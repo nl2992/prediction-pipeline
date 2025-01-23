@@ -179,6 +179,60 @@ class PolymarketClient:
         )
         return results
 
+    def get_event_by_slug(self, slug: str) -> dict | None:
+        """
+        Fetch a single Polymarket event and all its markets by event slug.
+
+        The slug is the URL path component from a Polymarket event URL:
+          https://polymarket.com/event/<slug>/...
+
+        Returns the event dict (with a ``markets`` list embedded), or None
+        if no event was found for that slug.
+
+        Example
+        -------
+        ::
+
+            ev = client.get_event_by_slug("ky-04-republican-primary-winner")
+            for m in ev["markets"]:
+                print(m["question"], m["outcomePrices"])
+        """
+        data = self._get(GAMMA_BASE, "/events", params={"slug": slug})
+        events = data if isinstance(data, list) else data.get("events", [data])
+        return events[0] if events else None
+
+    def get_markets_for_event_slug(self, slug: str) -> list[dict]:
+        """
+        Return the flat list of markets for a Polymarket event identified by
+        its URL slug (e.g. ``"ky-04-republican-primary-winner"``).
+
+        Each market dict includes ``question``, ``conditionId``,
+        ``clobTokenIds``, ``outcomePrices``, ``endDate``, etc.
+        Returns an empty list if the event is not found.
+        """
+        import json as _json
+
+        ev = self.get_event_by_slug(slug)
+        if not ev:
+            logger.warning("get_markets_for_event_slug: no event found for slug=%r", slug)
+            return []
+
+        markets = ev.get("markets", [])
+        # Normalise outcomePrices and clobTokenIds from JSON strings if needed
+        for m in markets:
+            for key in ("outcomePrices", "clobTokenIds"):
+                val = m.get(key)
+                if isinstance(val, str):
+                    try:
+                        m[key] = _json.loads(val)
+                    except Exception:
+                        pass
+        logger.info(
+            "get_markets_for_event_slug: slug=%r → event=%r, %d markets",
+            slug, ev.get("title"), len(markets),
+        )
+        return markets
+
     # ------------------------------------------------------------------
     # Order book (CLOB API)
     # ------------------------------------------------------------------

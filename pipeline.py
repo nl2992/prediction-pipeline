@@ -139,6 +139,7 @@ def fetch_polymarket(
     limit: int = 20,
     fetch_orderbooks: bool = True,
     keywords: list[str] | None = None,
+    event_slug: str | None = None,
 ) -> list[MarketSnapshot]:
     """
     Fetch active Polymarket markets and their order books.
@@ -146,24 +147,27 @@ def fetch_polymarket(
     Parameters
     ----------
     limit : int
-        Number of markets to fetch from the Gamma API when no keywords given.
-        Ignored when ``keywords`` is set (keyword search paginates the full
-        catalog and returns all matching markets).
+        Number of markets to fetch from the Gamma API when no keywords or
+        event_slug given.
     fetch_orderbooks : bool
         Whether to fetch full CLOB order book depth.
-        If False, falls back to the ``outcomePrices`` field from Gamma API
-        (which gives the last traded price, not a live bid/ask spread).
+        If False, falls back to ``outcomePrices`` (last traded price).
     keywords : list of str, optional
-        If provided, search the full Gamma catalog for markets whose question
-        contains any of these substrings (case-insensitive).  Useful for
-        targeting specific topic areas (e.g. ``["federal funds", "fed rate"]``).
-        Note: Gamma's ``tag_slug`` / ``_q`` query params are broken, so this
-        does paginated client-side filtering instead.
+        Search the full Gamma catalog for markets whose question contains any
+        of these substrings (case-insensitive).  Gamma's ``tag_slug`` / ``_q``
+        params are broken, so this paginates and filters client-side.
+    event_slug : str, optional
+        Fetch all markets for a specific Polymarket event identified by its URL
+        slug (e.g. ``"ky-04-republican-primary-winner"``).  Takes priority over
+        ``keywords`` and ``limit``.  Useful for targeting one specific event.
     """
     client = PolymarketClient()
     fetched_at = datetime.now(timezone.utc).isoformat()
 
-    if keywords:
+    if event_slug:
+        logger.info("Polymarket: fetching event slug=%r…", event_slug)
+        markets = client.get_markets_for_event_slug(event_slug)
+    elif keywords:
         logger.info("Polymarket: searching catalog for keywords %s…", keywords)
         markets = client.search_markets(keywords=keywords)
     else:
@@ -433,6 +437,7 @@ def run_pipeline(
     kalshi_series_ticker: str | None = None,
     kalshi_event_ticker: str | None = None,
     poly_keywords: list[str] | None = None,
+    poly_event_slug: str | None = None,
     output_dir: str | Path | None = None,
     run_matching: bool = False,
     run_arb: bool = False,
@@ -463,6 +468,7 @@ def run_pipeline(
         limit=polymarket_limit,
         fetch_orderbooks=fetch_polymarket_books,
         keywords=poly_keywords,
+        event_slug=poly_event_slug,
     )
     kalshi_snapshots = fetch_kalshi(
         limit=kalshi_limit,
