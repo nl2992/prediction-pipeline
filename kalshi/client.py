@@ -138,9 +138,20 @@ class KalshiClient:
             if authenticated
             else {}
         )
-        resp = self.session.get(
-            url, params=params, headers=headers, timeout=self.timeout
-        )
+        # Retry on 429 with exponential backoff
+        backoff = 5
+        for attempt in range(4):
+            resp = self.session.get(
+                url, params=params, headers=headers, timeout=self.timeout
+            )
+            if resp.status_code == 429:
+                import time as _time
+                _time.sleep(backoff)
+                backoff *= 2
+                continue
+            resp.raise_for_status()
+            return resp.json()
+        # Final attempt — let it raise
         resp.raise_for_status()
         return resp.json()
 
