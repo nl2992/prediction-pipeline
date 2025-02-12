@@ -506,6 +506,220 @@ def run_one_scan(
 
 
 # ---------------------------------------------------------------------------
+# Discover-mode scan  (uses organic event-catalog discovery from discover.py)
+# ---------------------------------------------------------------------------
+
+
+def run_discover_scan(
+    category: str = "all",
+    days: int = 365,
+    min_sim: float = 0.28,
+    max_events: int = 400,
+    fee_poly: float = 0.02,
+    fee_kalshi: float = 0.07,
+    min_profit_pct: float = 0.5,
+    verify_clob: bool = True,
+    clob_price_tolerance: float = 0.03,
+    clob_min_depth_usd: float = 10.0,
+    scan_id: str | None = None,
+) -> ScanSummary:
+    """
+    Organic scan: run discover() to find cross-exchange pairs via the events
+    catalog, fetch live orderbooks, detect arb, and verify via CLOB.
+
+    This replaces the fixed-series run_one_scan() with a broad, auto-discovering
+    scan that covers all Kalshi categories.
+    """
+    t0 = time.time()
+    scan_id = scan_id or uuid.uuid4().hex[:12]
+    ts_now = datetime.now(timezone.utc).isoformat()
+    summary = ScanSummary(
+        scan_id=scan_id, ts=ts_now,
+        poly_markets=0, kalshi_markets=0, matched_pairs=0,
+        arb_candidates=0, profitable_raw=0, verified_signals=0,
+    )
+
+    try:
+        from discover import discover
+        pairs = discover(
+            category=category,
+            days=days,
+            min_sim=min_sim,
+            show_prices=True,          # fetch live orderbooks for every pair
+            max_events_to_search=max_events,
+        )
+    except Exception as exc:
+        msg = f"Discovery failed: {exc}"
+        logger.error(msg)
+        summary.errors.append(msg)
+        summary.elapsed_s = round(time.time() - t0, 2)
+        return summary
+
+    summary.matched_pairs = len(pairs)
+    # poly/kalshi market counts come from discover internals; approximate here
+    summary.poly_markets = len({p["poly_id"] for p in pairs})
+    summary.kalshi_markets = len({p["kalshi_ticker"] for p in pairs})
+
+    FEE = fee_poly + fee_kalshi
+
+    for pair in pairs:
+        pb = pair.get("poly_bid")
+        pa = pair.get("poly_ask")
+        kb = pair.get("kalshi_bid")
+        ka = pair.get("kalshi_ask")
+
+        if not (pa and kb and ka and pb):
+            continue  # no live prices — skip arb check
+
+        # Compute best arb direction
+        arb_dir = arb_profit = None
+
+        # poly_yes + kalshi_no: buy YES on Poly at ask, buy NO on Kalshi at (1 - bid)
+        cost_pyk = pa + (1.0 - kb)
+        profit_pyk = round(1.0 - cost_pyk - FEE, 6)
+        if profit_pyk > 0:
+            arb_dir = "poly_yes__kalshi_no"
+            arb_profit = profit_pyk
+
+        # kalshi_yes + poly_no: buy YES on Kalshi at ask, buy NO on Poly at (1 - bid)
+        cost_kyp = ka + (1.0 - pb)
+        profit_kyp = round(1.0 - cost_kyp - FEE, 6)
+        if arb_profit is None or profit_kyp > arb_profit:
+            arb_dir = "kalshi_yes__poly_no"
+            arb_profit = profit_kyp
+
+        if arb_profit is None or arb_profit <= 0:
+            continue
+
+        summary.arb_candidates += 1
+        net_pct = round(arb_profit * 100, 4)
+        if net_pct < min_profit_pct:
+            continue
+
+        summary.profitable_raw += 1
+
+        # Build a minimal ArbSignal (token_id not available from discover dicts)
+        poly_token_id = None  # discover() doesn't store per-pair token IDs
+        if arb_dir == "poly_yes__kalshi_no":
+            gross_cost = round(pa + (1.0 - kb), 6)
+            winning_fee = fee_poly
+            buy_yes_ask = pa
+        else:
+            gross_cost = round(ka + (1.0 - pb), 6)
+            winning_fee = fee_kalshi
+            buy_yes_ask = ka
+
+        signal = ArbSignal(
+            scan_id=scan_id,
+            ts=ts_now,
+            signal_type="cross_exchange_arb",
+            direction=arb_dir,
+            poly_title=pair["poly_title"],
+            poly_market_id=pair["poly_id"],
+            poly_token_id=poly_token_id,
+            poly_yes_ask=pa,
+            poly_yes_bid=pb,
+            kalshi_ticker=pair["kalshi_ticker"],
+            kalshi_title=pair["kalshi_title"],
+            kalshi_yes_bid=kb,
+            kalshi_yes_ask=ka,
+            gross_cost=gross_cost,
+            net_profit=round(arb_profit, 6),
+            net_profit_pct=net_pct,
+            winning_leg_fee=winning_fee,
+            max_size_contracts=None,
+            match_confidence=pair.get("confidence", 0.0),
+            match_via_override=False,
+            clob_verified=False,
+        )
+
+        if not verify_clob:
+            signal.clob_verified = True
+            signal.clob_notes.append("verification skipped (--no-verify)")
+        else:
+            # For discover mode we don't have a poly token_id stored per pair.
+            # Re-fetch it from the Polymarket catalog using the conditionId.
+            poly_ok = True
+            try:
+                from polymarket.client import PolymarketClient
+                pc = PolymarketClient()
+                mkt_data = pc._get(
+                    "https://gamma-api.polymarket.com",
+                    f"/markets/{pair['poly_id']}",
+                )
+                tids = mkt_data.get("clobTokenIds") or "[]"
+                if isinstance(tids, str):
+                    tids = json.loads(tids)
+                poly_token_id = tids[0] if tids else None
+                signal.poly_token_id = poly_token_id
+            except Exception:
+                poly_token_id = None
+
+            if arb_dir == "poly_yes__kalshi_no":
+                if poly_token_id:
+                    ok_p, det_p = _verify_poly_clob(
+                        poly_token_id,
+                        expected_ask=pa,
+                        price_tolerance=clob_price_tolerance,
+                        min_depth_usd=clob_min_depth_usd,
+                    )
+                    signal.clob_live_poly_ask = det_p.get("live_ask")
+                    signal.clob_live_poly_bid = det_p.get("live_bid")
+                    signal.clob_notes.append(f"poly_clob: {det_p.get('reason', '?')}")
+                    if not ok_p:
+                        poly_ok = False
+                else:
+                    signal.clob_notes.append("poly_clob: no token_id")
+                    poly_ok = False
+
+                ok_k, det_k = _verify_kalshi_clob(
+                    pair["kalshi_ticker"],
+                    expected_bid=kb,
+                    price_tolerance=clob_price_tolerance,
+                )
+                signal.clob_live_kalshi_bid = det_k.get("live_yes_bid")
+                signal.clob_notes.append(f"kalshi_clob: {det_k.get('reason', '?')}")
+                if not ok_k:
+                    poly_ok = False
+            else:  # kalshi_yes__poly_no
+                ok_k, det_k = _verify_kalshi_clob(
+                    pair["kalshi_ticker"],
+                    expected_bid=kb,
+                    price_tolerance=clob_price_tolerance,
+                )
+                signal.clob_live_kalshi_bid = det_k.get("live_yes_bid")
+                signal.clob_notes.append(f"kalshi_clob: {det_k.get('reason', '?')}")
+                if not ok_k:
+                    poly_ok = False
+
+                if poly_token_id:
+                    ok_p, det_p = _verify_poly_clob(
+                        poly_token_id,
+                        expected_ask=pb,
+                        price_tolerance=clob_price_tolerance,
+                        min_depth_usd=clob_min_depth_usd,
+                    )
+                    signal.clob_live_poly_bid = det_p.get("live_bid")
+                    signal.clob_live_poly_ask = det_p.get("live_ask")
+                    signal.clob_notes.append(f"poly_clob: {det_p.get('reason', '?')}")
+                    if not ok_p:
+                        poly_ok = False
+                else:
+                    signal.clob_notes.append("poly_clob: no token_id")
+                    poly_ok = False
+
+            signal.clob_verified = poly_ok
+
+        if signal.clob_verified:
+            summary.verified_signals += 1
+
+        summary.signals.append(signal)
+
+    summary.elapsed_s = round(time.time() - t0, 2)
+    return summary
+
+
+# ---------------------------------------------------------------------------
 # Signal file writer
 # ---------------------------------------------------------------------------
 
@@ -689,6 +903,17 @@ def _parse_args() -> argparse.Namespace:
                    help="Console logging verbosity")
     p.add_argument("--show-unverified", action="store_true",
                    help="Print unverified (CLOB-failed) signals in output")
+    # ── Discover mode ──────────────────────────────────────────────────────────
+    p.add_argument("--discover", action="store_true",
+                   help="Use organic event-catalog discovery (discover.py) instead of "
+                        "fixed-series fetching.  Covers all market categories automatically.")
+    p.add_argument("--discover-category", default="all",
+                   choices=["all", "election", "sports", "economic", "political", "pop"],
+                   help="Category filter for discover mode (default: all)")
+    p.add_argument("--discover-days", type=int, default=365,
+                   help="Horizon in days for discover mode (default: 365)")
+    p.add_argument("--discover-max-events", type=int, default=400,
+                   help="Max Kalshi events to scan per discovery cycle (default: 400)")
     return p.parse_args()
 
 
@@ -709,9 +934,13 @@ def main() -> None:
     mode_tag = "DRY-RUN" if args.dry_run else "LIVE"
     exec_tag = f"  auto-execute={mode_tag}" if args.execute else "  monitoring-only"
 
+    scan_mode = (
+        f"discover(category={args.discover_category}, days={args.discover_days})"
+        if args.discover else "fixed-series"
+    )
     logger.info(
-        "Monitor starting — interval=%ds%s  signals→%s  log→%s",
-        args.interval, exec_tag, args.signals_file, args.log_file,
+        "Monitor starting — mode=%s  interval=%ds%s  signals→%s  log→%s",
+        scan_mode, args.interval, exec_tag, args.signals_file, args.log_file,
     )
     if not args.dry_run and args.execute:
         logger.warning(
@@ -726,20 +955,32 @@ def main() -> None:
         logger.info("Starting scan #%d…", scan_count)
 
         try:
-            summary = run_one_scan(
-                poly_limit=args.poly_limit,
-                kalshi_limit=args.kalshi_limit,
-                kalshi_series=args.kalshi_series,
-                kalshi_event=args.kalshi_event,
-                poly_keywords=args.poly_keywords or None,
-                poly_event_slug=args.poly_event_slug or None,
-                fee_poly=args.fee_poly,
-                fee_kalshi=args.fee_kalshi,
-                min_profit_pct=args.min_profit_pct,
-                min_match_sim=args.min_match_sim,
-                max_close_delta_hours=args.max_close_delta_hours,
-                verify_clob=args.verify_clob,
-            )
+            if args.discover:
+                summary = run_discover_scan(
+                    category=args.discover_category,
+                    days=args.discover_days,
+                    min_sim=args.min_match_sim,
+                    max_events=args.discover_max_events,
+                    fee_poly=args.fee_poly,
+                    fee_kalshi=args.fee_kalshi,
+                    min_profit_pct=args.min_profit_pct,
+                    verify_clob=args.verify_clob,
+                )
+            else:
+                summary = run_one_scan(
+                    poly_limit=args.poly_limit,
+                    kalshi_limit=args.kalshi_limit,
+                    kalshi_series=args.kalshi_series,
+                    kalshi_event=args.kalshi_event,
+                    poly_keywords=args.poly_keywords or None,
+                    poly_event_slug=args.poly_event_slug or None,
+                    fee_poly=args.fee_poly,
+                    fee_kalshi=args.fee_kalshi,
+                    min_profit_pct=args.min_profit_pct,
+                    min_match_sim=args.min_match_sim,
+                    max_close_delta_hours=args.max_close_delta_hours,
+                    verify_clob=args.verify_clob,
+                )
 
             print_scan_summary(summary, show_unverified=args.show_unverified)
 
