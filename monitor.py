@@ -296,6 +296,7 @@ def run_one_scan(
     kalshi_series: str | None = None,
     kalshi_event: str | None = None,
     poly_keywords: list[str] | None = None,
+    poly_event_slug: str | None = None,
     fee_poly: float = 0.02,
     fee_kalshi: float = 0.07,
     min_profit_pct: float = 0.5,
@@ -326,6 +327,7 @@ def run_one_scan(
             limit=poly_limit,
             fetch_orderbooks=True,
             keywords=poly_keywords or None,
+            event_slug=poly_event_slug or None,
         )
         summary.poly_markets = len(poly_snaps)
     except Exception as exc:
@@ -664,6 +666,9 @@ def _parse_args() -> argparse.Namespace:
                    help="Kalshi series ticker filter, e.g. KXFED")
     p.add_argument("--kalshi-event", default=None,
                    help="Kalshi event ticker filter")
+    p.add_argument("--poly-event-slug", default=None,
+                   help="Fetch all markets for a specific Polymarket event by URL slug "
+                        "(e.g. 'ky-04-republican-primary-winner'). Takes priority over --poly-keywords.")
     p.add_argument("--poly-keywords", nargs="*", default=[],
                    help="Extra Polymarket title keywords (substring, case-insensitive)")
     p.add_argument("--min-match-sim", type=float, default=0.25,
@@ -727,6 +732,7 @@ def main() -> None:
                 kalshi_series=args.kalshi_series,
                 kalshi_event=args.kalshi_event,
                 poly_keywords=args.poly_keywords or None,
+                poly_event_slug=args.poly_event_slug or None,
                 fee_poly=args.fee_poly,
                 fee_kalshi=args.fee_kalshi,
                 min_profit_pct=args.min_profit_pct,
