@@ -260,6 +260,8 @@
   .detail-val.a { color: var(--amber); }
   .detail-val.r { color: var(--red); }
   .detail-val.o { color: var(--orange); }
+  .ex-link { margin-left: auto; color: var(--dim); font-size: 9px; text-decoration: none; letter-spacing: .05em; }
+  .ex-link:hover { color: var(--white); }
 
   /* ── Signals view ──────────────────────────────────────────── */
   #signals-view { display: none; flex: 1; flex-direction: column; overflow: hidden; }
@@ -492,10 +494,11 @@
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-let allPairs   = [];
-let currentCat = 'all';
-let arbOnly    = false;
-let selected   = null;
+let allPairs       = [];
+let displayedPairs = [];   // sorted/filtered list currently shown in the table
+let currentCat  = 'all';
+let arbOnly     = false;
+let selected    = null;
 let currentView = 'pairs';
 let currentSort = 'arb';  // 'arb' | 'confidence'
 
@@ -618,6 +621,7 @@ function renderPairs() {
     pairs.sort((a, b) => (b.arb_net_profit || 0) - (a.arb_net_profit || 0));
   }
   // 'confidence' order comes from the server already sorted
+  displayedPairs = pairs;   // keep in sync so selectRow reads the right item
 
   const arbs = pairs.filter(p => (p.arb_net_profit || 0) > 0).length;
   document.getElementById('pair-count').textContent   = allPairs.length;
@@ -677,7 +681,7 @@ function selectRow(idx) {
   document.querySelectorAll('#pairs-body tr').forEach((tr,i) => {
     tr.classList.toggle('selected', i === idx);
   });
-  renderDetail(allPairs[idx] || null);
+  renderDetail(displayedPairs[idx] || null);
 }
 
 function renderDetail(p) {
@@ -695,11 +699,17 @@ function renderDetail(p) {
   const polyEventLine  = p.poly_event_title   ? `<div class="detail-row"><span class="detail-key">  EVENT</span><span class="detail-val dim">${esc(p.poly_event_title)}</span></div>` : '';
   const kalshiEventLine = p.kalshi_event_title ? `<div class="detail-row"><span class="detail-key">  EVENT</span><span class="detail-val dim">${esc(p.kalshi_event_title)}</span></div>` : '';
 
+  const polyUrl   = p.poly_slug          ? `https://polymarket.com/event/${encodeURIComponent(p.poly_slug)}` : '';
+  const kalshiUrl = p.kalshi_event_ticker ? `https://kalshi.com/markets/${p.kalshi_event_ticker.toLowerCase()}` : '';
+  const polyLink   = polyUrl   ? `<a href="${polyUrl}"   target="_blank" rel="noopener" class="ex-link">↗ OPEN</a>` : '';
+  const kalshiLink = kalshiUrl ? `<a href="${kalshiUrl}" target="_blank" rel="noopener" class="ex-link">↗ OPEN</a>` : '';
+
   left.innerHTML = `
     <div class="detail-title">PAIR DETAIL — ${esc(p.category||'?').toUpperCase()}</div>
     <div class="detail-row">
       <span class="detail-key">POLYMARKET</span>
       <span class="detail-val o">${esc(p.poly_title||'')}</span>
+      ${polyLink}
     </div>
     ${polyEventLine}
     <div class="detail-row">
@@ -711,6 +721,7 @@ function renderDetail(p) {
     <div class="detail-row" style="margin-top:4px;">
       <span class="detail-key">KALSHI</span>
       <span class="detail-val a">${esc(p.kalshi_title||'')}</span>
+      ${kalshiLink}
     </div>
     ${kalshiEventLine}
     <div class="detail-row">
