@@ -143,6 +143,44 @@ class CoreLogicTests(unittest.TestCase):
         self.assertTrue(is_compatible_match(poly, kalshi))
         self.assertEqual(len(match_markets([poly], [kalshi], min_title_similarity=0.1)), 1)
 
+    def test_matcher_rejects_named_contract_against_generic_winner(self) -> None:
+        poly = snap(
+            "polymarket",
+            "poly-french-candidate",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": "Will Jordan Bardella win the 2027 French presidential election?"},
+        )
+        kalshi = snap(
+            "kalshi",
+            "kalshi-generic-winner",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": "Who will win the next presidential election?"},
+        )
+
+        self.assertFalse(is_compatible_match(poly, kalshi))
+
+    def test_matcher_rejects_different_contract_predicates(self) -> None:
+        poly = snap(
+            "polymarket",
+            "poly-win",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": "Will Andy Beshear win the 2028 US Presidential Election?"},
+        )
+        kalshi = snap(
+            "kalshi",
+            "kalshi-declare",
+            bid=0.4,
+            ask=0.5,
+            extra={
+                "full_question": "Will Andy Beshear be first this list to declare for 2028 United States presidential election before Nov 7, 2028?"
+            },
+        )
+
+        self.assertFalse(is_compatible_match(poly, kalshi))
+
     @patch("kalshi.client.KalshiClient")
     def test_verify_kalshi_clob_checks_derived_yes_ask(self, client_cls: MagicMock) -> None:
         client = client_cls.return_value
