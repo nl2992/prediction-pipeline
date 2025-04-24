@@ -181,6 +181,42 @@ class CoreLogicTests(unittest.TestCase):
 
         self.assertFalse(is_compatible_match(poly, kalshi))
 
+    def test_matcher_rejects_win_vs_run_for_office(self) -> None:
+        poly = snap(
+            "polymarket",
+            "poly-win-governor",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": "Will Kamala Harris win the California Governor Election in 2026?"},
+        )
+        kalshi = snap(
+            "kalshi",
+            "kalshi-run-governor",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": "Will Kamala Harris run for California Governor?"},
+        )
+
+        self.assertFalse(is_compatible_match(poly, kalshi))
+
+    def test_matcher_rejects_named_candidate_against_party_contract(self) -> None:
+        poly = snap(
+            "polymarket",
+            "poly-candidate",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": "Will Rick Caruso win the California Governor Election in 2026?"},
+        )
+        kalshi = snap(
+            "kalshi",
+            "kalshi-party",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": "Will Labour win the 2026 Makerfield by-election?"},
+        )
+
+        self.assertFalse(is_compatible_match(poly, kalshi))
+
     @patch("kalshi.client.KalshiClient")
     def test_verify_kalshi_clob_checks_derived_yes_ask(self, client_cls: MagicMock) -> None:
         client = client_cls.return_value
