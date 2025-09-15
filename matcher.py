@@ -33,6 +33,10 @@ _STOPWORDS = frozenset({
 
 def _tokens(title: str) -> frozenset[str]:
     title = title.lower()
+    # Preserve decimal numbers (e.g. "5.25%", "4.75") as single tokens before
+    # stripping punctuation — otherwise "5.25" splits into "5" (dropped, len=1)
+    # and "25", making different rate levels match each other.
+    title = re.sub(r"\b(\d+\.\d+)%?", lambda m: m.group(1).replace(".", "_"), title)
     title = re.sub(r"[^\w\s]", " ", title)
     return frozenset(t for t in title.split() if t not in _STOPWORDS and len(t) > 1)
 
@@ -112,9 +116,10 @@ class MatchedPair:
 def match_markets(
     poly_snaps: list["MarketSnapshot"],
     kalshi_snaps: list["MarketSnapshot"],
-    min_title_similarity: float = 0.25,
+    min_title_similarity: float = 0.30,
     max_close_delta_hours: float = 72.0,
     overrides: list[tuple[str, str]] | None = None,
+    min_token_ratio: float = 0.0,
 ) -> list[MatchedPair]:
     """
     Pair Polymarket and Kalshi snapshots representing the same event.
@@ -165,17 +170,27 @@ def match_markets(
     poly_tok = {s.market_id: _tokens(s.title) for s in remaining_poly}
     kalshi_tok = {s.market_id: _tokens(s.title) for s in remaining_kalshi}
 
-    # Score all candidate pairs
+    # Score all candidate pairs.
+    # Close-time delta is a scoring signal only — never a hard exclusion gate.
+    # Kalshi sports series carry a contractual far-out expiry (e.g. 2028 for
+    # the current NBA Finals) even though the market resolves this season.
+    # Hard-filtering by delta_h would silently drop all such sports pairs.
     scored: list[tuple[float, "MarketSnapshot", "MarketSnapshot"]] = []
     for p in remaining_poly:
         p_toks = poly_tok[p.market_id]
         for k in remaining_kalshi:
-            sim = _jaccard(p_toks, kalshi_tok[k.market_id])
+            k_toks = kalshi_tok[k.market_id]
+            sim = _jaccard(p_toks, k_toks)
             if sim < min_title_similarity:
                 continue
+            # Token-ratio guard: block short labels ("Democratic Party", 2 tokens)
+            # from matching long questions (8+ tokens) via coincidental Jaccard.
+            if min_token_ratio > 0 and p_toks and k_toks:
+                shorter = min(len(p_toks), len(k_toks))
+                longer  = max(len(p_toks), len(k_toks))
+                if shorter / longer < min_token_ratio:
+                    continue
             delta_h = _close_delta_hours(p.close_time, k.close_time)
-            if delta_h is not None and delta_h > max_close_delta_hours:
-                continue
             score = _confidence(sim, delta_h, max_close_delta_hours)
             scored.append((score, p, k))
 

@@ -196,8 +196,11 @@ Market selection:
 Matching:
   --min-match-sim FLOAT       Minimum Jaccard similarity (default: 0.25)
   --max-close-delta-hours FLOAT
-                              Max close-time difference hours (default: 72;
-                              use 9999 for cross-horizon comparisons)
+                              Normalisation window for close-time proximity
+                              scoring (default: 72). Pairs beyond this window
+                              are scored on title similarity alone; they are
+                              never hard-excluded (sports markets on Kalshi
+                              carry a contractual far-out expiry date).
 
 Arb thresholds:
   --min-profit-pct FLOAT  Minimum net profit % (default: 0.5)

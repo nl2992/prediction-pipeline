@@ -300,7 +300,7 @@ def run_one_scan(
     fee_poly: float = 0.02,
     fee_kalshi: float = 0.07,
     min_profit_pct: float = 0.5,
-    min_match_sim: float = 0.25,
+    min_match_sim: float = 0.30,
     max_close_delta_hours: float = 72.0,
     verify_clob: bool = True,
     clob_price_tolerance: float = 0.03,
@@ -541,11 +541,14 @@ def run_discover_scan(
 
     try:
         from discover import discover
+        # Pass show_prices=False — catalog mid-prices are sufficient for the
+        # first-pass arb screen.  We fetch live CLOB only for arb candidates
+        # (below), which keeps the scan fast (no per-pair orderbook calls here).
         pairs = discover(
             category=category,
             days=days,
             min_sim=min_sim,
-            show_prices=True,          # fetch live orderbooks for every pair
+            show_prices=False,
             max_events_to_search=max_events,
         )
     except Exception as exc:
@@ -885,11 +888,14 @@ def _parse_args() -> argparse.Namespace:
                         "(e.g. 'ky-04-republican-primary-winner'). Takes priority over --poly-keywords.")
     p.add_argument("--poly-keywords", nargs="*", default=[],
                    help="Extra Polymarket title keywords (substring, case-insensitive)")
-    p.add_argument("--min-match-sim", type=float, default=0.25,
-                   help="Minimum Jaccard similarity for cross-exchange pairing")
+    p.add_argument("--min-match-sim", type=float, default=0.30,
+                   help="Minimum Jaccard title similarity for cross-exchange pairing")
     p.add_argument("--max-close-delta-hours", type=float, default=72.0,
-                   help="Max close-time difference in hours between paired markets "
-                        "(default 72; use 9999 to ignore for cross-horizon comparisons)")
+                   help="Normalisation window (hours) for close-time proximity scoring. "
+                        "Pairs within this window get a time-proximity bonus; pairs beyond "
+                        "it are scored on title similarity alone. No longer a hard exclusion "
+                        "gate — sports markets with far-out contractual expiry dates are "
+                        "always considered. (default: 72)")
     p.add_argument("--no-verify", dest="verify_clob", action="store_false", default=True,
                    help="Skip live CLOB re-verification (not recommended)")
     p.add_argument("--size-contracts", type=float, default=10.0,

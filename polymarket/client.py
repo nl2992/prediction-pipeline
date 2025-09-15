@@ -179,6 +179,64 @@ class PolymarketClient:
         )
         return results
 
+    def search_events(
+        self,
+        keywords: list[str],
+        active: bool = True,
+        closed: bool = False,
+        max_offset: int = 2000,
+        page_size: int = 100,
+    ) -> list[dict]:
+        """
+        Paginate the Gamma /events catalog and return events whose ``title``
+        field contains any of the given keywords (case-insensitive).
+
+        Each returned event dict includes an embedded ``markets`` list — the
+        individual outcome contracts for that event.  This makes it possible to
+        do two-level (event → outcome) matching without extra API calls.
+
+        Parameters
+        ----------
+        keywords   : list of substring patterns to match in the event title
+        active     : only return active events (default True)
+        closed     : include closed events (default False)
+        max_offset : stop paginating after this many records (default 2000)
+        page_size  : records per API request (default 100)
+        """
+        kw_lower = [k.lower() for k in keywords]
+        results: list[dict] = []
+        seen: set[str] = set()
+
+        for offset in range(0, max_offset + 1, page_size):
+            try:
+                batch = self.get_events(
+                    limit=page_size,
+                    offset=offset,
+                    active=active,
+                    closed=closed,
+                )
+            except Exception as exc:
+                logger.warning("search_events: fetch failed at offset=%d: %s", offset, exc)
+                break
+
+            if not batch:
+                break
+
+            for ev in batch:
+                title = (ev.get("title") or "").lower()
+                slug = ev.get("slug") or ev.get("id", "")
+                if slug in seen:
+                    continue
+                if any(kw in title for kw in kw_lower):
+                    results.append(ev)
+                    seen.add(slug)
+
+        logger.info(
+            "search_events: found %d events for keywords %s",
+            len(results), keywords,
+        )
+        return results
+
     def get_event_by_slug(self, slug: str) -> dict | None:
         """
         Fetch a single Polymarket event and all its markets by event slug.
