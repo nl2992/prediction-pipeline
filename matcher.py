@@ -63,6 +63,12 @@ _DT_FORMATS = (
 def _parse_dt(s: str | None) -> datetime | None:
     if not s:
         return None
+    iso = s.replace("Z", "+00:00").replace("z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(iso)
+        return dt.astimezone(timezone.utc) if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except ValueError:
+        pass
     s = s.split("+")[0].rstrip("Z").rstrip("z")
     for fmt in _DT_FORMATS:
         try:
@@ -86,6 +92,8 @@ def _confidence(title_sim: float, delta_h: float | None, max_delta: float) -> fl
     If close time is unknown, title similarity alone determines the score.
     """
     if delta_h is None:
+        return title_sim
+    if max_delta <= 0:
         return title_sim
     time_score = max(0.0, 1.0 - delta_h / max_delta)
     return 0.70 * title_sim + 0.30 * time_score

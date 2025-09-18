@@ -109,6 +109,7 @@ class ArbSignal:
     poly_title: str
     poly_market_id: str
     poly_token_id: str | None       # CLOB YES token id (None if unresolved)
+    poly_no_token_id: str | None    # CLOB NO token id (None if unresolved)
     poly_yes_ask: float | None
     poly_yes_bid: float | None
 
@@ -160,12 +161,13 @@ class ArbSignal:
 # ---------------------------------------------------------------------------
 
 
-def _resolve_poly_yes_token(snap) -> str | None:
+def _resolve_poly_token(snap, side: str = "YES") -> str | None:
     """
-    Extract the YES CLOB token from a Polymarket MarketSnapshot.
+    Extract the requested CLOB token from a Polymarket MarketSnapshot.
 
-    Convention: clobTokenIds is a list; index 0 is the YES token for standard
-    binary markets on Polymarket.  Returns None if unavailable.
+    ``clobTokenIds`` aligns with the market's ``outcomes`` array.  Most binary
+    markets are YES/NO in that order, but categorical markets and API edge cases
+    make label matching safer than assuming index 0.
     """
     token_ids = snap.extra.get("clob_token_ids") or []
     if isinstance(token_ids, str):
@@ -173,20 +175,42 @@ def _resolve_poly_yes_token(snap) -> str | None:
             token_ids = json.loads(token_ids)
         except Exception:
             return None
-    return token_ids[0] if token_ids else None
+    outcomes = snap.extra.get("outcomes") or []
+    if isinstance(outcomes, str):
+        try:
+            outcomes = json.loads(outcomes)
+        except Exception:
+            outcomes = []
+
+    wanted = side.strip().lower()
+    for i, outcome in enumerate(outcomes or []):
+        if isinstance(outcome, str) and outcome.strip().lower() == wanted and i < len(token_ids):
+            return token_ids[i]
+
+    if not token_ids:
+        return None
+    if wanted == "no" and len(token_ids) > 1:
+        return token_ids[1]
+    return token_ids[0]
+
+
+def _resolve_poly_yes_token(snap) -> str | None:
+    """Backward-compatible wrapper for callers that need the YES token."""
+    return _resolve_poly_token(snap, "YES")
 
 
 def _verify_poly_clob(
     token_id: str,
-    expected_ask: float,
+    expected_price: float,
+    side: str = "ask",
     price_tolerance: float = 0.03,
     min_depth_usd: float = 10.0,
 ) -> tuple[bool, dict]:
     """
     Re-check Polymarket CLOB for a given YES token.
 
-    Returns (ok, details_dict).
-    ok=True means: live ask exists, within tolerance, and depth >= min_depth_usd.
+    ``side`` is the live side to validate: ``"ask"`` when buying a token and
+    ``"bid"`` when validating the complement price from a YES bid.
     """
     details: dict[str, Any] = {"token_id": token_id[:16] + "..."}
     try:
@@ -197,18 +221,19 @@ def _verify_poly_clob(
         )
         live_ask = liq.get("best_ask")
         live_bid = liq.get("best_bid")
-        depth = liq.get("depth_usd")
+        depth = liq.get("ask_size") if side == "ask" else liq.get("bid_size")
+        live_price = live_ask if side == "ask" else live_bid
 
         details["live_ask"] = live_ask
         details["live_bid"] = live_bid
         details["depth_usd"] = depth
-        details["clob_ok"] = liq.get("ok", False)
+        details["clob_ok"] = liq.get("is_liquid", False)
 
-        if live_ask is None:
-            details["reason"] = "no live ask"
+        if live_price is None:
+            details["reason"] = f"no live {side}"
             return False, details
 
-        drift = abs(live_ask - expected_ask)
+        drift = abs(live_price - expected_price)
         details["price_drift"] = round(drift, 5)
 
         if drift > price_tolerance:
@@ -230,14 +255,15 @@ def _verify_poly_clob(
 
 def _verify_kalshi_clob(
     ticker: str,
-    expected_bid: float,
+    expected_price: float,
+    side: str = "bid",
     price_tolerance: float = 0.03,
 ) -> tuple[bool, dict]:
     """
     Re-check Kalshi orderbook for a given ticker.
 
-    Returns (ok, details_dict).
-    ok=True means: live YES bid exists and within tolerance.
+    ``side="bid"`` validates the live YES bid.  ``side="ask"`` validates the
+    live YES ask derived from the best NO bid.
     """
     details: dict[str, Any] = {"ticker": ticker}
     try:
@@ -247,18 +273,22 @@ def _verify_kalshi_clob(
         ob_fp = raw.get("orderbook_fp", {})
 
         yes_bids = ob_fp.get("yes_dollars", [])
-        if not yes_bids:
-            details["reason"] = "no YES bids in live book"
+        no_bids = ob_fp.get("no_dollars", [])
+        live_bid = float(yes_bids[-1][0]) if yes_bids else None
+        live_ask = round(1.0 - float(no_bids[-1][0]), 6) if no_bids else None
+        live_price = live_bid if side == "bid" else live_ask
+        details["live_yes_bid"] = live_bid
+        details["live_yes_ask"] = live_ask
+
+        if live_price is None:
+            details["reason"] = f"no YES {side} in live book"
             return False, details
 
-        # yes_dollars is ascending; last entry is highest bid
-        live_bid = float(yes_bids[-1][0])
-        details["live_yes_bid"] = live_bid
-        drift = abs(live_bid - expected_bid)
+        drift = abs(live_price - expected_price)
         details["price_drift"] = round(drift, 5)
 
         if drift > price_tolerance:
-            details["reason"] = f"bid drifted {drift:.4f} > tolerance {price_tolerance}"
+            details["reason"] = f"{side} drifted {drift:.4f} > tolerance {price_tolerance}"
             return False, details
 
         details["reason"] = "ok"
@@ -398,7 +428,8 @@ def run_one_scan(
         poly_snap = pair.poly
         kalshi_snap = pair.kalshi
 
-        yes_token_id = _resolve_poly_yes_token(poly_snap)
+        yes_token_id = _resolve_poly_token(poly_snap, "YES")
+        no_token_id = _resolve_poly_token(poly_snap, "NO")
 
         signal = ArbSignal(
             scan_id=scan_id,
@@ -408,6 +439,7 @@ def run_one_scan(
             poly_title=poly_snap.title,
             poly_market_id=poly_snap.market_id,
             poly_token_id=yes_token_id,
+            poly_no_token_id=no_token_id,
             poly_yes_ask=poly_snap.orderbook.best_ask,
             poly_yes_bid=poly_snap.orderbook.best_bid,
             kalshi_ticker=kalshi_snap.market_id,
@@ -435,7 +467,8 @@ def run_one_scan(
                 if yes_token_id and opp.buy_yes_ask:
                     ok, details = _verify_poly_clob(
                         yes_token_id,
-                        expected_ask=opp.buy_yes_ask,
+                        expected_price=opp.buy_yes_ask,
+                        side="ask",
                         price_tolerance=clob_price_tolerance,
                         min_depth_usd=clob_min_depth_usd,
                     )
@@ -456,7 +489,8 @@ def run_one_scan(
                 if kalshi_snap.orderbook.best_bid:
                     ok_k, details_k = _verify_kalshi_clob(
                         kalshi_snap.market_id,
-                        expected_bid=kalshi_snap.orderbook.best_bid,
+                        expected_price=kalshi_snap.orderbook.best_bid,
+                        side="bid",
                         price_tolerance=clob_price_tolerance,
                     )
                     signal.clob_live_kalshi_bid = details_k.get("live_yes_bid")
@@ -469,19 +503,22 @@ def run_one_scan(
                 if kalshi_snap.orderbook.best_ask:
                     ok_k, details_k = _verify_kalshi_clob(
                         kalshi_snap.market_id,
-                        expected_bid=kalshi_snap.orderbook.best_bid or 0,
+                        expected_price=kalshi_snap.orderbook.best_ask,
+                        side="ask",
                         price_tolerance=clob_price_tolerance,
                     )
                     signal.clob_live_kalshi_bid = details_k.get("live_yes_bid")
+                    signal.clob_notes.append(f"kalshi_live_ask: {details_k.get('live_yes_ask')}")
                     signal.clob_notes.append(f"kalshi_clob: {details_k.get('reason', '?')}")
                     if not ok_k:
                         poly_ok = False
 
-                # Polymarket NO check (we're buying NO → look at YES bid, implies NO ask)
-                if yes_token_id and poly_snap.orderbook.best_bid:
+                # Polymarket NO check (we're buying the NO token directly)
+                if no_token_id and opp.buy_no_ask:
                     ok_p, details_p = _verify_poly_clob(
-                        yes_token_id,
-                        expected_ask=poly_snap.orderbook.best_bid,
+                        no_token_id,
+                        expected_price=opp.buy_no_ask,
+                        side="ask",
                         price_tolerance=clob_price_tolerance,
                         min_depth_usd=clob_min_depth_usd,
                     )
@@ -491,7 +528,7 @@ def run_one_scan(
                     if not ok_p:
                         poly_ok = False
                 else:
-                    signal.clob_notes.append("poly_clob: no token_id — skipped")
+                    signal.clob_notes.append("poly_clob: no NO token_id — skipped")
                     poly_ok = False
 
             signal.clob_verified = poly_ok
@@ -563,7 +600,7 @@ def run_discover_scan(
     summary.poly_markets = len({p["poly_id"] for p in pairs})
     summary.kalshi_markets = len({p["kalshi_ticker"] for p in pairs})
 
-    FEE = fee_poly + fee_kalshi
+    worst_fee = max(fee_poly, fee_kalshi)
 
     for pair in pairs:
         pb = pair.get("poly_bid")
@@ -579,14 +616,14 @@ def run_discover_scan(
 
         # poly_yes + kalshi_no: buy YES on Poly at ask, buy NO on Kalshi at (1 - bid)
         cost_pyk = pa + (1.0 - kb)
-        profit_pyk = round(1.0 - cost_pyk - FEE, 6)
+        profit_pyk = round(1.0 - cost_pyk - worst_fee, 6)
         if profit_pyk > 0:
             arb_dir = "poly_yes__kalshi_no"
             arb_profit = profit_pyk
 
         # kalshi_yes + poly_no: buy YES on Kalshi at ask, buy NO on Poly at (1 - bid)
         cost_kyp = ka + (1.0 - pb)
-        profit_kyp = round(1.0 - cost_kyp - FEE, 6)
+        profit_kyp = round(1.0 - cost_kyp - worst_fee, 6)
         if arb_profit is None or profit_kyp > arb_profit:
             arb_dir = "kalshi_yes__poly_no"
             arb_profit = profit_kyp
@@ -595,21 +632,23 @@ def run_discover_scan(
             continue
 
         summary.arb_candidates += 1
-        net_pct = round(arb_profit * 100, 4)
+        gross_cost_for_pct = cost_pyk if arb_dir == "poly_yes__kalshi_no" else cost_kyp
+        net_pct = round(arb_profit / gross_cost_for_pct * 100, 4) if gross_cost_for_pct > 0 else 0.0
         if net_pct < min_profit_pct:
             continue
 
         summary.profitable_raw += 1
 
         # Build a minimal ArbSignal (token_id not available from discover dicts)
-        poly_token_id = None  # discover() doesn't store per-pair token IDs
+        poly_token_id = None  # YES token; resolved below when verification runs
+        poly_no_token_id = None
         if arb_dir == "poly_yes__kalshi_no":
             gross_cost = round(pa + (1.0 - kb), 6)
-            winning_fee = fee_poly
+            winning_fee = worst_fee
             buy_yes_ask = pa
         else:
             gross_cost = round(ka + (1.0 - pb), 6)
-            winning_fee = fee_kalshi
+            winning_fee = worst_fee
             buy_yes_ask = ka
 
         signal = ArbSignal(
@@ -620,6 +659,7 @@ def run_discover_scan(
             poly_title=pair["poly_title"],
             poly_market_id=pair["poly_id"],
             poly_token_id=poly_token_id,
+            poly_no_token_id=poly_no_token_id,
             poly_yes_ask=pa,
             poly_yes_bid=pb,
             kalshi_ticker=pair["kalshi_ticker"],
@@ -654,15 +694,19 @@ def run_discover_scan(
                 if isinstance(tids, str):
                     tids = json.loads(tids)
                 poly_token_id = tids[0] if tids else None
+                poly_no_token_id = tids[1] if len(tids) > 1 else None
                 signal.poly_token_id = poly_token_id
+                signal.poly_no_token_id = poly_no_token_id
             except Exception:
                 poly_token_id = None
+                poly_no_token_id = None
 
             if arb_dir == "poly_yes__kalshi_no":
                 if poly_token_id:
                     ok_p, det_p = _verify_poly_clob(
                         poly_token_id,
-                        expected_ask=pa,
+                        expected_price=pa,
+                        side="ask",
                         price_tolerance=clob_price_tolerance,
                         min_depth_usd=clob_min_depth_usd,
                     )
@@ -677,7 +721,8 @@ def run_discover_scan(
 
                 ok_k, det_k = _verify_kalshi_clob(
                     pair["kalshi_ticker"],
-                    expected_bid=kb,
+                    expected_price=kb,
+                    side="bid",
                     price_tolerance=clob_price_tolerance,
                 )
                 signal.clob_live_kalshi_bid = det_k.get("live_yes_bid")
@@ -687,7 +732,8 @@ def run_discover_scan(
             else:  # kalshi_yes__poly_no
                 ok_k, det_k = _verify_kalshi_clob(
                     pair["kalshi_ticker"],
-                    expected_bid=kb,
+                    expected_price=ka,
+                    side="ask",
                     price_tolerance=clob_price_tolerance,
                 )
                 signal.clob_live_kalshi_bid = det_k.get("live_yes_bid")
@@ -695,10 +741,11 @@ def run_discover_scan(
                 if not ok_k:
                     poly_ok = False
 
-                if poly_token_id:
+                if poly_no_token_id:
                     ok_p, det_p = _verify_poly_clob(
-                        poly_token_id,
-                        expected_ask=pb,
+                        poly_no_token_id,
+                        expected_price=1.0 - pb,
+                        side="ask",
                         price_tolerance=clob_price_tolerance,
                         min_depth_usd=clob_min_depth_usd,
                     )
@@ -793,7 +840,7 @@ def execute_signal(
                 limit_price=round(1.0 - (signal.poly_yes_bid or 0.0), 6),
                 size_contracts=size_contracts,
                 market_id=signal.poly_market_id,
-                token_id=signal.poly_token_id,
+                token_id=signal.poly_no_token_id,
                 description=f"Buy NO on Poly @ {round(1.0 - (signal.poly_yes_bid or 0), 6)}",
             )
 
