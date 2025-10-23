@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 from arb import find_arb
 from discover import _parse_dt as discover_parse_dt
 from executor import TradeIntent, check_price_still_valid
-from matcher import MatchedPair, _confidence, _parse_dt as matcher_parse_dt
+from matcher import MatchedPair, _confidence, _parse_dt as matcher_parse_dt, is_compatible_match, match_markets
 from monitor import _resolve_poly_token, _verify_kalshi_clob
 from pipeline import MarketSnapshot, OrderBook, PriceLevel, _parse_kalshi_full_book
 
@@ -85,6 +85,63 @@ class CoreLogicTests(unittest.TestCase):
 
     def test_confidence_ignores_nonpositive_time_window(self) -> None:
         self.assertEqual(_confidence(0.42, delta_h=10, max_delta=0), 0.42)
+
+    def test_matcher_rejects_same_template_different_elections(self) -> None:
+        poly = snap(
+            "polymarket",
+            "poly-election",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": "Will Marine Le Pen win the 2027 French presidential election?"},
+        )
+        kalshi = snap(
+            "kalshi",
+            "kalshi-election",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": "Who will win the next Turkish presidential election?"},
+        )
+
+        self.assertFalse(is_compatible_match(poly, kalshi))
+        self.assertEqual(match_markets([poly], [kalshi], min_title_similarity=0.1), [])
+
+    def test_matcher_rejects_office_and_state_mismatch(self) -> None:
+        poly = snap(
+            "polymarket",
+            "poly-governor",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": "Will the Republicans win the South Carolina governor race in 2026?"},
+        )
+        kalshi = snap(
+            "kalshi",
+            "kalshi-senate",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": "Will Republicans win the Senate race in South Dakota?"},
+        )
+
+        self.assertFalse(is_compatible_match(poly, kalshi))
+        self.assertEqual(match_markets([poly], [kalshi], min_title_similarity=0.1), [])
+
+    def test_matcher_allows_same_party_state_office_template(self) -> None:
+        poly = snap(
+            "polymarket",
+            "poly-senate",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": "Will the Republicans win the North Carolina Senate race in 2026?"},
+        )
+        kalshi = snap(
+            "kalshi",
+            "kalshi-senate",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": "Will Republicans win the Senate race in North Carolina?"},
+        )
+
+        self.assertTrue(is_compatible_match(poly, kalshi))
+        self.assertEqual(len(match_markets([poly], [kalshi], min_title_similarity=0.1)), 1)
 
     @patch("kalshi.client.KalshiClient")
     def test_verify_kalshi_clob_checks_derived_yes_ask(self, client_cls: MagicMock) -> None:
