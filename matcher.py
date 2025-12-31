@@ -217,15 +217,45 @@ _NAME_STOP = {
     "south carolina", "south dakota", "north dakota", "united states",
 }
 
+_LEADING_QUESTION_WORDS = re.compile(
+    r"\b(Will|Who|Which|What|When|Where|How|Does|Is|Are|Can|Should)\b\s+"
+)
+
 
 def _proper_names(text: str) -> set[str]:
     ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    ascii_text = _LEADING_QUESTION_WORDS.sub("", ascii_text)
     names = set()
-    for match in re.finditer(r"\b([A-Z][a-z]{2,}(?:\s+(?:de|la|le|van|von))?\s+[A-Z][a-z]{2,})\b", ascii_text):
+    for match in re.finditer(r"\b([A-Z][a-z]{2,}(?:\s+(?:de|la|le|van|von|the))?\s+[A-Z][A-Za-z]{1,})\b", ascii_text):
         name = match.group(1).lower()
         if name not in _NAME_STOP:
             names.add(name)
     return names
+
+
+def _contract_actions(text: str) -> set[str]:
+    low = _ascii_lower(text)
+    actions: set[str] = set()
+    if re.search(r"\b(win|wins|winner|defeat|defeats)\b", low):
+        actions.add("win")
+    if re.search(r"\b(nominee|nomination|declare|declares|first this list)\b", low):
+        actions.add("nomination")
+    if re.search(r"\bfinish(?:es)?\s+(?:1st|first|2nd|second|3rd|third)\b", low):
+        actions.add("finish_position")
+    if re.search(r"\bticket\b|running mate|vice president", low):
+        actions.add("ticket")
+    if re.search(r"\b(leave|resign|depart|ousted|fired)\b", low):
+        actions.add("leave_role")
+    if re.search(r"\bmeet next\b|where will .*meet|next meet", low):
+        actions.add("meeting_location")
+    if re.search(r"\bbecome\s+prime\s+minister|next\s+prime\s+minister", low):
+        actions.add("become_pm")
+    return actions
+
+
+def _is_generic_winner_market(text: str) -> bool:
+    low = _ascii_lower(text)
+    return bool(re.search(r"\b(who|which)\s+will\s+win\b|\bwho\s+will\s+be\b", low))
 
 
 def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> bool:
@@ -257,6 +287,15 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
         k_names = _proper_names(k_text)
         if p_names and k_names and p_names.isdisjoint(k_names):
             return False
+        if (p_names and not k_names and _is_generic_winner_market(k_text)) or (
+            k_names and not p_names and _is_generic_winner_market(p_text)
+        ):
+            return False
+
+    p_actions = _contract_actions(p_text)
+    k_actions = _contract_actions(k_text)
+    if p_actions and k_actions and p_actions.isdisjoint(k_actions):
+        return False
 
     p_years = _years(p_text)
     k_years = _years(k_text)
