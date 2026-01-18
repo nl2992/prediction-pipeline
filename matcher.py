@@ -185,8 +185,10 @@ def _parties(text: str) -> set[str]:
     parties: set[str] = set()
     if re.search(r"\b(rep|republican|republicans|gop)\b", low):
         parties.add("republican")
-    if re.search(r"\b(dem|democrat|democrats|democratic|democratics)\b", low):
+    if re.search(r"\b(dem|democrat|democrats|democratic|democratics|labour)\b", low):
         parties.add("democratic")
+    if re.search(r"\b(conservative|tory|tories)\b", low):
+        parties.add("conservative")
     return parties
 
 
@@ -236,14 +238,22 @@ def _proper_names(text: str) -> set[str]:
 def _contract_actions(text: str) -> set[str]:
     low = _ascii_lower(text)
     actions: set[str] = set()
-    if re.search(r"\b(win|wins|winner|defeat|defeats)\b", low):
-        actions.add("win")
-    if re.search(r"\b(nominee|nomination|declare|declares|first this list)\b", low):
+    if re.search(r"\b(run|runs|running|declare|declares|first this list)\b", low):
+        actions.add("run_or_declare")
+    if re.search(r"\b(win|wins|winner)\b.*\b(nominee|nomination)\b|\b(nominee|nomination)\b.*\b(win|wins|winner)\b", low):
+        actions.add("win_nomination")
+    elif re.search(r"\b(nominee|nomination)\b", low):
         actions.add("nomination")
+    if re.search(r"\b(defeat|defeats)\b", low):
+        actions.add("head_to_head")
+    elif re.search(r"\b(win|wins|winner)\b", low):
+        actions.add("win")
     if re.search(r"\bfinish(?:es)?\s+(?:1st|first|2nd|second|3rd|third)\b", low):
         actions.add("finish_position")
     if re.search(r"\bticket\b|running mate|vice president", low):
         actions.add("ticket")
+    if re.search(r"\b(occur|occurs|happen|happens|held|take place)\b", low):
+        actions.add("occur")
     if re.search(r"\b(leave|resign|depart|ousted|fired)\b", low):
         actions.add("leave_role")
     if re.search(r"\bmeet next\b|where will .*meet|next meet", low):
@@ -256,6 +266,20 @@ def _contract_actions(text: str) -> set[str]:
 def _is_generic_winner_market(text: str) -> bool:
     low = _ascii_lower(text)
     return bool(re.search(r"\b(who|which)\s+will\s+win\b|\bwho\s+will\s+be\b", low))
+
+
+def _is_party_contract(text: str) -> bool:
+    return bool(_parties(text)) and not _proper_names(text)
+
+
+def _is_generic_location_market(text: str) -> bool:
+    low = _ascii_lower(text)
+    return bool(re.search(r"\bwhere\s+will\b|where .* next meet", low))
+
+
+def _is_specific_location_option(text: str) -> bool:
+    low = _ascii_lower(text)
+    return bool(re.search(r"\bmeet\s+next\s+in\b|\bnext\s+meet\s+in\b", low))
 
 
 def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> bool:
@@ -291,10 +315,20 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
             k_names and not p_names and _is_generic_winner_market(p_text)
         ):
             return False
+        if (p_names and _is_party_contract(k_text)) or (k_names and _is_party_contract(p_text)):
+            return False
 
     p_actions = _contract_actions(p_text)
     k_actions = _contract_actions(k_text)
     if p_actions and k_actions and p_actions.isdisjoint(k_actions):
+        return False
+    if (_proper_names(p_text) and _is_generic_location_market(k_text)) or (
+        _proper_names(k_text) and _is_generic_location_market(p_text)
+    ):
+        return False
+    if (_is_specific_location_option(p_text) and _is_generic_location_market(k_text)) or (
+        _is_specific_location_option(k_text) and _is_generic_location_market(p_text)
+    ):
         return False
 
     p_years = _years(p_text)
