@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from arb import find_arb
-from discover import _parse_dt as discover_parse_dt
+from discover import _match_outcomes_within_group, _parse_dt as discover_parse_dt
 from executor import TradeIntent, check_price_still_valid
 from matcher import MatchedPair, _confidence, _parse_dt as matcher_parse_dt, is_compatible_match, match_markets
 from monitor import _resolve_poly_token, _verify_kalshi_clob
@@ -216,6 +216,26 @@ class CoreLogicTests(unittest.TestCase):
         )
 
         self.assertFalse(is_compatible_match(poly, kalshi))
+
+    def test_group_matcher_requires_outcome_label_overlap(self) -> None:
+        poly = snap(
+            "polymarket",
+            "poly-andy",
+            bid=0.22,
+            ask=0.22,
+            extra={"event_title": "2028 Democratic presidential nominee"},
+        )
+        poly.title = "Andy Beshear"
+        kalshi = snap(
+            "kalshi",
+            "kalshi-generic",
+            bid=0.22,
+            ask=0.22,
+            extra={"event_title": "2028 Democratic presidential nominee"},
+        )
+        kalshi.title = "Who will win the next presidential election?"
+
+        self.assertEqual(_match_outcomes_within_group([kalshi], [poly], group_sim=0.9), [])
 
     @patch("kalshi.client.KalshiClient")
     def test_verify_kalshi_clob_checks_derived_yes_ask(self, client_cls: MagicMock) -> None:

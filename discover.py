@@ -509,6 +509,13 @@ def _match_outcomes_within_group(
             p_mid = p.orderbook.mid or p.orderbook.best_bid
 
             title_sim = _jaccard(k_toks, p_toks)
+            # Price proximity is useful only after the two outcomes share some
+            # lexical evidence.  Without this floor, a categorical Polymarket
+            # outcome like "Andy Beshear" can match a generic Kalshi question
+            # such as "Who will win the next presidential election?" solely
+            # because their catalogue prices happen to be close.
+            if title_sim < 0.15:
+                continue
 
             if k_mid is not None and p_mid is not None and k_mid > 0 and p_mid > 0:
                 # Within a matched event, a small price difference is a very
