@@ -1,40 +1,42 @@
 """
 Organic Cross-Exchange Market Discovery
 ========================================
-Scans the full Kalshi events catalog (excluding sports parlays), auto-derives
-search keywords from each event title, searches Polymarket for matching markets,
-and runs the matcher to surface real cross-exchange price comparisons.
+Scans the full Kalshi events catalog, auto-derives search keywords from each
+event title, searches Polymarket for matching markets, and runs the matcher to
+surface real cross-exchange price comparisons — with live bid/ask spreads.
 
-No manual slug or series configuration needed.  Just run it.
+No manual slug or series configuration.  Just run it.
 
 Usage
 -----
-    python discover.py                          # all near-term non-sports events
-    python discover.py --days 180               # closing within 180 days
-    python discover.py --category election      # elections only
-    python discover.py --category economic      # Fed/crypto/GDP/etc.
-    python discover.py --category all           # everything
+    python discover.py                          # everything, 365-day horizon
+    python discover.py --category election      # Senate/House/Governor/primary
+    python discover.py --category sports        # NBA/MLB/NFL/NHL/soccer/etc.
+    python discover.py --category economic      # Fed/crypto/GDP/CPI/jobs
+    python discover.py --category political     # SCOTUS/Trump/legislation/intl
+    python discover.py --category pop           # entertainment/celebrity
+    python discover.py --days 90                # closing within 90 days
     python discover.py --min-sim 0.30           # stricter title matching
     python discover.py --show-prices            # fetch live orderbooks for pairs
     python discover.py --output pairs.json      # save results to JSON
 
-Categories
-----------
-  election  – Congressional, Senate, Governor, primary, AG, Sec of State races
-  economic  – Fed rate, Bitcoin, GDP, CPI, jobs, economic indicators
-  political – SCOTUS, Trump admin, legislation, international politics
-  pop       – Entertainment, sports (non-parlay), celebrity
-  all       – Everything non-parlay
+What gets excluded
+------------------
+Only Kalshi multi-event parlays are excluded — these are markets with titles
+like "yes Yankees, yes OKC wins by 4.5, yes LeBron: 25+" that bundle multiple
+props into one contract.  Every other market type (elections, sports game
+winners, economic indicators, entertainment, politics) is included.
 
 Algorithm
 ---------
-1. Fetch all active Kalshi events (3000 events, ~7s)
-2. Filter to non-sports, category-matching, near-term events
-3. For each filtered event, derive 2–4 Polymarket search keywords from title
-4. Deduplicate keywords; search Polymarket in batches (paginated keyword scan)
+1. Fetch all active Kalshi events (~3000, ~6s)
+2. Exclude multi-event parlays; filter by category and close-date horizon
+3. For each event, fetch its markets and auto-derive Polymarket search keywords
+4. Search Polymarket with those keywords (paginated catalog scan)
 5. Build MarketSnapshots from both sides
-6. Run Jaccard+close-time matcher with per-category thresholds
-7. Print ranked pairs with bid/ask spread and implied arb
+6. Run Jaccard+close-time matcher
+7. Optionally fetch live orderbooks for matched pairs
+8. Print ranked pairs with bid/ask spread and arb signals
 """
 
 from __future__ import annotations
@@ -42,124 +44,195 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import sys
 import time
-from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
-# Sports prefixes — exclude from discovery
+# Parlay exclusion — the ONLY filter applied to Kalshi markets
 # ---------------------------------------------------------------------------
+# Kalshi KXMVE / KXMVECROSS markets bundle multiple props into one contract:
+#   "yes Oklahoma City, yes Shohei Ohtani: 1+, no Cubs win by 4.5"
+# These are structurally incomparable with Polymarket binary markets.
+# All other Kalshi markets — including single-game sports, elections, crypto —
+# are kept.
 
-SPORTS_EVENT_PREFIXES = (
-    "KXMVE", "KXMLB", "KXNBA", "KXNFL", "KXNHL", "KXSOCCER",
-    "KXNASCAR", "KXTENNIS", "KXGOLF", "KXPGA", "KXFORMULA",
-    "KXBOXING", "KXMMA", "KXUFC", "KXESPORT", "KXOLYMPIC",
-    "KXNCAAFW", "KXNCAAMB", "KXNCAAH",
+_PARLAY_EVENT_PREFIXES = ("KXMVE",)
+
+_PARLAY_TITLE_RE = re.compile(
+    r"^(yes |no )(.*,)*(yes |no )",   # "yes X, yes Y, ..." multi-leg pattern
+    re.IGNORECASE,
 )
 
-SPORTS_TITLE_PATTERNS = re.compile(
-    r"^(yes |no |over |under |\d+\.\d+ (points|runs|games|rebounds|assists|strikeouts))",
+# Kalshi voter-turnout / margin-of-victory markets are numeric range markets
+# (e.g. "Will the total vote count be between 800k and 900k?") that have no
+# Polymarket equivalent.  Exclude them too.
+_STATS_ONLY_RE = re.compile(
+    r"(voter turnout|margin of victory|total vote count|vote share|"
+    r"win percentage|double double|triple double|quadruple double)",
     re.IGNORECASE,
 )
 
 
-def _is_sports(event: dict) -> bool:
+def _is_parlay(event: dict) -> bool:
+    """Return True only for multi-event combo markets and stats-only markets."""
     et = (event.get("event_ticker") or "").upper()
-    if et.startswith(SPORTS_EVENT_PREFIXES):
+    if et.startswith(_PARLAY_EVENT_PREFIXES):
         return True
-    title = event.get("title", "").lower()
-    # Voter turnout / margin of victory are Kalshi-only stats markets
-    if any(p in title for p in ("voter turnout", "margin of victory", "vote count",
-                                 "total vote", "win percentage", "vote share",
-                                 "double double", "triple double")):
+    title = event.get("title", "")
+    if _PARLAY_TITLE_RE.match(title):
         return True
-    return bool(SPORTS_TITLE_PATTERNS.match(event.get("title", "")))
+    if _STATS_ONLY_RE.search(title):
+        return True
+    return False
+
+
+def _is_parlay_market(market: dict) -> bool:
+    """Also filter individual markets with parlay-format titles."""
+    title = market.get("title", "")
+    return bool(_PARLAY_TITLE_RE.match(title))
 
 
 # ---------------------------------------------------------------------------
 # Category classifiers
 # ---------------------------------------------------------------------------
 
-ELECTION_HINTS = re.compile(
+_SPORTS_HINTS = re.compile(
+    # Leagues / governing bodies — very unambiguous
+    r"(\bnba\b|\bnfl\b|\bmlb\b|\bnhl\b|\bmls\b|\bnascar\b|\bufc\b|"
+    r"\bboxing\b|\bmma\b|\btennis\b|\bgolf\b|\bpga\b|"
+    r"formula 1|\bf1\b|\bolympics\b|\bncaa\b|"
+    r"college football|college basketball|"
+    # Championships / rounds
+    r"super bowl|world series|stanley cup|nba finals|nba championship|"
+    r"\bplayoffs\b|\bplayoff\b|\bchampionship\b|"
+    r"premier league|la liga|bundesliga|serie a|champions league|"
+    r"\bworld cup\b|\beuro \d{4}\b|\bcopa\b|"
+    # NBA teams (unambiguous standalone words)
+    r"\blakers\b|\bceltics\b|\bwarriors\b|\bknicks\b|\bbucks\b|"
+    r"\bnuggets\b|\bthunder\b|\btimberwolves\b|\bpacers\b|"
+    # MLB teams
+    r"\byankees\b|\bdodgers\b|\bmets\b|\bcubs\b|\bbraves\b|"
+    r"\bastros\b|\bred sox\b|\bpadres\b|"
+    # NFL teams — keep only clearly unambiguous ones
+    r"\bchiefs\b|\b49ers\b|\bpackers\b|\bravens\b|\bbengals\b|"
+    # Known player names (no short/common-word names to avoid false positives)
+    r"\blebron\b|\bsteph curry\b|\bkd durant\b|\bgiannis\b|"
+    r"\bwembanyama\b|\bjokic\b|\bohtani\b|\bmahomes\b|\bburrow\b|"
+    r"\bhurts\b|"
+    # Game/match terminology — with word boundaries to avoid 'matchup', 'Seth', 'Dakota'
+    r"\bgame \d\b|\bseries\b|\bovertime\b|\binning\b|\bpitching\b|"
+    r"\bhalftime\b|\bsoccer\b|\bgoalscorer\b)",
+    re.IGNORECASE,
+)
+
+_ELECTION_HINTS = re.compile(
     r"(republican|democrat|nominee|primary|senate|house|governor|congress|"
-    r"election|race|seat|candidate|ag |attorney general|secretary of state|"
-    r"win the|who will win|special election|runoff|party)",
+    r"election|ballot|race|seat|candidate|attorney general|secretary of state|"
+    r"special election|runoff|midterm|caucus|mayor|alderman|comptroller|"
+    r"lieutenant governor)",
     re.IGNORECASE,
 )
 
-ECONOMIC_HINTS = re.compile(
-    r"(fed|federal funds|interest rate|fomc|bitcoin|btc|ethereum|eth|gdp|cpi|"
-    r"inflation|jobs|unemployment|payroll|s&p|nasdaq|dow|oil|gold|gas price|"
-    r"tariff|trade deficit|treasury|yield|mortgage rate)",
+_ECONOMIC_HINTS = re.compile(
+    r"(fed |federal funds|interest rate|fomc|bitcoin|\bbtc\b|ethereum|\beth\b|solana|"
+    r"\bgdp\b|\bcpi\b|inflation|jobs report|unemployment|payroll|nonfarm|"
+    r"s&p 500|nasdaq|dow jones|oil price|gold price|gas price|"
+    r"tariff|trade deficit|treasury|bond yield|mortgage rate|"
+    r"earnings|revenue|market cap|\bipo\b|merger|acquisition)",
     re.IGNORECASE,
 )
 
-POLITICAL_HINTS = re.compile(
-    r"(scotus|supreme court|trump|biden|president|congress|legislation|bill|"
-    r"impeach|resign|cabinet|nato|ukraine|russia|china|israel|iran|"
-    r"executive order|veto|pardon|indictment|conviction|sanction)",
+_POLITICAL_HINTS = re.compile(
+    r"(scotus|supreme court|trump|biden|harris|president|white house|"
+    r"congress|senate|legislation|bill|impeach|resign|cabinet|nato|"
+    r"ukraine|russia|china|taiwan|israel|iran|north korea|"
+    r"executive order|veto|pardon|indictment|conviction|sanction|"
+    r"diplomacy|treaty|ceasefire|invasion|coup)",
     re.IGNORECASE,
 )
 
 
 def _category(event: dict) -> str:
     title = event.get("title", "")
-    if ELECTION_HINTS.search(title):
+    # Election/political checks take priority — prevents NFL "Bills" / "race" /
+    # player-name substrings from mis-classifying Senate/House/Governor events.
+    if _ELECTION_HINTS.search(title):
         return "election"
-    if ECONOMIC_HINTS.search(title):
+    if _ECONOMIC_HINTS.search(title):
         return "economic"
-    if POLITICAL_HINTS.search(title):
+    if _POLITICAL_HINTS.search(title):
         return "political"
+    if _SPORTS_HINTS.search(title):
+        return "sports"
     return "pop"
 
 
 # ---------------------------------------------------------------------------
-# Keyword extraction from Kalshi event titles
+# Keyword extraction
 # ---------------------------------------------------------------------------
 
-# US state abbreviations (2-letter) and common district patterns
-_STATE_RE = re.compile(r"\b([A-Z]{2})-?(\d{2})\b")
-_CANDIDATE_RE = re.compile(r"Will ([A-Z][a-z]+ [A-Z][a-z]+)")
-
-_QUESTION_WORDS = re.compile(
+_QUESTION_PREFIX = re.compile(
     r"^(will|which|who|who will|when will|what|how|does|is|are|can|"
-    r"should|does|did|was|were)\s+",
+    r"should|did|was|were|has|have)\s+",
     re.IGNORECASE,
 )
-_FILLER = re.compile(
-    r"\b(the|a|an|be|win|lose|get|have|make|take|go|come|run|become|"
-    r"happen|occur|pass|reach|above|below|over|under|before|after|"
-    r"during|next|new|another|other|this|that|than|more|less|at|in|"
-    r"on|of|for|to|by|with|from|or|and|but|not|no|yes|any|all|each|"
-    r"ever|never|first|last|most|least|per|between|within|until|since|"
-    r"once|also|already|only|just|even|still|yet|again|then|when|where|"
-    r"who|whom|whose|how|why|whether|either|both|neither|very|really|"
-    r"party|parties|election|race|seat|candidate|winner|win)\b",
+
+_GENERIC_FILLER = re.compile(
+    r"\b(the|a|an|be|to|of|in|on|at|by|for|or|and|but|not|that|this|"
+    r"their|they|it|its|he|she|we|you|i|am|is|are|was|were|"
+    r"have|has|had|do|does|did|will|would|could|should|may|might|"
+    r"more|less|most|least|very|really|just|only|even|still|yet|"
+    r"before|after|during|between|within|until|since|once|already|"
+    r"again|also|then|when|where|how|why|whether|either|both|"
+    r"any|all|each|every|some|other|another|same|first|last|next|"
+    r"new|old|big|small|high|low|long|short|early|late|"
+    r"happen|occur|reach|pass|become|get|go|come|run|make|take|"
+    r"win|lose|beat|score|play|start|end|finish)\b",
     re.IGNORECASE,
 )
+
+# Proper-noun pairs (e.g. "Thomas Massie", "LeBron James", "New Hampshire")
+_PROPER_PAIR_RE = re.compile(r"\b([A-Z][a-z]{1,15} [A-Z][a-z]{1,15})\b")
+
+# District codes: "KY-4", "MD-06", "TX-35"
+_DISTRICT_RE = re.compile(r"\b([A-Z]{2})-?(\d{1,2})\b")
+
+# Game numbers: "Game 4", "Round 2"
+_GAME_NUM_RE = re.compile(r"\b(game|round|series|match|leg)\s*(\d)\b", re.IGNORECASE)
+
+# Sports team / league shorthands
+_LEAGUE_RE = re.compile(r"\b(NBA|NFL|MLB|NHL|MLS|NCAA|UFC|PGA|F1)\b")
 
 
 def _derive_keywords(title: str) -> list[str]:
     """
-    Extract 2–4 short search terms from a Kalshi event title.
+    Extract the most specific search terms from a Kalshi event title.
 
-    Strategy:
-      1. Named candidates → use full name (e.g. "Thomas Massie")
-      2. District codes → use "XX-NN" style (e.g. "KY-04")
-      3. State name → use state abbreviation + surrounding noun
-      4. Fall back to removing stopwords and taking the 3 longest tokens
+    Priority:
+      1. Proper-noun pairs (candidate/player/place names)
+      2. League + game number combos
+      3. District codes
+      4. Longest meaningful tokens after stopword removal
     """
     keywords: list[str] = []
 
-    # Named candidates (two capitalised words)
-    for m in _CANDIDATE_RE.finditer(title):
-        keywords.append(m.group(1))
+    # 1. Proper noun pairs — most specific signal
+    for m in _PROPER_PAIR_RE.finditer(title):
+        kw = m.group(1)
+        # Skip generic two-word phrases
+        if not any(skip in kw.lower() for skip in ("which ", "that ", "this ")):
+            keywords.append(kw)
 
-    # District/state codes like "KY-4", "MD-06", "TX-35"
-    for m in _STATE_RE.finditer(title):
+    # 2. League + game number (e.g. "NBA Finals game 4")
+    league = _LEAGUE_RE.search(title)
+    game = _GAME_NUM_RE.search(title)
+    if league and game:
+        keywords.append(f"{league.group(1)} {game.group(0).lower()}")
+
+    # 3. District codes
+    for m in _DISTRICT_RE.finditer(title):
         state, num = m.group(1), m.group(2).lstrip("0") or "0"
         keywords.append(f"{state}-{num}")
         keywords.append(f"{state}-{num.zfill(2)}")
@@ -167,17 +240,16 @@ def _derive_keywords(title: str) -> list[str]:
     if keywords:
         return list(dict.fromkeys(keywords))[:4]
 
-    # Fall back: remove question words + stopwords, keep longest tokens
-    cleaned = _QUESTION_WORDS.sub("", title)
-    cleaned = _FILLER.sub(" ", cleaned)
-    tokens = [t for t in re.split(r"\W+", cleaned) if len(t) > 2]
-    # Sort by length desc to get the most informative terms
+    # 4. Fallback: remove stopwords, keep 3 longest tokens
+    cleaned = _QUESTION_PREFIX.sub("", title)
+    cleaned = _GENERIC_FILLER.sub(" ", cleaned)
+    tokens = [t for t in re.split(r"\W+", cleaned) if len(t) > 3]
     tokens.sort(key=len, reverse=True)
     return list(dict.fromkeys(tokens[:3]))
 
 
 # ---------------------------------------------------------------------------
-# Snapshot builders (no orderbook fetch — speed first)
+# Snapshot builders (no orderbook fetch — speed pass first)
 # ---------------------------------------------------------------------------
 
 def _parse_dt(s: str | None) -> datetime | None:
@@ -192,7 +264,7 @@ def _parse_dt(s: str | None) -> datetime | None:
 
 
 def _k_snap(m: dict, fetched_at: str):
-    from pipeline import MarketSnapshot, OrderBook, PriceLevel, _parse_kalshi_top_of_book
+    from pipeline import MarketSnapshot, _parse_kalshi_top_of_book
     ob = _parse_kalshi_top_of_book(m)
     close = m.get("close_time") or m.get("expiration_time")
     return MarketSnapshot(
@@ -246,11 +318,10 @@ def _p_snap(m: dict, fetched_at: str):
 
 
 # ---------------------------------------------------------------------------
-# Live orderbook enrichment (called only for confirmed pairs)
+# Live orderbook enrichment (only for confirmed pairs)
 # ---------------------------------------------------------------------------
 
-def _enrich_kalshi(snaps, max_workers: int = 8):
-    """Fetch full Kalshi orderbooks for the given snapshots (in parallel-ish)."""
+def _enrich_kalshi(snaps: list) -> None:
     from kalshi.client import KalshiClient
     from pipeline import _parse_kalshi_full_book
     client = KalshiClient()
@@ -262,44 +333,47 @@ def _enrich_kalshi(snaps, max_workers: int = 8):
             pass
 
 
-def _enrich_polymarket(snaps):
-    """Fetch live CLOB orderbooks for Polymarket snapshots."""
+def _enrich_polymarket(snaps: list) -> None:
     from polymarket.client import PolymarketClient
     from pipeline import _parse_polymarket_book
     client = PolymarketClient()
-    token_map: dict[str, Any] = {}
+    # Batch by groups of 500 (CLOB /books limit)
+    token_order: list[tuple[Any, str]] = []
     for snap in snaps:
         tids = snap.extra.get("clob_token_ids") or []
         if tids:
-            token_map[snap.market_id] = tids[0]  # YES token
-    if not token_map:
+            token_order.append((snap, tids[0]))
+    if not token_order:
         return
-    try:
-        bodies = [{"token_id": tid} for tid in token_map.values()]
-        books = client._post("https://clob.polymarket.com", "/books", json_body=bodies)
-        for snap, (_, tid) in zip(
-            [s for s in snaps if s.market_id in token_map],
-            token_map.items(),
-        ):
-            book = next((b for b in books if b.get("asset_id") == tid), None)
-            if book:
-                snap.orderbook = _parse_polymarket_book(book)
-    except Exception:
-        pass
+    BATCH = 500
+    for i in range(0, len(token_order), BATCH):
+        batch = token_order[i : i + BATCH]
+        try:
+            books = client._post(
+                "https://clob.polymarket.com",
+                "/books",
+                json_body=[{"token_id": tid} for _, tid in batch],
+            )
+            tid_to_book = {b.get("asset_id"): b for b in books}
+            for snap, tid in batch:
+                book = tid_to_book.get(tid)
+                if book:
+                    snap.orderbook = _parse_polymarket_book(book)
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
-# Main discovery function
+# Core discovery function
 # ---------------------------------------------------------------------------
-
 
 def discover(
-    category: str = "election",
+    category: str = "all",
     days: int = 365,
     min_sim: float = 0.28,
     show_prices: bool = False,
     max_poly_offset: int = 3000,
-    max_events_to_search: int = 300,
+    max_events_to_search: int = 400,
 ) -> list[dict]:
     """
     Run organic cross-exchange discovery and return matched pairs as dicts.
@@ -315,39 +389,60 @@ def discover(
     horizon = now + timedelta(days=days)
     fetched_at = now.isoformat()
 
-    # ── 1. Kalshi events catalog ────────────────────────────────────────────
-    print(f"[1/5] Fetching Kalshi event catalog…", flush=True)
+    # ── 1. Kalshi event catalog ─────────────────────────────────────────────
+    print("[1/5] Fetching Kalshi event catalog…", flush=True)
     kc = KalshiClient()
     t0 = time.time()
     all_events = kc.get_all_events(max_pages=15, page_size=200, status="open")
-    print(f"      {len(all_events)} events in {time.time()-t0:.1f}s")
+    print(f"      {len(all_events):,} events in {time.time()-t0:.1f}s")
 
-    # ── 2. Filter events ────────────────────────────────────────────────────
+    # ── 2. Filter events ─────────────────────────────────────────────────────
     filtered = []
     for ev in all_events:
-        if _is_sports(ev):
+        if _is_parlay(ev):
             continue
         close = _parse_dt(ev.get("close_time") or ev.get("end_date"))
-        if close and (close < now or close > horizon):
+        # Determine the category first so we can apply category-appropriate filters
+        ev_cat = _category(ev)
+        if category != "all" and ev_cat != category:
             continue
-        cat = _category(ev)
-        if category != "all" and cat != category:
+        # Keep events with unknown close time (might resolve soon) or within horizon.
+        # Sports contracts on Kalshi often carry a far-out contractual expiry date
+        # (e.g. 2028) even though the market resolves as soon as the game/series
+        # ends.  Skip only events that have already closed; accept sports events
+        # regardless of their stated close date.
+        if close and close < now:
+            continue
+        if close and close > horizon and ev_cat != "sports":
             continue
         filtered.append(ev)
 
-    print(f"[2/5] Filtered to {len(filtered)} {category} events within {days} days")
-    if not filtered:
-        print("      No events matched. Try --category all or --days 730.")
-        return []
+    # Prioritise events closing sooner (more liquid, more likely to match)
+    def _sort_key(ev):
+        dt = _parse_dt(ev.get("close_time") or ev.get("end_date"))
+        return dt if dt else now + timedelta(days=9999)
 
-    # Limit to avoid too many API calls
+    filtered.sort(key=_sort_key)
     filtered = filtered[:max_events_to_search]
 
-    # ── 3. Fetch Kalshi markets for each event ─────────────────────────────
+    cat_counts: dict[str, int] = {}
+    for ev in filtered:
+        c = _category(ev)
+        cat_counts[c] = cat_counts.get(c, 0) + 1
+
+    print(f"[2/5] Filtered to {len(filtered)} events within {days} days  "
+          f"({', '.join(f'{c}={n}' for c, n in sorted(cat_counts.items()))})")
+    if not filtered:
+        print("      Nothing to scan.  Try --category all or --days 730.")
+        return []
+
+    # ── 3. Fetch Kalshi markets per event ────────────────────────────────────
     print(f"[3/5] Fetching Kalshi markets for {len(filtered)} events…", flush=True)
     t0 = time.time()
-    k_snaps = []
+    k_snaps: list = []
     k_keywords: list[str] = []
+    skipped_parlay = 0
+
     for ev in filtered:
         et = ev.get("event_ticker", "")
         try:
@@ -356,25 +451,67 @@ def discover(
         except Exception:
             continue
         for m in mkts:
+            if _is_parlay_market(m):
+                skipped_parlay += 1
+                continue
             k_snaps.append(_k_snap(m, fetched_at))
-        # Derive keywords from event title
         kws = _derive_keywords(ev.get("title", ""))
         k_keywords.extend(kws)
 
-    # Deduplicate keywords, keep most specific (longest first)
-    k_keywords = list(dict.fromkeys(kw for kw in k_keywords if len(kw) > 2))
+    # Deduplicate + cap keywords from the events scan (before supplemental)
+    k_keywords = [kw for kw in dict.fromkeys(k_keywords) if len(kw) > 2]
     k_keywords.sort(key=len, reverse=True)
-    k_keywords = k_keywords[:60]  # cap Poly search budget
+    k_keywords = k_keywords[:80]
 
-    print(f"      {len(k_snaps)} Kalshi markets in {time.time()-t0:.1f}s")
+    # ── Supplemental: known sports series not in the events catalog ───────────
+    # Kalshi's active championship markets (NBA Finals, NHL, MLB, NFL) are stored
+    # under KXNBA / KXNHL / KXMLB / KXNFL series_tickers but may not appear in
+    # the events catalog.  Fetch them directly when the category allows sports.
+    # Important: supplemental keywords are added AFTER the cap so short but
+    # high-value terms like "NBA" or "Oklahoma City" are never crowded out.
+    supplemental_kws: list[str] = []
+    if category in ("all", "sports"):
+        _SPORTS_SERIES = [
+            ("KXNBA",  ["NBA", "Pro Basketball"]),
+            ("KXNHL",  ["NHL", "Stanley Cup"]),
+            ("KXMLB",  ["MLB", "World Series"]),
+            ("KXNFL",  ["NFL", "Super Bowl"]),
+            ("KXNFLSB", ["NFL", "Super Bowl"]),
+        ]
+        seen_tickers = {s.market_id for s in k_snaps}
+        for series_ticker, extra_kws in _SPORTS_SERIES:
+            try:
+                resp = kc.get_markets(limit=100, series_ticker=series_ticker, status="open")
+                mkts = resp if isinstance(resp, list) else resp.get("markets", [])
+                for m in mkts:
+                    if m.get("ticker", "") in seen_tickers:
+                        continue
+                    if _is_parlay_market(m):
+                        skipped_parlay += 1
+                        continue
+                    snap = _k_snap(m, fetched_at)
+                    k_snaps.append(snap)
+                    seen_tickers.add(snap.market_id)
+                    supplemental_kws.extend(_derive_keywords(m.get("title", "")))
+                    supplemental_kws.extend(extra_kws)
+            except Exception:
+                pass
+    # Merge supplemental keywords without re-applying the length cap
+    all_kws_seen = set(k_keywords)
+    for kw in supplemental_kws:
+        if kw not in all_kws_seen and len(kw) > 2:
+            k_keywords.append(kw)
+            all_kws_seen.add(kw)
+
+    elapsed = time.time() - t0
+    print(f"      {len(k_snaps):,} Kalshi markets ({skipped_parlay} parlay-format skipped) in {elapsed:.1f}s")
     print(f"      Derived {len(k_keywords)} Polymarket search keywords")
-
     if not k_snaps:
-        print("      No Kalshi markets found. Exiting.")
+        print("      No Kalshi markets found.")
         return []
 
-    # ── 4. Search Polymarket ─────────────────────────────────────────────
-    print(f"[4/5] Searching Polymarket ({max_poly_offset} market scan + keyword filter)…", flush=True)
+    # ── 4. Search Polymarket ─────────────────────────────────────────────────
+    print(f"[4/5] Searching Polymarket ({max_poly_offset:,}-market catalog scan)…", flush=True)
     t0 = time.time()
     pc = PolymarketClient()
     p_raw = pc.search_markets(
@@ -384,27 +521,30 @@ def discover(
         max_offset=max_poly_offset,
     )
     p_snaps = [_p_snap(m, fetched_at) for m in p_raw]
-    print(f"      {len(p_snaps)} Polymarket markets in {time.time()-t0:.1f}s")
-
+    print(f"      {len(p_snaps):,} Polymarket markets in {time.time()-t0:.1f}s")
     if not p_snaps:
         print("      No Polymarket markets found.")
         return []
 
-    # ── 5. Match ────────────────────────────────────────────────────────────
+    # ── 5. Match ─────────────────────────────────────────────────────────────
     print(f"[5/5] Running matcher (min_sim={min_sim})…", flush=True)
     pairs = match_markets(
         p_snaps, k_snaps,
         min_title_similarity=min_sim,
-        max_close_delta_hours=9999,
+        # Use a very large horizon so sports contracts with far-out Kalshi expiry
+        # dates (e.g. 2028 for current NBA Finals) still receive a meaningful
+        # time-proximity score in the confidence formula rather than zero.
+        max_close_delta_hours=100_000,
     )
+    print(f"      {len(pairs)} pairs found")
 
-    # Optionally enrich with live orderbooks
     if show_prices and pairs:
         print(f"      Fetching live orderbooks for {len(pairs)} pairs…", flush=True)
-        _enrich_kalshi([pair.kalshi for pair in pairs])
-        _enrich_polymarket([pair.poly for pair in pairs])
+        _enrich_kalshi([p.kalshi for p in pairs])
+        _enrich_polymarket([p.poly for p in pairs])
 
-    # ── Format output ────────────────────────────────────────────────────────
+    # ── Format results ────────────────────────────────────────────────────────
+    FEE = 0.07  # conservative worst-case fee
     results = []
     for pair in sorted(pairs, key=lambda x: -x.confidence):
         pb = pair.poly.orderbook.best_bid
@@ -412,47 +552,40 @@ def discover(
         kb = pair.kalshi.orderbook.best_bid
         ka = pair.kalshi.orderbook.best_ask
 
-        # Arb check
-        arb_dir = None
-        arb_profit = None
-        FEE = 0.07
+        arb_dir = arb_profit = None
         if pa is not None and kb is not None:
-            cost = pa + (1.0 - kb)
-            profit = round(1.0 - cost - FEE, 4)
+            profit = round(1.0 - (pa + 1.0 - kb) - FEE, 4)
             if profit > 0:
-                arb_dir = "poly_yes + kalshi_no"
-                arb_profit = profit
+                arb_dir, arb_profit = "poly_yes + kalshi_no", profit
         if ka is not None and pb is not None:
-            cost = ka + (1.0 - pb)
-            profit = round(1.0 - cost - FEE, 4)
+            profit = round(1.0 - (ka + 1.0 - pb) - FEE, 4)
             if arb_profit is None or profit > arb_profit:
-                arb_dir = "kalshi_yes + poly_no"
-                arb_profit = profit
+                arb_dir, arb_profit = "kalshi_yes + poly_no", profit
 
         results.append({
-            "confidence": round(pair.confidence, 3),
-            "title_sim":  round(pair.title_similarity, 3),
+            "confidence":       round(pair.confidence, 3),
+            "title_sim":        round(pair.title_similarity, 3),
+            "category":         _category({"title": pair.kalshi.title}),
             "close_delta_days": round(pair.close_delta_hours / 24) if pair.close_delta_hours else None,
-            "poly_title":  pair.poly.title,
-            "poly_id":     pair.poly.market_id,
-            "poly_slug":   pair.poly.event_id,
-            "poly_close":  (pair.poly.close_time or "")[:10],
-            "poly_bid":    pb,
-            "poly_ask":    pa,
-            "kalshi_title":  pair.kalshi.title,
-            "kalshi_ticker": pair.kalshi.market_id,
-            "kalshi_close":  (pair.kalshi.close_time or "")[:10],
-            "kalshi_bid":  kb,
-            "kalshi_ask":  ka,
-            "arb_direction": arb_dir,
-            "arb_net_profit": arb_profit,
+            "poly_title":       pair.poly.title,
+            "poly_id":          pair.poly.market_id,
+            "poly_slug":        pair.poly.event_id,
+            "poly_close":       (pair.poly.close_time or "")[:10],
+            "poly_bid":         pb,
+            "poly_ask":         pa,
+            "kalshi_title":     pair.kalshi.title,
+            "kalshi_ticker":    pair.kalshi.market_id,
+            "kalshi_close":     (pair.kalshi.close_time or "")[:10],
+            "kalshi_bid":       kb,
+            "kalshi_ask":       ka,
+            "arb_direction":    arb_dir,
+            "arb_net_profit":   arb_profit,
         })
-
     return results
 
 
 # ---------------------------------------------------------------------------
-# CLI
+# CLI printer
 # ---------------------------------------------------------------------------
 
 def _print_results(results: list[dict], show_prices: bool) -> None:
@@ -460,54 +593,70 @@ def _print_results(results: list[dict], show_prices: bool) -> None:
         print("\nNo pairs found.")
         return
 
-    arb_results = [r for r in results if r.get("arb_net_profit", 0) and r["arb_net_profit"] > 0]
+    arb = [r for r in results if (r.get("arb_net_profit") or 0) > 0]
 
-    print(f"\n{'═' * 120}")
-    print(f"  {len(results)} MATCHED PAIRS   |   {len(arb_results)} with positive arb signal")
-    print(f"{'═' * 120}\n")
+    # Group by category for the summary line
+    by_cat: dict[str, int] = {}
+    for r in results:
+        c = r.get("category", "?")
+        by_cat[c] = by_cat.get(c, 0) + 1
+    cat_summary = "  ".join(f"{c}={n}" for c, n in sorted(by_cat.items()))
+
+    print(f"\n{'═' * 122}")
+    print(f"  {len(results)} MATCHED PAIRS   |   {len(arb)} arb signals   |   {cat_summary}")
+    print(f"{'═' * 122}\n")
 
     for i, r in enumerate(results, 1):
+        arb_tag = ""
+        if (r.get("arb_net_profit") or 0) > 0:
+            arb_tag = f"  ⚡ +{r['arb_net_profit']:.4f} ({r['arb_direction']})"
+        cat_tag = f"[{r.get('category','?')[:4]}]"
         conf_tag = f"[{r['confidence']:.2f}]"
-        arb_tag = f"  ⚡ ARB +{r['arb_net_profit']:.4f} ({r['arb_direction']})" if r.get("arb_net_profit", 0) > 0 else ""
 
-        print(f"  #{i:>3} {conf_tag}  sim={r['title_sim']:.2f}{arb_tag}")
-        print(f"        Poly:   {r['poly_title'][:80]}")
-        print(f"        Kalshi: {r['kalshi_title'][:80]}")
+        print(f"  #{i:>4} {conf_tag} {cat_tag}  sim={r['title_sim']:.2f}{arb_tag}")
+        print(f"         Poly:   {r['poly_title'][:90]}")
+        print(f"         Kalshi: {r['kalshi_title'][:90]}")
 
         if show_prices:
             pb, pa = r.get("poly_bid"), r.get("poly_ask")
             kb, ka = r.get("kalshi_bid"), r.get("kalshi_ask")
-            poly_str = f"bid={pb:.3f} ask={pa:.3f}" if pb and pa else "no live CLOB"
-            kalshi_str = f"bid={kb:.3f} ask={ka:.3f}" if kb and ka else "no live book"
-            print(f"        Prices: Poly [{poly_str}]   Kalshi [{kalshi_str}]")
-            print(f"        Close:  Poly={r['poly_close']}   Kalshi={r['kalshi_close']}   Δ={r['close_delta_days']} days")
-
+            poly_str   = f"bid={pb:.3f}  ask={pa:.3f}" if pb and pa else "no live CLOB / frozen"
+            kalshi_str = f"bid={kb:.3f}  ask={ka:.3f}" if kb and ka else "no live book"
+            print(f"         Prices: Poly [{poly_str}]   Kalshi [{kalshi_str}]")
+            print(f"         Close:  Poly={r['poly_close'] or '—':<12} "
+                  f"Kalshi={r['kalshi_close'] or '—':<12} "
+                  f"Δ={str(r['close_delta_days'])+'d' if r['close_delta_days'] is not None else '?'}")
         print()
 
 
+# ---------------------------------------------------------------------------
+# CLI entry point
+# ---------------------------------------------------------------------------
+
 def main() -> None:
     p = argparse.ArgumentParser(
-        description="Organically discover cross-exchange market pairs.",
+        description="Organically discover cross-exchange market pairs across "
+                    "Kalshi and Polymarket.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    p.add_argument("--category", default="election",
-                   choices=["election", "economic", "political", "pop", "all"],
-                   help="Event category to scan")
+    p.add_argument("--category", default="all",
+                   choices=["all", "election", "sports", "economic", "political", "pop"],
+                   help="Event category filter")
     p.add_argument("--days", type=int, default=365,
-                   help="Only include markets closing within this many days")
+                   help="Only scan events closing within this many days")
     p.add_argument("--min-sim", type=float, default=0.28,
-                   help="Minimum Jaccard title similarity")
+                   help="Minimum Jaccard title similarity to report a pair")
     p.add_argument("--show-prices", action="store_true",
-                   help="Fetch live orderbooks for matched pairs")
-    p.add_argument("--max-events", type=int, default=300,
+                   help="Fetch live orderbooks for matched pairs (slower)")
+    p.add_argument("--max-events", type=int, default=400,
                    help="Maximum Kalshi events to scan (caps API calls)")
     p.add_argument("--poly-scan", type=int, default=3000,
-                   help="Polymarket catalog depth (max offset)")
+                   help="Polymarket catalog depth (max offset to paginate)")
     p.add_argument("--output", default=None,
                    help="Save matched pairs to this JSON file")
     args = p.parse_args()
 
-    print(f"\nDiscover: category={args.category}  days={args.days}  "
+    print(f"\nDiscover  category={args.category}  days={args.days}  "
           f"min_sim={args.min_sim}  max_events={args.max_events}\n")
 
     results = discover(
