@@ -91,7 +91,13 @@ def _is_parlay(event: dict) -> bool:
 def _is_parlay_market(market: dict) -> bool:
     """Also filter individual markets with parlay-format titles."""
     title = market.get("title", "")
-    return bool(_PARLAY_TITLE_RE.match(title))
+    if _PARLAY_TITLE_RE.match(title):
+        return True
+    # "Will X win Y, X win Z, and X win W?" — three or more "win" occurrences
+    # signals a multi-leg parlay even when the yes/no prefix is absent.
+    if len(re.findall(r"\bwin\b", title, re.IGNORECASE)) >= 3:
+        return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -263,7 +269,7 @@ def _parse_dt(s: str | None) -> datetime | None:
     return None
 
 
-def _k_snap(m: dict, fetched_at: str):
+def _k_snap(m: dict, fetched_at: str, event_title: str = ""):
     from pipeline import MarketSnapshot, _parse_kalshi_top_of_book
     ob = _parse_kalshi_top_of_book(m)
     close = m.get("close_time") or m.get("expiration_time")
@@ -276,10 +282,12 @@ def _k_snap(m: dict, fetched_at: str):
         close_time=close,
         fetched_at=fetched_at,
         orderbook=ob,
+        extra={"event_title": event_title},
     )
 
 
 def _p_snap(m: dict, fetched_at: str):
+    """Build a Polymarket snapshot from a raw /markets result (legacy path)."""
     from pipeline import MarketSnapshot, OrderBook, PriceLevel
     prices = m.get("outcomePrices")
     if isinstance(prices, str):
@@ -304,16 +312,73 @@ def _p_snap(m: dict, fetched_at: str):
         except Exception:
             tids = []
     close = m.get("endDate") or m.get("endDateIso")
+    # For categorical markets, groupItemTitle is the short outcome label
+    # (e.g. "France", "Ken Paxton", "No change").  For binary markets it is
+    # absent, so fall back to the full question text.
+    outcome_label = m.get("groupItemTitle") or m.get("question") or m.get("title", "")
+    group_slug = m.get("groupSlug") or m.get("slug", "")
     return MarketSnapshot(
         source="polymarket",
         market_id=m.get("conditionId") or m.get("id", ""),
-        event_id=m.get("slug", ""),
-        title=m.get("question") or m.get("title", ""),
+        event_id=group_slug,
+        title=outcome_label,
         status="open" if m.get("active") else "closed",
         close_time=close,
         fetched_at=fetched_at,
         orderbook=ob,
-        extra={"clob_token_ids": tids},
+        extra={
+            "clob_token_ids": tids,
+            "event_title": m.get("groupTitle", ""),
+            "full_question": m.get("question", ""),
+        },
+    )
+
+
+def _p_snap_from_event(m: dict, ev_title: str, ev_slug: str, fetched_at: str):
+    """Build a Polymarket snapshot from a market embedded in a /events response.
+
+    Uses the parent event's title and slug for group-level matching, and
+    groupItemTitle (short outcome label like "France") for outcome matching.
+    """
+    from pipeline import MarketSnapshot, OrderBook, PriceLevel
+    prices = m.get("outcomePrices")
+    if isinstance(prices, str):
+        try:
+            prices = json.loads(prices)
+        except Exception:
+            prices = []
+    yes_p = None
+    if prices:
+        try:
+            yes_p = float(prices[0])
+        except (TypeError, ValueError):
+            pass
+    ob = OrderBook(
+        bids=[PriceLevel(yes_p, 0.0)] if yes_p else [],
+        asks=[PriceLevel(yes_p, 0.0)] if yes_p else [],
+    )
+    tids = m.get("clobTokenIds")
+    if isinstance(tids, str):
+        try:
+            tids = json.loads(tids)
+        except Exception:
+            tids = []
+    outcome_label = m.get("groupItemTitle") or m.get("question") or m.get("title", "")
+    close = m.get("endDate") or m.get("endDateIso")
+    return MarketSnapshot(
+        source="polymarket",
+        market_id=m.get("conditionId") or m.get("id", ""),
+        event_id=ev_slug,
+        title=outcome_label,
+        status="open" if m.get("active") else "closed",
+        close_time=close,
+        fetched_at=fetched_at,
+        orderbook=ob,
+        extra={
+            "clob_token_ids": tids,
+            "event_title": ev_title,
+            "full_question": m.get("question", ""),
+        },
     )
 
 
@@ -364,13 +429,203 @@ def _enrich_polymarket(snaps: list) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Two-level hierarchical matcher
+# ---------------------------------------------------------------------------
+
+# Economic-outcome direction synonyms: normalise before Jaccard so
+# "cut"/"decrease"/"lower" all collapse to "cut", etc.
+_DIRECTION_SYNONYMS: dict[str, str] = {
+    "cut": "cut", "cuts": "cut", "cutting": "cut",
+    "decrease": "cut", "decreases": "cut", "decreased": "cut",
+    "lower": "cut", "lowering": "cut",
+    "reduce": "cut", "reduction": "cut",
+    "hike": "hike", "hikes": "hike", "hiking": "hike",
+    "increase": "hike", "increases": "hike", "increased": "hike",
+    "raise": "hike", "raising": "hike",
+    "hold": "hold", "holds": "hold",
+    "maintain": "hold", "maintains": "hold",
+    "unchanged": "hold", "unchanged": "hold",
+    "pause": "hold", "steady": "hold",
+    "no change": "hold",
+}
+
+
+def _normalise_tokens(title: str) -> frozenset[str]:
+    """Like matcher._tokens but with bps-split and direction synonym folding."""
+    from matcher import _tokens
+    # Split "25bps" → "25 bps" before standard tokenisation
+    title = re.sub(r"(\d+)\s*bps\b", lambda m: m.group(1) + " bps", title, flags=re.IGNORECASE)
+    toks = _tokens(title)
+    return frozenset(_DIRECTION_SYNONYMS.get(t, t) for t in toks)
+
+
+def _match_outcomes_within_group(
+    k_outcomes: list,
+    p_outcomes: list,
+    group_sim: float,
+) -> list:
+    """
+    Pair individual outcomes within a matched event group.
+
+    Scoring combines three signals:
+    - title_sim:  Jaccard on short outcome labels ("France" ↔ "France" → 1.0)
+    - price_sim:  how close the catalogue mid-prices are (strong signal when
+                  labels differ, e.g. "No change" ↔ "Fed maintains rate")
+    - group_sim:  confidence that the parent events were correctly matched
+
+    Returns a list of MatchedPair objects (already deduplicated 1-to-1).
+    """
+    from matcher import _jaccard, MatchedPair, _close_delta_hours
+
+    scored = []
+    for k in k_outcomes:
+        k_toks = _normalise_tokens(k.title)
+        k_mid = k.orderbook.mid or k.orderbook.best_bid
+        for p in p_outcomes:
+            p_toks = _normalise_tokens(p.title)
+            p_mid = p.orderbook.mid or p.orderbook.best_bid
+
+            title_sim = _jaccard(k_toks, p_toks)
+
+            if k_mid is not None and p_mid is not None and k_mid > 0 and p_mid > 0:
+                # Within a matched event, a small price difference is a very
+                # strong signal.  Scale so 0.15 difference → 0 score.
+                price_sim = max(0.0, 1.0 - abs(k_mid - p_mid) / 0.15)
+            else:
+                price_sim = 0.0
+
+            # Two scoring modes: title-led or price-led (take the higher)
+            title_led = 0.70 * title_sim + 0.30 * group_sim
+            price_led = 0.50 * price_sim + 0.30 * group_sim + 0.20 * title_sim
+            combined = max(title_led, price_led)
+
+            scored.append((combined, p, k, title_sim))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    pairs: list = []
+    used_p: set[str] = set()
+    used_k: set[str] = set()
+
+    for combined, p, k, title_sim in scored:
+        if p.market_id in used_p or k.market_id in used_k:
+            continue
+        if combined < 0.20:
+            break
+        pairs.append(MatchedPair(
+            poly=p,
+            kalshi=k,
+            title_similarity=title_sim,
+            close_delta_hours=_close_delta_hours(p.close_time, k.close_time),
+            confidence=combined,
+        ))
+        used_p.add(p.market_id)
+        used_k.add(k.market_id)
+
+    return pairs
+
+
+def _match_groups_then_individual(
+    k_snaps: list,
+    p_snaps: list,
+    min_sim: float,
+) -> list:
+    """
+    Primary matching strategy.
+
+    Step 1 — Event-group matching (handles categorical markets):
+      Group Kalshi markets by event_ticker (all outcomes of one Kalshi event
+      share the same event_ticker and event_title).  Group Polymarket markets
+      by their event_id (groupSlug or slug).  Match K-event-groups to
+      P-event-groups by Jaccard on their event titles, then call
+      _match_outcomes_within_group() for each matched pair.
+
+    Step 2 — Individual Jaccard fallback:
+      Any markets not consumed by Step 1 are matched with the standard
+      match_markets() call (works well for binary markets and sports).
+    """
+    from matcher import _tokens, _jaccard, match_markets
+
+    # ── Group by event ────────────────────────────────────────────────────────
+    k_groups: dict[str, list] = {}
+    for s in k_snaps:
+        k_groups.setdefault(s.event_id, []).append(s)
+
+    p_groups: dict[str, list] = {}
+    for s in p_snaps:
+        p_groups.setdefault(s.event_id, []).append(s)
+
+    # Event titles: prefer stored event_title, fall back to the market title
+    # itself (works for single-market binary events where title == event title)
+    k_etitles = {
+        eid: (snaps[0].extra.get("event_title") or snaps[0].title)
+        for eid, snaps in k_groups.items()
+    }
+    p_etitles = {
+        eid: (snaps[0].extra.get("event_title") or snaps[0].title)
+        for eid, snaps in p_groups.items()
+    }
+
+    # ── Step 1: match event groups ────────────────────────────────────────────
+    event_scores: list[tuple[float, str, str]] = []
+    for k_eid, k_et in k_etitles.items():
+        k_toks = _tokens(k_et)
+        if not k_toks:
+            continue
+        for p_eid, p_et in p_etitles.items():
+            p_toks = _tokens(p_et)
+            sim = _jaccard(k_toks, p_toks)
+            if sim >= min_sim:
+                event_scores.append((sim, k_eid, p_eid))
+
+    event_scores.sort(key=lambda x: x[0], reverse=True)
+    matched_k_events: set[str] = set()
+    matched_p_events: set[str] = set()
+    used_k: set[str] = set()
+    used_p: set[str] = set()
+    all_pairs: list = []
+
+    for event_sim, k_eid, p_eid in event_scores:
+        if k_eid in matched_k_events or p_eid in matched_p_events:
+            continue
+        matched_k_events.add(k_eid)
+        matched_p_events.add(p_eid)
+
+        k_outs = [s for s in k_groups[k_eid] if s.market_id not in used_k]
+        p_outs = [s for s in p_groups[p_eid] if s.market_id not in used_p]
+
+        for pair in _match_outcomes_within_group(k_outs, p_outs, event_sim):
+            all_pairs.append(pair)
+            used_k.add(pair.kalshi.market_id)
+            used_p.add(pair.poly.market_id)
+
+    # ── Step 2: individual Jaccard for remaining markets ──────────────────────
+    # Use stricter thresholds than group matching:
+    #   min_sim raised to 0.45 to stop short generic labels from matching
+    #   min_token_ratio=0.40 blocks "Democratic Party" (2 toks) matching a
+    #   long parlay question (8 toks) — ratio 0.25 < 0.40 → rejected.
+    rem_k = [s for s in k_snaps if s.market_id not in used_k]
+    rem_p = [s for s in p_snaps if s.market_id not in used_p]
+    if rem_k and rem_p:
+        fallback = match_markets(
+            rem_p, rem_k,
+            min_title_similarity=max(min_sim, 0.45),
+            max_close_delta_hours=100_000,
+            min_token_ratio=0.40,
+        )
+        all_pairs.extend(fallback)
+
+    all_pairs.sort(key=lambda x: -x.confidence)
+    return all_pairs
+
+
+# ---------------------------------------------------------------------------
 # Core discovery function
 # ---------------------------------------------------------------------------
 
 def discover(
     category: str = "all",
     days: int = 365,
-    min_sim: float = 0.28,
+    min_sim: float = 0.30,
     show_prices: bool = False,
     max_poly_offset: int = 3000,
     max_events_to_search: int = 400,
@@ -383,7 +638,6 @@ def discover(
 
     from kalshi.client import KalshiClient
     from polymarket.client import PolymarketClient
-    from matcher import match_markets
 
     now = datetime.now(timezone.utc)
     horizon = now + timedelta(days=days)
@@ -445,6 +699,7 @@ def discover(
 
     for ev in filtered:
         et = ev.get("event_ticker", "")
+        event_title = ev.get("title", "")
         try:
             resp = kc.get_markets(limit=50, event_ticker=et, status="open")
             mkts = resp.get("markets", [])
@@ -454,8 +709,8 @@ def discover(
             if _is_parlay_market(m):
                 skipped_parlay += 1
                 continue
-            k_snaps.append(_k_snap(m, fetched_at))
-        kws = _derive_keywords(ev.get("title", ""))
+            k_snaps.append(_k_snap(m, fetched_at, event_title=event_title))
+        kws = _derive_keywords(event_title)
         k_keywords.extend(kws)
 
     # Deduplicate + cap keywords from the events scan (before supplemental)
@@ -489,7 +744,7 @@ def discover(
                     if _is_parlay_market(m):
                         skipped_parlay += 1
                         continue
-                    snap = _k_snap(m, fetched_at)
+                    snap = _k_snap(m, fetched_at, event_title=m.get("title", ""))
                     k_snaps.append(snap)
                     seen_tickers.add(snap.market_id)
                     supplemental_kws.extend(_derive_keywords(m.get("title", "")))
@@ -511,31 +766,69 @@ def discover(
         return []
 
     # ── 4. Search Polymarket ─────────────────────────────────────────────────
-    print(f"[4/5] Searching Polymarket ({max_poly_offset:,}-market catalog scan)…", flush=True)
+    # Primary path: search /events so we get the event title + all outcome
+    # markets in one call.  This enables two-level (event → outcome) matching
+    # for categorical markets (Fed rate, FIFA World Cup, Senate primaries, …).
+    # Fall back to the legacy /markets search for any keywords not matched.
+    print(f"[4/5] Searching Polymarket events ({max_poly_offset:,}-event catalog scan)…", flush=True)
     t0 = time.time()
     pc = PolymarketClient()
-    p_raw = pc.search_markets(
+
+    p_events = pc.search_events(
         keywords=k_keywords,
         active=True,
         closed=False,
-        max_offset=max_poly_offset,
+        max_offset=min(max_poly_offset, 2000),  # events catalog is smaller than markets
     )
-    p_snaps = [_p_snap(m, fetched_at) for m in p_raw]
-    print(f"      {len(p_snaps):,} Polymarket markets in {time.time()-t0:.1f}s")
+
+    p_snaps: list = []
+    seen_poly_ids: set[str] = set()
+
+    for ev in p_events:
+        ev_title = ev.get("title", "")
+        ev_slug = ev.get("slug") or ev.get("id", "")
+        markets = ev.get("markets") or []
+        if not markets:
+            # Event endpoint didn't embed markets; build a stub from the event
+            # itself so the event title is still available for group matching.
+            continue
+        for m in markets:
+            if not m.get("active", True):
+                continue
+            cid = m.get("conditionId") or m.get("id", "")
+            if cid in seen_poly_ids:
+                continue
+            seen_poly_ids.add(cid)
+            p_snaps.append(_p_snap_from_event(m, ev_title, ev_slug, fetched_at))
+
+    # Fallback: if the event search found nothing (e.g. the /events endpoint
+    # didn't embed markets for these results), try the legacy /markets search.
+    if len(p_snaps) < 5:
+        p_raw = pc.search_markets(
+            keywords=k_keywords,
+            active=True,
+            closed=False,
+            max_offset=max_poly_offset,
+        )
+        for m in p_raw:
+            cid = m.get("conditionId") or m.get("id", "")
+            if cid not in seen_poly_ids:
+                seen_poly_ids.add(cid)
+                p_snaps.append(_p_snap(m, fetched_at))
+
+    elapsed_p = time.time() - t0
+    print(f"      {len(p_snaps):,} Polymarket markets from {len(p_events)} events in {elapsed_p:.1f}s")
     if not p_snaps:
         print("      No Polymarket markets found.")
         return []
 
     # ── 5. Match ─────────────────────────────────────────────────────────────
-    print(f"[5/5] Running matcher (min_sim={min_sim})…", flush=True)
-    pairs = match_markets(
-        p_snaps, k_snaps,
-        min_title_similarity=min_sim,
-        # Use a very large horizon so sports contracts with far-out Kalshi expiry
-        # dates (e.g. 2028 for current NBA Finals) still receive a meaningful
-        # time-proximity score in the confidence formula rather than zero.
-        max_close_delta_hours=100_000,
-    )
+    # Two-level group matching: first match Kalshi events to Polymarket events
+    # by event-title similarity, then match outcomes within matched events by
+    # outcome-label similarity + price proximity.  Remaining markets fall back
+    # to the standard individual Jaccard matcher.
+    print(f"[5/5] Running two-level group matcher (min_sim={min_sim})…", flush=True)
+    pairs = _match_groups_then_individual(k_snaps, p_snaps, min_sim=min_sim)
     print(f"      {len(pairs)} pairs found")
 
     if show_prices and pairs:
@@ -562,18 +855,26 @@ def discover(
             if arb_profit is None or profit > arb_profit:
                 arb_dir, arb_profit = "kalshi_yes + poly_no", profit
 
+        # Categorise using the event title (not the short outcome label like
+        # "France" or "No change" which would always return "pop").
+        k_event_title = pair.kalshi.extra.get("event_title") or pair.kalshi.title
+        p_event_title = pair.poly.extra.get("event_title") or pair.poly.title
+        cat = _category({"title": k_event_title or p_event_title})
+
         results.append({
             "confidence":       round(pair.confidence, 3),
             "title_sim":        round(pair.title_similarity, 3),
-            "category":         _category({"title": pair.kalshi.title}),
+            "category":         cat,
             "close_delta_days": round(pair.close_delta_hours / 24) if pair.close_delta_hours else None,
             "poly_title":       pair.poly.title,
+            "poly_event_title": p_event_title,
             "poly_id":          pair.poly.market_id,
             "poly_slug":        pair.poly.event_id,
             "poly_close":       (pair.poly.close_time or "")[:10],
             "poly_bid":         pb,
             "poly_ask":         pa,
             "kalshi_title":     pair.kalshi.title,
+            "kalshi_event_title": k_event_title,
             "kalshi_ticker":    pair.kalshi.market_id,
             "kalshi_close":     (pair.kalshi.close_time or "")[:10],
             "kalshi_bid":       kb,
@@ -644,7 +945,7 @@ def main() -> None:
                    help="Event category filter")
     p.add_argument("--days", type=int, default=365,
                    help="Only scan events closing within this many days")
-    p.add_argument("--min-sim", type=float, default=0.28,
+    p.add_argument("--min-sim", type=float, default=0.30,
                    help="Minimum Jaccard title similarity to report a pair")
     p.add_argument("--show-prices", action="store_true",
                    help="Fetch live orderbooks for matched pairs (slower)")

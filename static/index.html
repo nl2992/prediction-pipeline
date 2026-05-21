@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PRED-ARB MONITOR</title>
+<style>
+  /* ── Bloomberg palette ─────────────────────────────────────── */
+  :root {
+    --bg:        #000000;
+    --bg1:       #0a0a0a;
+    --bg2:       #111111;
+    --bg3:       #1a1a1a;
+    --border:    #2a2a2a;
+    --border2:   #333333;
+    --orange:    #ff6600;
+    --orange2:   #cc5200;
+    --amber:     #ffaa00;
+    --white:     #e8e8e8;
+    --dim:       #666666;
+    --dimmer:    #444444;
+    --green:     #00cc44;
+    --green2:    #009933;
+    --red:       #ff3333;
+    --red2:      #cc2200;
+    --cyan:      #00aacc;
+    --cyan2:     #007a99;
+    --yellow:    #ffcc00;
+    --magenta:   #cc44aa;
+    --font:      'Courier New', 'Lucida Console', monospace;
+    --font-size: 12px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--white);
+    font-family: var(--font);
+    font-size: var(--font-size);
+    line-height: 1.4;
+    overflow-x: hidden;
+  }
+
+  /* ── Top bar ───────────────────────────────────────────────── */
+  #topbar {
+    background: var(--orange);
+    color: #000;
+    padding: 2px 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: bold;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+  }
+  #topbar .logo { font-size: 13px; letter-spacing: 2px; }
+  #topbar .fkeys span {
+    margin-left: 10px;
+    background: #000;
+    color: var(--orange);
+    padding: 1px 5px;
+    cursor: pointer;
+    font-size: 10px;
+  }
+  #topbar .fkeys span:hover { background: var(--orange2); color: #000; }
+  #topbar .clock { font-size: 11px; letter-spacing: 1px; }
+
+  /* ── Status bar ────────────────────────────────────────────── */
+  #statusbar {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 3px 8px;
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    font-size: 11px;
+    color: var(--dim);
+  }
+  #statusbar .label { color: var(--orange); font-weight: bold; }
+  .dot-ok   { color: var(--green); }
+  .dot-err  { color: var(--red); }
+  .dot-wait { color: var(--amber); }
+
+  /* ── Command line ──────────────────────────────────────────── */
+  #cmdline {
+    background: var(--bg1);
+    border-bottom: 2px solid var(--orange2);
+    padding: 4px 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #cmdline .prompt { color: var(--orange); font-weight: bold; font-size: 12px; }
+  #cmd-input {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--amber);
+    font-family: var(--font);
+    font-size: 12px;
+    flex: 1;
+    caret-color: var(--orange);
+  }
+  #cmd-hint { color: var(--dimmer); font-size: 10px; }
+
+  /* ── Main layout ───────────────────────────────────────────── */
+  #main { display: flex; height: calc(100vh - 72px); }
+
+  /* ── Sidebar ───────────────────────────────────────────────── */
+  #sidebar {
+    width: 200px;
+    min-width: 200px;
+    background: var(--bg1);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .sidebar-section {
+    border-bottom: 1px solid var(--border);
+    padding: 6px 0;
+  }
+  .sidebar-section .s-header {
+    color: var(--orange);
+    font-size: 10px;
+    font-weight: bold;
+    padding: 2px 8px 4px;
+    letter-spacing: 1px;
+  }
+  .sidebar-item {
+    padding: 3px 8px 3px 16px;
+    color: var(--dim);
+    cursor: pointer;
+    font-size: 11px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .sidebar-item:hover { background: var(--bg3); color: var(--white); }
+  .sidebar-item.active { background: var(--bg3); color: var(--orange); }
+  .sidebar-item .badge {
+    background: var(--orange2);
+    color: #000;
+    font-size: 9px;
+    padding: 0 4px;
+    min-width: 16px;
+    text-align: center;
+  }
+  .sidebar-item .badge.arb { background: var(--green2); color: #000; }
+
+  /* ── Content area ──────────────────────────────────────────── */
+  #content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ── Panel header ──────────────────────────────────────────── */
+  .panel-header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 4px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .panel-title {
+    color: var(--orange);
+    font-weight: bold;
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+  .panel-meta { color: var(--dim); font-size: 10px; display: flex; gap: 16px; }
+  .panel-meta .highlight { color: var(--amber); }
+  .panel-meta .arb-count { color: var(--green); font-weight: bold; }
+
+  /* ── Table ─────────────────────────────────────────────────── */
+  .tbl-wrap { flex: 1; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  thead th {
+    background: var(--bg3);
+    color: var(--orange);
+    font-weight: bold;
+    font-size: 10px;
+    letter-spacing: 0.8px;
+    text-align: left;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border2);
+    position: sticky;
+    top: 0;
+    white-space: nowrap;
+  }
+  thead th.r { text-align: right; }
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  tbody tr:hover { background: var(--bg3); }
+  tbody tr.arb-row { background: #001a00; }
+  tbody tr.arb-row:hover { background: #002200; }
+  tbody tr.selected { background: #1a1000; }
+  td { padding: 4px 8px; white-space: nowrap; color: var(--white); vertical-align: middle; }
+  td.r { text-align: right; }
+  td.dim { color: var(--dim); }
+  td.orange { color: var(--orange); }
+  td.amber { color: var(--amber); }
+  td.green { color: var(--green); font-weight: bold; }
+  td.red { color: var(--red); }
+  td.cyan { color: var(--cyan); }
+  td.cat { font-size: 9px; color: var(--cyan); letter-spacing: 1px; }
+
+  .title-cell { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+  .title-cell .exch { color: var(--dim); font-size: 10px; }
+
+  .price-cell { font-family: var(--font); text-align: right; }
+  .price-cell.up { color: var(--green); }
+  .price-cell.dn { color: var(--red); }
+
+  .sim-bar {
+    display: inline-block;
+    height: 6px;
+    background: var(--orange2);
+    vertical-align: middle;
+    margin-right: 4px;
+  }
+
+  .arb-badge {
+    background: var(--green);
+    color: #000;
+    font-size: 9px;
+    font-weight: bold;
+    padding: 1px 5px;
+    letter-spacing: 0.5px;
+  }
+  .no-arb { color: var(--dimmer); font-size: 10px; }
+
+  /* ── Detail panel ──────────────────────────────────────────── */
+  #detail {
+    height: 160px;
+    min-height: 160px;
+    background: var(--bg1);
+    border-top: 2px solid var(--orange2);
+    display: flex;
+    overflow: hidden;
+  }
+  #detail-left {
+    flex: 1;
+    padding: 8px 12px;
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+  }
+  #detail-right {
+    width: 320px;
+    padding: 8px 12px;
+    overflow-y: auto;
+  }
+  .detail-title { color: var(--orange); font-size: 10px; font-weight: bold; letter-spacing: 1px; margin-bottom: 6px; }
+  .detail-row { display: flex; gap: 24px; margin-bottom: 3px; }
+  .detail-key { color: var(--dim); font-size: 10px; width: 100px; }
+  .detail-val { color: var(--white); font-size: 11px; }
+  .detail-val.g { color: var(--green); }
+  .detail-val.a { color: var(--amber); }
+  .detail-val.r { color: var(--red); }
+  .detail-val.o { color: var(--orange); }
+
+  /* ── Signals view ──────────────────────────────────────────── */
+  #signals-view { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+
+  /* ── Loading overlay ───────────────────────────────────────── */
+  #loading {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 12px;
+  }
+  #loading.show { display: flex; }
+  .spinner { color: var(--orange); font-size: 14px; animation: blink 0.8s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+  /* ── Scrollbar ─────────────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--orange2); }
+
+  /* ── Misc ──────────────────────────────────────────────────── */
+  .empty-state { padding: 20px; color: var(--dimmer); text-align: center; font-size: 11px; }
+  .tag { font-size: 9px; padding: 1px 4px; letter-spacing: 0.5px; }
+  .tag-ver { background: #1a0000; color: var(--red); border: 1px solid var(--red2); }
+  .tag-ok  { background: #001a00; color: var(--green); border: 1px solid var(--green2); }
+
+  #refresh-btn {
+    background: transparent;
+    border: 1px solid var(--orange2);
+    color: var(--orange);
+    font-family: var(--font);
+    font-size: 10px;
+    padding: 2px 8px;
+    cursor: pointer;
+    letter-spacing: 1px;
+  }
+  #refresh-btn:hover { background: var(--orange2); color: #000; }
+  #refresh-btn:disabled { border-color: var(--dimmer); color: var(--dimmer); cursor: default; }
+
+  .cat-filter {
+    display: flex;
+    gap: 1px;
+    align-items: center;
+  }
+  .cat-btn {
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--dim);
+    font-family: var(--font);
+    font-size: 9px;
+    padding: 1px 6px;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+  }
+  .cat-btn:hover { border-color: var(--orange2); color: var(--orange); }
+  .cat-btn.active { background: var(--orange2); color: #000; border-color: var(--orange); }
+</style>
+</head>
+<body>
+
+<!-- ── Top bar ──────────────────────────────────────────────────── -->
+<div id="topbar">
+  <div style="display:flex;align-items:center;gap:16px;">
+    <span class="logo">PRED-ARB</span>
+    <div class="fkeys">
+      <span onclick="showView('pairs')">F1 PAIRS</span>
+      <span onclick="showView('signals')">F2 SIGNALS</span>
+      <span onclick="runScan()">F3 SCAN</span>
+      <span onclick="runFastScan()">F8 FAST</span>
+    </div>
+  </div>
+  <div class="clock" id="clock"></div>
+</div>
+
+<!-- ── Status bar ────────────────────────────────────────────────── -->
+<div id="statusbar">
+  <span><span class="label">POLY</span> <span id="poly-status" class="dot-wait">◉ CHECKING</span></span>
+  <span><span class="label">KALSHI</span> <span id="kalshi-status" class="dot-wait">◉ CHECKING</span></span>
+  <span><span class="label">PAIRS</span> <span id="pair-count" class="highlight">—</span></span>
+  <span><span class="label">ARB</span> <span id="arb-count" style="color:var(--green)">—</span></span>
+  <span><span class="label">SCAN</span> <span id="last-scan" class="dim">—</span></span>
+  <span style="margin-left:auto;">
+    <span id="elapsed" class="dim"></span>
+  </span>
+</div>
+
+<!-- ── Command line ──────────────────────────────────────────────── -->
+<div id="cmdline">
+  <span class="prompt">▶</span>
+  <input id="cmd-input" type="text" placeholder="SCAN [category] | SIGNALS | HELP" autocomplete="off" spellcheck="false">
+  <span id="cmd-hint" class="dim"></span>
+</div>
+
+<!-- ── Main ──────────────────────────────────────────────────────── -->
+<div id="main">
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <div class="sidebar-section">
+      <div class="s-header">VIEWS</div>
+      <div class="sidebar-item active" onclick="showView('pairs')" id="nav-pairs">
+        <span>LIVE PAIRS</span><span class="badge" id="sb-pairs">—</span>
+      </div>
+      <div class="sidebar-item" onclick="showView('signals')" id="nav-signals">
+        <span>SIGNALS LOG</span><span class="badge" id="sb-signals">—</span>
+      </div>
+    </div>
+    <div class="sidebar-section">
+      <div class="s-header">CATEGORY</div>
+      <div class="sidebar-item" onclick="setCategory('all')"   id="cat-all">ALL</div>
+      <div class="sidebar-item" onclick="setCategory('election')" id="cat-election">ELECTION</div>
+      <div class="sidebar-item" onclick="setCategory('economic')" id="cat-economic">ECONOMIC</div>
+      <div class="sidebar-item" onclick="setCategory('political')" id="cat-political">POLITICAL</div>
+      <div class="sidebar-item" onclick="setCategory('sports')"   id="cat-sports">SPORTS</div>
+      <div class="sidebar-item" onclick="setCategory('pop')"      id="cat-pop">POP</div>
+    </div>
+    <div class="sidebar-section">
+      <div class="s-header">FILTERS</div>
+      <div class="sidebar-item" onclick="toggleArbOnly()" id="filter-arb">
+        <span>ARB ONLY</span><span id="arb-only-ind" style="color:var(--dimmer)">○</span>
+      </div>
+      <div class="sidebar-item active" onclick="toggleSort()" id="sort-btn">SORT: ARB ▼</div>
+    </div>
+    <div class="sidebar-section">
+      <div class="s-header">ACTIONS</div>
+      <div class="sidebar-item" onclick="runScan()">⟳ FULL SCAN</div>
+      <div class="sidebar-item" onclick="runFastScan()">⚡ FAST SCAN</div>
+    </div>
+    <div style="flex:1;"></div>
+    <div style="padding:8px;color:var(--dimmer);font-size:9px;border-top:1px solid var(--border);">
+      PRED-ARB v1.0<br>
+      MIN SIM: 0.30<br>
+      FEE: POLY 2% KALSHI 7%
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div id="content">
+
+    <!-- Pairs view -->
+    <div id="pairs-view" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+      <div class="panel-header">
+        <span class="panel-title">CROSS-EXCHANGE MATCHED PAIRS</span>
+        <div class="panel-meta" style="display:flex;align-items:center;gap:12px;">
+          <span>SHOWING <span class="highlight" id="showing-count">—</span> PAIRS</span>
+          <span class="arb-count" id="showing-arb">— ARB</span>
+          <button id="refresh-btn" onclick="runScan()">⟳ REFRESH</button>
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table id="pairs-table">
+          <thead>
+            <tr>
+              <th style="width:28px;">#</th>
+              <th style="width:48px;">CAT</th>
+              <th style="width:52px;">SIM</th>
+              <th>POLYMARKET</th>
+              <th>KALSHI</th>
+              <th class="r" style="width:52px;">P-BID</th>
+              <th class="r" style="width:52px;">P-ASK</th>
+              <th class="r" style="width:52px;">K-BID</th>
+              <th class="r" style="width:52px;">K-ASK</th>
+              <th class="r" style="width:52px;">Δ-MID</th>
+              <th style="width:80px;">ARB</th>
+              <th class="r" style="width:64px;">P-CLOSE</th>
+              <th class="r" style="width:64px;">K-CLOSE</th>
+            </tr>
+          </thead>
+          <tbody id="pairs-body">
+            <tr><td colspan="13" class="empty-state">Press F3 SCAN or F8 FAST to load live data</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Detail panel -->
+      <div id="detail">
+        <div id="detail-left">
+          <div class="detail-title">SELECT A ROW TO VIEW DETAIL</div>
+        </div>
+        <div id="detail-right">
+          <div class="detail-title">ARB CALC</div>
+          <div id="arb-calc" style="color:var(--dimmer);font-size:10px;">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Signals view -->
+    <div id="signals-view">
+      <div class="panel-header">
+        <span class="panel-title">VERIFIED SIGNALS LOG</span>
+        <div class="panel-meta">
+          <span>LAST <span class="highlight" id="sig-count">—</span> SIGNALS</span>
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table id="signals-table">
+          <thead>
+            <tr>
+              <th>TIMESTAMP</th>
+              <th>DIRECTION</th>
+              <th>POLYMARKET</th>
+              <th>KALSHI</th>
+              <th class="r">GROSS</th>
+              <th class="r">NET PROFIT</th>
+              <th class="r">NET %</th>
+              <th>VERIFIED</th>
+              <th>EXECUTED</th>
+            </tr>
+          </thead>
+          <tbody id="signals-body">
+            <tr><td colspan="9" class="empty-state">No signals yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Loading overlay -->
+<div id="loading">
+  <div class="spinner" style="font-size:18px;">◉ SCANNING MARKETS...</div>
+  <div style="color:var(--dim);font-size:11px;" id="loading-msg">Fetching Kalshi event catalog</div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let allPairs   = [];
+let currentCat = 'all';
+let arbOnly    = false;
+let selected   = null;
+let currentView = 'pairs';
+let currentSort = 'arb';  // 'arb' | 'confidence'
+
+// ── Clock ──────────────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  document.getElementById('clock').textContent =
+    `${now.toISOString().slice(0,10)}  ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())} UTC`;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Status check ───────────────────────────────────────────────────────────
+async function checkStatus() {
+  try {
+    const r = await fetch('/api/status');
+    const d = await r.json();
+    setStatus('poly-status',   d.polymarket);
+    setStatus('kalshi-status', d.kalshi);
+  } catch(e) {
+    setStatus('poly-status',   'error');
+    setStatus('kalshi-status', 'error');
+  }
+}
+function setStatus(id, val) {
+  const el = document.getElementById(id);
+  const ok = val === 'ok';
+  el.className = ok ? 'dot-ok' : 'dot-err';
+  el.textContent = ok ? '◉ OK' : '◉ ' + (val || 'ERR').toUpperCase().slice(0,12);
+}
+
+// ── View switching ─────────────────────────────────────────────────────────
+function showView(v) {
+  currentView = v;
+  document.getElementById('pairs-view').style.display   = v === 'pairs'   ? 'flex' : 'none';
+  document.getElementById('signals-view').style.display = v === 'signals' ? 'flex' : 'none';
+  document.getElementById('nav-pairs').classList.toggle('active',   v === 'pairs');
+  document.getElementById('nav-signals').classList.toggle('active', v === 'signals');
+  if (v === 'signals') loadSignals();
+}
+
+// ── Category ───────────────────────────────────────────────────────────────
+function setCategory(cat) {
+  currentCat = cat;
+  ['all','election','economic','political','sports','pop'].forEach(c => {
+    document.getElementById('cat-'+c).classList.toggle('active', c === cat);
+  });
+  renderPairs();
+}
+
+function toggleArbOnly() {
+  arbOnly = !arbOnly;
+  document.getElementById('arb-only-ind').textContent = arbOnly ? '●' : '○';
+  document.getElementById('arb-only-ind').style.color = arbOnly ? 'var(--green)' : 'var(--dimmer)';
+  document.getElementById('filter-arb').classList.toggle('active', arbOnly);
+  renderPairs();
+}
+
+// ── Scan ───────────────────────────────────────────────────────────────────
+async function runScan() {
+  showLoading('FULL SCAN — fetching live orderbooks...');
+  const btn = document.getElementById('refresh-btn');
+  btn.disabled = true;
+  btn.textContent = '⟳ SCANNING...';
+  const t0 = Date.now();
+  try {
+    const r = await fetch(`/api/scan?category=${currentCat}&min_sim=0.30&max_events=300`);
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    allPairs = d.pairs || [];
+    document.getElementById('last-scan').textContent = new Date().toISOString().slice(11,19) + ' UTC';
+    document.getElementById('elapsed').textContent = `ELAPSED: ${d.elapsed}s`;
+    renderPairs();
+  } catch(e) {
+    showError('SCAN FAILED: ' + e.message);
+  } finally {
+    hideLoading();
+    btn.disabled = false;
+    btn.textContent = '⟳ REFRESH';
+  }
+}
+
+async function runFastScan() {
+  showLoading('FAST SCAN — catalog mid-prices only...');
+  const btn = document.getElementById('refresh-btn');
+  btn.disabled = true;
+  try {
+    const r = await fetch(`/api/scan/fast?category=${currentCat}`);
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    allPairs = d.pairs || [];
+    document.getElementById('last-scan').textContent = new Date().toISOString().slice(11,19) + ' UTC (fast)';
+    document.getElementById('elapsed').textContent = `ELAPSED: ${d.elapsed}s`;
+    renderPairs();
+  } catch(e) {
+    showError('SCAN FAILED: ' + e.message);
+  } finally {
+    hideLoading();
+    btn.disabled = false;
+    btn.textContent = '⟳ REFRESH';
+  }
+}
+
+// ── Sort ───────────────────────────────────────────────────────────────────
+function toggleSort() {
+  currentSort = currentSort === 'arb' ? 'confidence' : 'arb';
+  document.getElementById('sort-btn').textContent =
+    currentSort === 'arb' ? 'SORT: ARB ▼' : 'SORT: CONF ▼';
+  renderPairs();
+}
+
+// ── Render pairs ───────────────────────────────────────────────────────────
+function renderPairs() {
+  let pairs = [...allPairs];
+  if (currentCat !== 'all') pairs = pairs.filter(p => p.category === currentCat);
+  if (arbOnly) pairs = pairs.filter(p => (p.arb_net_profit || 0) > 0);
+
+  if (currentSort === 'arb') {
+    pairs.sort((a, b) => (b.arb_net_profit || 0) - (a.arb_net_profit || 0));
+  }
+  // 'confidence' order comes from the server already sorted
+
+  const arbs = pairs.filter(p => (p.arb_net_profit || 0) > 0).length;
+  document.getElementById('pair-count').textContent   = allPairs.length;
+  document.getElementById('arb-count').textContent    = allPairs.filter(p=>(p.arb_net_profit||0)>0).length;
+  document.getElementById('sb-pairs').textContent     = pairs.length;
+  document.getElementById('showing-count').textContent = pairs.length;
+  document.getElementById('showing-arb').textContent  = arbs + ' ARB';
+
+  const tbody = document.getElementById('pairs-body');
+  if (!pairs.length) {
+    tbody.innerHTML = '<tr><td colspan="13" class="empty-state">No pairs match current filters — try SCAN or change category</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = pairs.map((p, i) => {
+    const pb  = p.poly_bid,  pa  = p.poly_ask;
+    const kb  = p.kalshi_bid, ka = p.kalshi_ask;
+    const pmid = (pb != null && pa != null) ? ((+pb + +pa)/2) : pb;
+    const kmid = (kb != null && ka != null) ? ((+kb + +ka)/2) : kb;
+    const dmid = (pmid != null && kmid != null) ? (+pmid - +kmid) : null;
+    const hasArb = (p.arb_net_profit || 0) > 0;
+    const rowCls = hasArb ? 'arb-row' : '';
+    const selCls = selected === i ? 'selected' : '';
+
+    const fmt = v => v != null ? (+v).toFixed(3) : '<span class="dim">—</span>';
+    const fmtD = v => v != null
+      ? `<span class="${v > 0.02 ? 'green' : v < -0.02 ? 'red' : 'dim'}">${v > 0 ? '+' : ''}${v.toFixed(3)}</span>`
+      : '<span class="dim">—</span>';
+
+    const arbCell = hasArb
+      ? `<span class="arb-badge">+${(+p.arb_net_profit).toFixed(4)}</span>`
+      : `<span class="no-arb">—</span>`;
+
+    const simPct = Math.round(p.title_sim * 100);
+    const barW   = Math.round(p.title_sim * 40);
+
+    return `<tr class="${rowCls} ${selCls}" onclick="selectRow(${i})" data-idx="${i}">
+      <td class="dim">${i+1}</td>
+      <td class="cat">${(p.category||'?').toUpperCase().slice(0,5)}</td>
+      <td><span class="sim-bar" style="width:${barW}px"></span><span class="dim">${simPct}%</span></td>
+      <td class="title-cell" title="${esc((p.poly_event_title?p.poly_event_title+' › ':'')+p.poly_title)}">${esc(p.poly_event_title ? truncate(p.poly_event_title,22)+'›'+truncate(p.poly_title,14) : truncate(p.poly_title,38))}</td>
+      <td class="title-cell" title="${esc((p.kalshi_event_title?p.kalshi_event_title+' › ':'')+p.kalshi_title)}">${esc(p.kalshi_event_title ? truncate(p.kalshi_event_title,22)+'›'+truncate(p.kalshi_title,14) : truncate(p.kalshi_title,38))}</td>
+      <td class="price-cell r">${fmt(pb)}</td>
+      <td class="price-cell r">${fmt(pa)}</td>
+      <td class="price-cell r">${fmt(kb)}</td>
+      <td class="price-cell r">${fmt(ka)}</td>
+      <td class="r">${fmtD(dmid)}</td>
+      <td>${arbCell}</td>
+      <td class="dim r">${(p.poly_close||'').slice(0,10) || '—'}</td>
+      <td class="dim r">${(p.kalshi_close||'').slice(0,10) || '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function selectRow(idx) {
+  selected = idx;
+  document.querySelectorAll('#pairs-body tr').forEach((tr,i) => {
+    tr.classList.toggle('selected', i === idx);
+  });
+  renderDetail(allPairs[idx] || null);
+}
+
+function renderDetail(p) {
+  const left  = document.getElementById('detail-left');
+  const right = document.getElementById('detail-right');
+  if (!p) {
+    left.innerHTML  = '<div class="detail-title">SELECT A ROW TO VIEW DETAIL</div>';
+    right.innerHTML = '<div class="detail-title">ARB CALC</div><div style="color:var(--dimmer)">—</div>';
+    return;
+  }
+
+  const pb = p.poly_bid, pa = p.poly_ask, kb = p.kalshi_bid, ka = p.kalshi_ask;
+  const fmt3 = v => v != null ? (+v).toFixed(4) : 'N/A';
+
+  const polyEventLine  = p.poly_event_title   ? `<div class="detail-row"><span class="detail-key">  EVENT</span><span class="detail-val dim">${esc(p.poly_event_title)}</span></div>` : '';
+  const kalshiEventLine = p.kalshi_event_title ? `<div class="detail-row"><span class="detail-key">  EVENT</span><span class="detail-val dim">${esc(p.kalshi_event_title)}</span></div>` : '';
+
+  left.innerHTML = `
+    <div class="detail-title">PAIR DETAIL — ${esc(p.category||'?').toUpperCase()}</div>
+    <div class="detail-row">
+      <span class="detail-key">POLYMARKET</span>
+      <span class="detail-val o">${esc(p.poly_title||'')}</span>
+    </div>
+    ${polyEventLine}
+    <div class="detail-row">
+      <span class="detail-key">  BID / ASK</span>
+      <span class="detail-val">${fmt3(pb)} / ${fmt3(pa)}</span>
+      <span class="detail-key" style="margin-left:16px;">CLOSE</span>
+      <span class="detail-val dim">${(p.poly_close||'').slice(0,10)||'—'}</span>
+    </div>
+    <div class="detail-row" style="margin-top:4px;">
+      <span class="detail-key">KALSHI</span>
+      <span class="detail-val a">${esc(p.kalshi_title||'')}</span>
+    </div>
+    ${kalshiEventLine}
+    <div class="detail-row">
+      <span class="detail-key">  BID / ASK</span>
+      <span class="detail-val">${fmt3(kb)} / ${fmt3(ka)}</span>
+      <span class="detail-key" style="margin-left:16px;">CLOSE</span>
+      <span class="detail-val dim">${(p.kalshi_close||'').slice(0,10)||'—'}</span>
+    </div>
+    <div class="detail-row" style="margin-top:4px;">
+      <span class="detail-key">CONFIDENCE</span>
+      <span class="detail-val">${(p.confidence*100).toFixed(1)}%</span>
+      <span class="detail-key" style="margin-left:16px;">TITLE SIM</span>
+      <span class="detail-val">${(p.title_sim*100).toFixed(1)}%</span>
+    </div>`;
+
+  // Arb calc
+  const FEE = 0.09;
+  let arbHtml = '<div class="detail-title">ARB CALC</div>';
+  if (pb != null && pa != null && kb != null && ka != null) {
+    const costPYK   = +pa + (1 - +kb);
+    const profitPYK = +(1 - costPYK - FEE).toFixed(4);
+    const costKYP   = +ka + (1 - +pb);
+    const profitKYP = +(1 - costKYP - FEE).toFixed(4);
+    const bestDir   = profitPYK >= profitKYP ? 'POLY YES + KALSHI NO' : 'KALSHI YES + POLY NO';
+    const bestProfit = Math.max(profitPYK, profitKYP);
+    const pctStr = (bestProfit * 100).toFixed(2) + '%';
+
+    const pColor = p => p > 0 ? 'g' : 'r';
+    arbHtml += `
+      <div class="detail-row"><span class="detail-key">DIR A</span>
+        <span class="detail-val dim">POLY YES + KALSHI NO</span></div>
+      <div class="detail-row"><span class="detail-key">  COST</span>
+        <span class="detail-val">${costPYK.toFixed(4)}</span>
+        <span class="detail-key" style="margin-left:8px;">PROFIT</span>
+        <span class="detail-val ${pColor(profitPYK)}">${profitPYK > 0 ? '+' : ''}${profitPYK.toFixed(4)}</span></div>
+      <div class="detail-row"><span class="detail-key">DIR B</span>
+        <span class="detail-val dim">KALSHI YES + POLY NO</span></div>
+      <div class="detail-row"><span class="detail-key">  COST</span>
+        <span class="detail-val">${costKYP.toFixed(4)}</span>
+        <span class="detail-key" style="margin-left:8px;">PROFIT</span>
+        <span class="detail-val ${pColor(profitKYP)}">${profitKYP > 0 ? '+' : ''}${profitKYP.toFixed(4)}</span></div>
+      <div class="detail-row" style="margin-top:4px;border-top:1px solid var(--border);padding-top:4px;">
+        <span class="detail-key">BEST DIR</span>
+        <span class="detail-val ${bestProfit > 0 ? 'g' : 'r'}">${bestProfit > 0 ? bestDir : 'NO ARB'}</span></div>
+      <div class="detail-row"><span class="detail-key">NET PROFIT</span>
+        <span class="detail-val ${bestProfit > 0 ? 'g' : 'r'}" style="font-size:13px;font-weight:bold;">${bestProfit > 0 ? '+' : ''}${bestProfit.toFixed(4)} (${pctStr})</span></div>
+      <div class="detail-row"><span class="detail-key">FEE MODEL</span>
+        <span class="detail-val dim">MAX(POLY 2%, KALSHI 7%) = 7%</span></div>`;
+  } else {
+    arbHtml += '<div style="color:var(--dimmer);font-size:10px;margin-top:4px;">No live prices available — run FULL SCAN</div>';
+  }
+  right.innerHTML = arbHtml;
+}
+
+// ── Signals ────────────────────────────────────────────────────────────────
+async function loadSignals() {
+  try {
+    const r = await fetch('/api/signals?n=100');
+    const d = await r.json();
+    renderSignals(d.signals || []);
+  } catch(e) {
+    document.getElementById('signals-body').innerHTML =
+      `<tr><td colspan="9" class="empty-state">Error loading signals: ${e.message}</td></tr>`;
+  }
+}
+
+function renderSignals(signals) {
+  document.getElementById('sb-signals').textContent = signals.length;
+  document.getElementById('sig-count').textContent  = signals.length;
+  const tbody = document.getElementById('signals-body');
+  if (!signals.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No signals in signals.jsonl — run the monitor to generate</td></tr>';
+    return;
+  }
+  tbody.innerHTML = signals.map(s => {
+    const ts  = (s.ts||'').slice(0,19).replace('T',' ');
+    const dir = s.direction === 'poly_yes__kalshi_no' ? 'POLY-YES / K-NO' : 'K-YES / POLY-NO';
+    const verCls = s.clob_verified ? 'tag tag-ok' : 'tag tag-ver';
+    const verTxt = s.clob_verified ? '✓ VERIFIED' : '✗ UNVERIF';
+    const excTxt = s.executed ? '<span class="tag tag-ok">EXECUTED</span>' : '<span class="dim">—</span>';
+    return `<tr>
+      <td class="dim">${ts}</td>
+      <td class="amber">${dir}</td>
+      <td class="title-cell">${esc(truncate(s.poly_title||'',35))}</td>
+      <td class="title-cell">${esc(truncate(s.kalshi_title||'',35))}</td>
+      <td class="r">${(s.gross_cost||0).toFixed(4)}</td>
+      <td class="r ${(s.net_profit||0)>0?'green':'red'}">${(s.net_profit||0)>0?'+':''}${(s.net_profit||0).toFixed(4)}</td>
+      <td class="r ${(s.net_profit_pct||0)>0?'green':'red'}">${(s.net_profit_pct||0).toFixed(2)}%</td>
+      <td><span class="${verCls}">${verTxt}</span></td>
+      <td>${excTxt}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Command input ──────────────────────────────────────────────────────────
+document.getElementById('cmd-input').addEventListener('keydown', async e => {
+  if (e.key !== 'Enter') return;
+  const val = e.target.value.trim().toUpperCase();
+  e.target.value = '';
+  if (val === 'SCAN' || val.startsWith('SCAN ')) {
+    const parts = val.split(' ');
+    const cat = parts[1] ? parts[1].toLowerCase() : currentCat;
+    setCategory(cat);
+    await runScan();
+  } else if (val === 'FAST' || val === 'F8') {
+    await runFastScan();
+  } else if (val === 'SIGNALS' || val === 'F2') {
+    showView('signals');
+  } else if (val === 'PAIRS' || val === 'F1') {
+    showView('pairs');
+  } else if (val === 'ARB') {
+    arbOnly = !arbOnly;
+    toggleArbOnly();
+  } else if (val === 'HELP') {
+    document.getElementById('cmd-hint').textContent =
+      'CMDS: SCAN [cat] | FAST | SIGNALS | PAIRS | ARB (toggle)';
+    setTimeout(() => document.getElementById('cmd-hint').textContent = '', 5000);
+  }
+});
+
+// ── Loading ────────────────────────────────────────────────────────────────
+function showLoading(msg) {
+  document.getElementById('loading-msg').textContent = msg || '';
+  document.getElementById('loading').classList.add('show');
+}
+function hideLoading() {
+  document.getElementById('loading').classList.remove('show');
+}
+function showError(msg) {
+  alert(msg); // simple fallback
+}
+
+// ── Utils ──────────────────────────────────────────────────────────────────
+function truncate(s, n) { return s && s.length > n ? s.slice(0, n) + '…' : (s||''); }
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Keyboard shortcuts ─────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (document.activeElement === document.getElementById('cmd-input')) return;
+  if (e.key === 'F1') { e.preventDefault(); showView('pairs'); }
+  if (e.key === 'F2') { e.preventDefault(); showView('signals'); }
+  if (e.key === 'F3') { e.preventDefault(); runScan(); }
+  if (e.key === 'F8') { e.preventDefault(); runFastScan(); }
+});
+
+// ── Init ───────────────────────────────────────────────────────────────────
+checkStatus();
+setInterval(checkStatus, 30000);
+setCategory('all');
+</script>
+</body>
+</html>
