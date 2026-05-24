@@ -134,19 +134,32 @@ _SPORTS_HINTS = re.compile(
 )
 
 _ELECTION_HINTS = re.compile(
-    r"(republican|democrat|nominee|primary|senate|house|governor|congress|"
-    r"election|ballot|race|seat|candidate|attorney general|secretary of state|"
-    r"special election|runoff|midterm|caucus|mayor|alderman|comptroller|"
-    r"lieutenant governor)",
+    # Party names are strong signals for electoral content
+    r"(republican|democrat|democratic\s+party|gop\b|"
+    # Electoral process keywords (unambiguous)
+    r"\bnominee\b|\bprimary\b|\brunoff\b|\bcaucus\b|\bmidterm\b|"
+    r"\belection\b|\belectoral\b|\bballot\b|\bcandidate\b|"
+    # Senate/House/Congress in ELECTORAL context only (compound phrases)
+    r"senate\s+(race|seat|primary|election|runoff|candidate)|"
+    r"house\s+(race|seat|district|primary|election|candidate)|"
+    r"house\s+of\s+representatives|"
+    r"congressional\s+(race|primary|district|election|seat)|"
+    # Governor / state-level offices
+    r"\bgubernatorial\b|governor\s+(race|primary|election)|"
+    r"attorney\s+general|secretary\s+of\s+state|lieutenant\s+governor|"
+    # Local offices
+    r"mayor\s+(race|primary|election)|\bmayoral\b|\balderman\b|\bcomptroller\b|"
+    r"special\s+election)",
     re.IGNORECASE,
 )
 
 _ECONOMIC_HINTS = re.compile(
-    r"(fed |federal funds|interest rate|fomc|bitcoin|\bbtc\b|ethereum|\beth\b|solana|"
-    r"\bgdp\b|\bcpi\b|inflation|jobs report|unemployment|payroll|nonfarm|"
-    r"s&p 500|nasdaq|dow jones|oil price|gold price|gas price|"
-    r"tariff|trade deficit|treasury|bond yield|mortgage rate|"
-    r"earnings|revenue|market cap|\bipo\b|merger|acquisition)",
+    r"(\bfed\b|federal\s+reserve|federal\s+funds|interest\s+rate|fomc|"
+    r"bitcoin|\bbtc\b|ethereum|\beth\b|solana|"
+    r"\bgdp\b|\bcpi\b|inflation|jobs\s+report|unemployment|payroll|nonfarm|"
+    r"s&p\s*500|nasdaq|dow\s+jones|oil\s+price|gold\s+price|gas\s+price|"
+    r"tariff|trade\s+deficit|treasury|bond\s+yield|mortgage\s+rate|"
+    r"earnings|revenue|market\s+cap|\bipo\b|merger|acquisition)",
     re.IGNORECASE,
 )
 
@@ -261,6 +274,12 @@ def _derive_keywords(title: str) -> list[str]:
 def _parse_dt(s: str | None) -> datetime | None:
     if not s:
         return None
+    iso = s.replace("Z", "+00:00").replace("z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(iso)
+        return dt.astimezone(timezone.utc) if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except ValueError:
+        pass
     for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d"):
         try:
             return datetime.strptime(s.split("+")[0].rstrip("Zz"), fmt).replace(tzinfo=timezone.utc)
@@ -328,6 +347,7 @@ def _p_snap(m: dict, fetched_at: str):
         orderbook=ob,
         extra={
             "clob_token_ids": tids,
+            "outcomes": m.get("outcomes"),
             "event_title": m.get("groupTitle", ""),
             "full_question": m.get("question", ""),
         },
@@ -376,6 +396,7 @@ def _p_snap_from_event(m: dict, ev_title: str, ev_slug: str, fetched_at: str):
         orderbook=ob,
         extra={
             "clob_token_ids": tids,
+            "outcomes": m.get("outcomes"),
             "event_title": ev_title,
             "full_question": m.get("question", ""),
         },
@@ -852,7 +873,7 @@ def discover(
                 arb_dir, arb_profit = "poly_yes + kalshi_no", profit
         if ka is not None and pb is not None:
             profit = round(1.0 - (ka + 1.0 - pb) - FEE, 4)
-            if arb_profit is None or profit > arb_profit:
+            if profit > 0 and (arb_profit is None or profit > arb_profit):
                 arb_dir, arb_profit = "kalshi_yes + poly_no", profit
 
         # Categorise using the event title (not the short outcome label like
@@ -873,9 +894,10 @@ def discover(
             "poly_close":       (pair.poly.close_time or "")[:10],
             "poly_bid":         pb,
             "poly_ask":         pa,
-            "kalshi_title":     pair.kalshi.title,
-            "kalshi_event_title": k_event_title,
-            "kalshi_ticker":    pair.kalshi.market_id,
+            "kalshi_title":        pair.kalshi.title,
+            "kalshi_event_title":  k_event_title,
+            "kalshi_ticker":       pair.kalshi.market_id,
+            "kalshi_event_ticker": pair.kalshi.event_id,
             "kalshi_close":     (pair.kalshi.close_time or "")[:10],
             "kalshi_bid":       kb,
             "kalshi_ask":       ka,
@@ -921,8 +943,14 @@ def _print_results(results: list[dict], show_prices: bool) -> None:
         if show_prices:
             pb, pa = r.get("poly_bid"), r.get("poly_ask")
             kb, ka = r.get("kalshi_bid"), r.get("kalshi_ask")
-            poly_str   = f"bid={pb:.3f}  ask={pa:.3f}" if pb and pa else "no live CLOB / frozen"
-            kalshi_str = f"bid={kb:.3f}  ask={ka:.3f}" if kb and ka else "no live book"
+            poly_str = (
+                f"bid={pb:.3f}  ask={pa:.3f}"
+                if pb is not None and pa is not None else "no live CLOB / frozen"
+            )
+            kalshi_str = (
+                f"bid={kb:.3f}  ask={ka:.3f}"
+                if kb is not None and ka is not None else "no live book"
+            )
             print(f"         Prices: Poly [{poly_str}]   Kalshi [{kalshi_str}]")
             print(f"         Close:  Poly={r['poly_close'] or '—':<12} "
                   f"Kalshi={r['kalshi_close'] or '—':<12} "

@@ -222,6 +222,7 @@ def fetch_polymarket(
             volume_24h=_f(mkt.get("volume24hr")),
             extra={
                 "clob_token_ids": mkt.get("clobTokenIds"),
+                "outcomes": mkt.get("outcomes"),
                 "enable_order_book": mkt.get("enableOrderBook"),
                 "volume": mkt.get("volume"),
                 "liquidity": mkt.get("liquidityClob"),

@@ -62,6 +62,13 @@ class TradeIntent:
     def max_cost_usd(self) -> float:
         return round(self.limit_price * self.size_contracts, 6)
 
+    @property
+    def venue_limit_price(self) -> float:
+        """Price submitted to the venue for this side."""
+        if self.exchange == "kalshi" and self.contract_side == "NO":
+            return round(1.0 - self.limit_price, 6)
+        return self.limit_price
+
 
 @dataclass
 class TradeResult:
@@ -127,15 +134,24 @@ def check_price_still_valid(
             raw = client.get_orderbook(intent.market_id)
             ob_fp = raw.get("orderbook_fp", {})
             if intent.contract_side == "YES":
-                bids = ob_fp.get("yes_dollars", [])
-                live_bid = float(bids[-1][0]) if bids else None  # ascending → last = highest
-            else:
                 no_bids = ob_fp.get("no_dollars", [])
-                live_bid = float(no_bids[-1][0]) if no_bids else None
-            if live_bid is None:
-                return False, "no live bid available"
-            # For a buy, we care about the ask (complement of NO bid for YES, etc.)
-            return True, f"live best bid present: {live_bid:.4f}"
+                live_ask = round(1.0 - float(no_bids[-1][0]), 6) if no_bids else None
+                if live_ask is None:
+                    return False, "no live YES ask available"
+                drift = abs(live_ask - intent.limit_price)
+                if drift > price_tolerance:
+                    return False, f"YES ask drifted {drift:.4f} > tolerance {price_tolerance}"
+                return True, f"YES ask OK (live={live_ask:.4f} vs intended={intent.limit_price:.4f})"
+            else:
+                yes_bids = ob_fp.get("yes_dollars", [])
+                live_yes_bid = float(yes_bids[-1][0]) if yes_bids else None
+                live_no_ask = round(1.0 - live_yes_bid, 6) if live_yes_bid is not None else None
+                if live_no_ask is None:
+                    return False, "no live NO ask available"
+                drift = abs(live_no_ask - intent.limit_price)
+                if drift > price_tolerance:
+                    return False, f"NO ask drifted {drift:.4f} > tolerance {price_tolerance}"
+                return True, f"NO ask OK (live={live_no_ask:.4f} vs intended={intent.limit_price:.4f})"
 
         return True, "no live price check implemented for this exchange"
 
@@ -295,13 +311,15 @@ class Executor:
         """Place one leg on Kalshi."""
         # Map YES/NO contract side → Kalshi bid/ask side
         # side="bid"  → buy YES contracts  (we pay limit_price, receive YES)
-        # side="ask"  → sell YES contracts (we receive limit_price, hold NO)
+        # side="ask"  → sell YES contracts at the complementary YES price
+        #                (creates NO exposure at intent.limit_price)
         kalshi_side = "bid" if intent.contract_side == "YES" else "ask"
+        venue_price = intent.venue_limit_price
 
         if self.dry_run:
             logger.info(
-                "[DRY RUN] Kalshi %s  side=%s  price=%.4f  count=%.2f  (~$%.2f)",
-                intent.market_id, kalshi_side, intent.limit_price,
+                "[DRY RUN] Kalshi %s  side=%s  price=%.4f  economic_cost=%.4f  count=%.2f  (~$%.2f)",
+                intent.market_id, kalshi_side, venue_price, intent.limit_price,
                 intent.size_contracts, intent.max_cost_usd,
             )
             return TradeResult(
@@ -318,7 +336,7 @@ class Executor:
             resp = self._kalshi_client.place_order(
                 ticker=intent.market_id,
                 side=kalshi_side,
-                price=intent.limit_price,
+                price=venue_price,
                 count=intent.size_contracts,
                 time_in_force="fill_or_kill",
             )
@@ -335,7 +353,7 @@ class Executor:
 
     def _place_polymarket(self, intent: TradeIntent) -> TradeResult:
         """Place one leg on Polymarket."""
-        poly_side = "BUY" if intent.contract_side == "YES" else "SELL"
+        poly_side = "BUY"
 
         if self.dry_run:
             logger.info(
