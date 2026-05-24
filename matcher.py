@@ -9,6 +9,7 @@ proximity.  No external dependencies beyond the standard library.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
@@ -46,6 +47,228 @@ def _jaccard(a: frozenset[str], b: frozenset[str]) -> float:
     if not union:
         return 0.0
     return len(a & b) / len(union)
+
+
+# ---------------------------------------------------------------------------
+# False-positive guards
+# ---------------------------------------------------------------------------
+
+_SPORT_TERMS = frozenset({
+    "nba", "nfl", "mlb", "nhl", "mls", "baseball", "basketball", "football",
+    "hockey", "soccer", "championship", "finals", "super", "bowl",
+    "world", "series", "stanley", "cup", "playoff", "game",
+})
+
+_ELECTION_TERMS = frozenset({
+    "election", "presidential", "presidency", "president", "senate", "senator",
+    "governor", "governorship", "gubernatorial", "primary", "nominee",
+    "nomination", "democratic", "democratics", "democrat", "republican",
+    "republicans", "attorney", "general", "secretary", "state", "mayor",
+})
+
+_ECON_TERMS = frozenset({
+    "fed", "federal", "funds", "rate", "rates", "cut", "cuts", "hike",
+    "hikes", "inflation", "cpi", "gdp", "bitcoin", "btc", "ethereum",
+    "eth", "oil", "gold", "nasdaq", "dow",
+})
+
+_OFFICE_PATTERNS: tuple[tuple[str, str], ...] = (
+    ("president", r"\b(president|presidential|presidency)\b"),
+    ("senate", r"\b(senate|senator)\b"),
+    ("house", r"\b(house|representative|congressional district|congress)\b"),
+    ("governor", r"\b(governor|governorship|gubernatorial)\b"),
+    ("attorney_general", r"\battorney\s+general\b"),
+    ("secretary_state", r"\bsecretary\s+of\s+state\b"),
+    ("mayor", r"\b(mayor|mayoral)\b"),
+)
+
+_COUNTRY_ALIASES: dict[str, tuple[str, ...]] = {
+    "brazil": ("brazil", "brazilian"),
+    "colombia": ("colombia", "colombian"),
+    "france": ("france", "french"),
+    "ghana": ("ghana", "ghanian", "ghanaian"),
+    "moldova": ("moldova", "moldovan"),
+    "philippines": ("philippines", "philippine", "filipino"),
+    "turkey": ("turkey", "turkish"),
+}
+
+_US_STATE_ALIASES: dict[str, tuple[str, ...]] = {
+    "alabama": ("alabama", " al "),
+    "alaska": ("alaska", " ak "),
+    "arizona": ("arizona", " az "),
+    "arkansas": ("arkansas", " ar "),
+    "california": ("california", " ca "),
+    "colorado": ("colorado", " co "),
+    "connecticut": ("connecticut", " ct "),
+    "delaware": ("delaware", " de "),
+    "florida": ("florida", " fl "),
+    "georgia": ("georgia", " ga "),
+    "hawaii": ("hawaii", " hi "),
+    "idaho": ("idaho", " id "),
+    "illinois": ("illinois", " il "),
+    "indiana": ("indiana", " in "),
+    "iowa": ("iowa", " ia "),
+    "kansas": ("kansas", " ks "),
+    "kentucky": ("kentucky", " ky "),
+    "louisiana": ("louisiana", " la "),
+    "maine": ("maine", " me "),
+    "maryland": ("maryland", " md "),
+    "massachusetts": ("massachusetts", " ma "),
+    "michigan": ("michigan", " mi "),
+    "minnesota": ("minnesota", " mn "),
+    "mississippi": ("mississippi", " ms "),
+    "missouri": ("missouri", " mo "),
+    "montana": ("montana", " mt "),
+    "nebraska": ("nebraska", " ne "),
+    "nevada": ("nevada", " nv "),
+    "new hampshire": ("new hampshire", " nh "),
+    "new jersey": ("new jersey", " nj "),
+    "new mexico": ("new mexico", " nm "),
+    "new york": ("new york", " ny "),
+    "north carolina": ("north carolina", " nc "),
+    "north dakota": ("north dakota", " nd "),
+    "ohio": ("ohio", " oh "),
+    "oklahoma": ("oklahoma", " ok "),
+    "oregon": ("oregon", " or "),
+    "pennsylvania": ("pennsylvania", " pa "),
+    "rhode island": ("rhode island", " ri "),
+    "south carolina": ("south carolina", " sc "),
+    "south dakota": ("south dakota", " sd "),
+    "tennessee": ("tennessee", " tn "),
+    "texas": ("texas", " tx "),
+    "utah": ("utah", " ut "),
+    "vermont": ("vermont", " vt "),
+    "virginia": ("virginia", " va "),
+    "washington": ("washington", " wa "),
+    "west virginia": ("west virginia", " wv "),
+    "wisconsin": ("wisconsin", " wi "),
+    "wyoming": ("wyoming", " wy "),
+}
+
+
+def _ascii_lower(text: str) -> str:
+    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
+
+
+def _snapshot_text(s: "MarketSnapshot") -> str:
+    extra = getattr(s, "extra", {}) or {}
+    return " ".join(
+        str(x)
+        for x in (
+            getattr(s, "title", ""),
+            extra.get("event_title", ""),
+            extra.get("full_question", ""),
+        )
+        if x
+    )
+
+
+def _domains(text: str) -> set[str]:
+    toks = _tokens(text)
+    found: set[str] = set()
+    if toks & _SPORT_TERMS:
+        found.add("sports")
+    if toks & _ELECTION_TERMS:
+        found.add("election")
+    if toks & _ECON_TERMS:
+        found.add("economic")
+    return found
+
+
+def _offices(text: str) -> set[str]:
+    low = _ascii_lower(text)
+    return {office for office, pat in _OFFICE_PATTERNS if re.search(pat, low)}
+
+
+def _parties(text: str) -> set[str]:
+    low = _ascii_lower(text)
+    parties: set[str] = set()
+    if re.search(r"\b(rep|republican|republicans|gop)\b", low):
+        parties.add("republican")
+    if re.search(r"\b(dem|democrat|democrats|democratic|democratics)\b", low):
+        parties.add("democratic")
+    return parties
+
+
+def _jurisdictions(text: str) -> set[str]:
+    low = f" {_ascii_lower(text)} "
+    found: set[str] = set()
+    for canonical, aliases in _COUNTRY_ALIASES.items():
+        if any(alias in low for alias in aliases):
+            found.add(canonical)
+    for canonical, aliases in _US_STATE_ALIASES.items():
+        if any(alias in low for alias in aliases):
+            found.add(canonical)
+    return found
+
+
+def _years(text: str) -> set[str]:
+    return set(re.findall(r"\b(20\d{2})\b", text))
+
+
+def _rates(text: str) -> set[str]:
+    return set(re.findall(r"\b\d+(?:\.\d+)?\s*%|\b\d+\.\d+\b", text))
+
+
+_NAME_STOP = {
+    "will", "who", "which", "what", "when", "where", "how", "republican",
+    "democratic", "democrat", "republicans", "democrats", "senate", "house",
+    "governor", "president", "presidential", "new york", "north carolina",
+    "south carolina", "south dakota", "north dakota", "united states",
+}
+
+
+def _proper_names(text: str) -> set[str]:
+    ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    names = set()
+    for match in re.finditer(r"\b([A-Z][a-z]{2,}(?:\s+(?:de|la|le|van|von))?\s+[A-Z][a-z]{2,})\b", ascii_text):
+        name = match.group(1).lower()
+        if name not in _NAME_STOP:
+            names.add(name)
+    return names
+
+
+def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> bool:
+    """Return False for high-confidence false-positive patterns."""
+    p_text = _snapshot_text(poly)
+    k_text = _snapshot_text(kalshi)
+    p_domains = _domains(p_text)
+    k_domains = _domains(k_text)
+    if p_domains and k_domains and p_domains.isdisjoint(k_domains):
+        return False
+
+    if "election" in p_domains and "election" in k_domains:
+        p_offices = _offices(p_text)
+        k_offices = _offices(k_text)
+        if p_offices and k_offices and p_offices.isdisjoint(k_offices):
+            return False
+
+        p_parties = _parties(p_text)
+        k_parties = _parties(k_text)
+        if p_parties and k_parties and p_parties.isdisjoint(k_parties):
+            return False
+
+        p_juris = _jurisdictions(p_text)
+        k_juris = _jurisdictions(k_text)
+        if p_juris and k_juris and p_juris.isdisjoint(k_juris):
+            return False
+
+        p_names = _proper_names(p_text)
+        k_names = _proper_names(k_text)
+        if p_names and k_names and p_names.isdisjoint(k_names):
+            return False
+
+    p_years = _years(p_text)
+    k_years = _years(k_text)
+    if p_years and k_years and p_years.isdisjoint(k_years):
+        return False
+
+    p_rates = _rates(p_text)
+    k_rates = _rates(k_text)
+    if p_rates and k_rates and p_rates.isdisjoint(k_rates):
+        return False
+
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +410,8 @@ def match_markets(
     for p in remaining_poly:
         p_toks = poly_tok[p.market_id]
         for k in remaining_kalshi:
+            if not is_compatible_match(p, k):
+                continue
             k_toks = kalshi_tok[k.market_id]
             sim = _jaccard(p_toks, k_toks)
             if sim < min_title_similarity:
