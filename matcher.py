@@ -245,6 +245,18 @@ def _has_over_under(text: str) -> bool:
     return bool(re.search(r"\bo/u\b|\bover\s*/\s*under\b|\bover\b|\bunder\b", low))
 
 
+def _set_numbers(text: str) -> set[str]:
+    low = _ascii_lower(text)
+    return set(re.findall(r"\bset\s*(\d+)\b", low))
+
+
+def _draft_pick_numbers(text: str) -> set[str]:
+    low = _ascii_lower(text)
+    nums = set(re.findall(r"\b(\d+)(?:st|nd|rd|th)?\s+(?:overall\s+)?pick\b", low))
+    nums.update(re.findall(r"\bpicked\s+(\d+)(?:st|nd|rd|th)?\b", low))
+    return nums
+
+
 _NAME_STOP = {
     "will", "who", "which", "what", "when", "where", "how", "republican",
     "democratic", "democrat", "republicans", "democrats", "senate", "house",
@@ -275,8 +287,14 @@ def _contract_actions(text: str) -> set[str]:
         actions.add("weather")
     if re.search(r"\bipo\b|initial public offering|publicly list", low):
         actions.add("ipo")
-    if re.search(r"\b(largest|biggest|top|best|rank|ranking)\b.*\b(company|model|ai)\b|\b(company|model|ai)\b.*\b(largest|biggest|top|best|rank|ranking)\b", low):
+    if re.search(r"\b(largest|biggest|top|best|rank|ranking|#\s*\d+)\b.*\b(company|model|ai|movie|opening|album)\b|\b(company|model|ai|movie|opening|album)\b.*\b(largest|biggest|top|best|rank|ranking|#\s*\d+)\b", low):
         actions.add("rank")
+    if re.search(r"\b(chatbot arena|elo|benchmark|ai model)\b", low):
+        actions.add("ai_benchmark")
+    if re.search(r"\b(rotten tomatoes|metacritic|review score|critic score|audience score)\b", low):
+        actions.add("review_score")
+    if re.search(r"\b(opening weekend|opening week|box office)\b", low):
+        actions.add("box_office")
     if re.search(r"\b(launch|expansion|available in)\b", low):
         actions.add("launch")
     if re.search(r"\brelocat(?:e|ed|ion)|moved away|away from\b", low):
@@ -287,6 +305,16 @@ def _contract_actions(text: str) -> set[str]:
         actions.add("labor_stats")
     if re.search(r"\b(rate hike|rate cut|interest rate|bps|fomc|ecb|bank of england|bank of japan|fed)\b", low):
         actions.add("monetary_policy")
+    if re.search(r"\b(points?|pts|rebounds?|rbs?|assists?|asts?|hits?|runs?|goals?)\b", low):
+        actions.add("stat_prop")
+    if re.search(r"\bmvp\b|\bmost valuable player\b|\baward\b", low):
+        actions.add("award")
+    if re.search(r"\brelease\b.*\balbum\b|\balbum\b.*\brelease\b", low):
+        actions.add("album_release")
+    if re.search(r"\b#\s*1 album\b|\bnumber one album\b|\btop album\b", low):
+        actions.add("album_chart")
+    if re.search(r"\bdraft\b|\boverall pick\b|\bpicked\s+\d+", low):
+        actions.add("draft_pick")
     if re.search(r"\b(run|runs|running|declare|declares|first this list)\b", low):
         actions.add("run_or_declare")
     if re.search(r"\b(win|wins|winner)\b.*\b(nominee|nomination)\b|\b(nominee|nomination)\b.*\b(win|wins|winner)\b", low):
@@ -373,6 +401,8 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
     k_actions = _contract_actions(k_text)
     if p_actions and k_actions and p_actions.isdisjoint(k_actions):
         return False
+    if ("rank" in p_actions) != ("rank" in k_actions):
+        return False
     if (_proper_names(p_text) and _is_generic_location_market(k_text)) or (
         _proper_names(k_text) and _is_generic_location_market(p_text)
     ):
@@ -390,6 +420,16 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
     p_rates = _rates(p_text)
     k_rates = _rates(k_text)
     if p_rates and k_rates and p_rates.isdisjoint(k_rates):
+        return False
+
+    p_sets = _set_numbers(p_text)
+    k_sets = _set_numbers(k_text)
+    if p_sets and k_sets and p_sets.isdisjoint(k_sets):
+        return False
+
+    p_picks = _draft_pick_numbers(p_text)
+    k_picks = _draft_pick_numbers(k_text)
+    if p_picks and k_picks and p_picks.isdisjoint(k_picks):
         return False
 
     p_stats = _stat_thresholds(p_text)
