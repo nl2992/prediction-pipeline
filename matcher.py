@@ -233,6 +233,7 @@ def _stat_thresholds(text: str) -> dict[str, set[float]]:
         "hits": r"\bhits?\b",
         "strikeouts": r"\b(strikeouts?|ks?)\b",
         "blocks": r"\b(blocks?|blks?)\b",
+        "threes": r"\b(threes?|three[-\s]?pointers?|3[-\s]?pointers?)\b",
         "runs": r"\bruns?\b",
         "goals": r"\bgoals?\b",
     }
@@ -269,6 +270,34 @@ def _draft_pick_numbers(text: str) -> set[str]:
     return nums
 
 
+def _is_generic_match_winner(text: str) -> bool:
+    low = _ascii_lower(text)
+    return bool(re.search(r"\bset\s+\d+\s+winner\b|\bmatch\s+winner\b", low))
+
+
+def _is_unselected_vs_winner(text: str) -> bool:
+    low = _ascii_lower(text)
+    return bool(
+        re.search(r"\bvs\.?\b", low)
+        and re.search(r"\b(set\s+\d+\s+winner|match\s+winner)\b", low)
+        and not re.search(r"\bwill\s+[a-z][a-z .'-]+\s+win\b", low)
+    )
+
+
+def _has_no_ipo(text: str) -> bool:
+    return bool(re.search(r"\bno ipo\b|\bwithout an ipo\b", _ascii_lower(text)))
+
+
+def _selected_names(text: str) -> set[str]:
+    low = _LEADING_QUESTION_WORDS.sub("", text)
+    low_ascii = _ascii_lower(low)
+    for splitter in (" vs. ", " vs ", " v. ", " at "):
+        if splitter in low_ascii:
+            low = low[:low_ascii.index(splitter)]
+            break
+    return _proper_names(low)
+
+
 _NAME_STOP = {
     "will", "who", "which", "what", "when", "where", "how", "republican",
     "democratic", "democrat", "republicans", "democrats", "senate", "house",
@@ -299,6 +328,10 @@ def _contract_actions(text: str) -> set[str]:
         actions.add("weather")
     if re.search(r"\bipo\b|initial public offering|publicly list", low):
         actions.add("ipo")
+    if re.search(r"\bbankrupt(?:cy)?\b", low):
+        actions.add("bankruptcy")
+    if re.search(r"\btake a stake\b|\bstake in\b|government stake", low):
+        actions.add("government_stake")
     if re.search(r"\b(largest|biggest|highest|second-highest|third-highest|top|best|rank|ranking|#\s*\d+)\b.*\b(company|model|ai|movie|opening|album|revenue|ipo|market cap)\b|\b(company|model|ai|movie|opening|album|revenue|ipo|market cap)\b.*\b(largest|biggest|highest|second-highest|third-highest|top|best|rank|ranking|#\s*\d+)\b", low):
         actions.add("rank")
     if re.search(r"\brevenue\b", low):
@@ -319,9 +352,9 @@ def _contract_actions(text: str) -> set[str]:
         actions.add("labor_stats")
     if re.search(r"\b(rate hike|rate cut|interest rate|bps|fomc|ecb|bank of england|bank of japan|fed)\b", low):
         actions.add("monetary_policy")
-    if re.search(r"\b(points?|pts|rebounds?|rbs?|assists?|asts?|hits?|strikeouts?|blocks?|runs?|goals?)\b", low):
+    if re.search(r"\b(points?|pts|rebounds?|rbs?|assists?|asts?|hits?|strikeouts?|blocks?|threes?|three[-\s]?pointers?|3[-\s]?pointers?|runs?|goals?)\b", low):
         actions.add("stat_prop")
-    if re.search(r"\bleader\b|\blead\b", low) and "stat_prop" in actions:
+    if re.search(r"\b(leader|lead|era leader)\b", low) and ("stat_prop" in actions or "era" in low):
         actions.add("stat_leader")
     if re.search(r"\bmvp\b|\bmost valuable player\b|\baward\b", low):
         actions.add("award")
@@ -329,8 +362,26 @@ def _contract_actions(text: str) -> set[str]:
         actions.add("album_release")
     if re.search(r"#\s*1\s+albums?|\bnumber one albums?\b|\btop albums?\b", low):
         actions.add("album_chart")
+    if re.search(r"#\s*1\s+artists?|\bbillboard\s+#?\s*1\s+artists?|\btop artists?\b", low):
+        actions.add("artist_chart")
+    if re.search(r"#\s*1\s+songs?|\bbillboard\s+#?\s*1\s+songs?|\btop songs?\b", low):
+        actions.add("song_chart")
+    if re.search(r"\bfight next\b|\bnext fight\b", low):
+        actions.add("fight_next")
     if re.search(r"\bdraft\b|\boverall pick\b|\bpicked\s+\d+", low):
         actions.add("draft_pick")
+    if re.search(r"\bteam to draft\b|\bdrafted by\b", low):
+        actions.add("draft_team")
+    if re.search(r"\bexact match score\b|\bset score\b|\bscore of \d+-\d+\b", low):
+        actions.add("exact_score")
+    if re.search(r"\bhandicap\b", low):
+        actions.add("handicap")
+    if re.search(r"\bwinless\b", low):
+        actions.add("winless")
+    if re.search(r"\bgroup [a-h]\b.*\bwin\b|\bteam from group\b", low):
+        actions.add("group_winner")
+    if re.search(r"\bbefore\b|by\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|q[1-4]|\d{1,2})", low):
+        actions.add("deadline")
     if re.search(r"\bstarting qb\b|\bquarterback\b", low):
         actions.add("starting_qb")
     if re.search(r"\b(run|runs|running|declare|declares|first this list)\b", low):
@@ -427,6 +478,31 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
         return False
     if ("stat_leader" in p_actions) != ("stat_leader" in k_actions):
         return False
+    if ("deadline" in p_actions) != ("deadline" in k_actions):
+        return False
+    if _is_generic_match_winner(p_text) != _is_generic_match_winner(k_text):
+        return False
+    if _is_unselected_vs_winner(p_text) != _is_unselected_vs_winner(k_text):
+        return False
+    if _has_no_ipo(p_text) != _has_no_ipo(k_text):
+        return False
+    if ("draft_team" in p_actions) != ("draft_team" in k_actions):
+        return False
+    if "fight_next" in p_actions and "fight_next" in k_actions:
+        p_names = _proper_names(p_text)
+        k_names = _proper_names(k_text)
+        p_event_names = _proper_names((getattr(poly, "extra", {}) or {}).get("event_title", ""))
+        k_event_names = _proper_names((getattr(kalshi, "extra", {}) or {}).get("event_title", ""))
+        if p_event_names and k_event_names and p_event_names.isdisjoint(k_event_names):
+            return False
+        if p_event_names and k_names and p_event_names.isdisjoint(k_names) and not (p_names & k_names):
+            return False
+        if k_event_names and p_names and k_event_names.isdisjoint(p_names) and not (p_names & k_names):
+            return False
+    p_selected_names = _selected_names(p_text)
+    k_selected_names = _selected_names(k_text)
+    if p_selected_names and k_selected_names and p_selected_names.isdisjoint(k_selected_names):
+        return False
     if (_proper_names(p_text) and _is_generic_location_market(k_text)) or (
         _proper_names(k_text) and _is_generic_location_market(p_text)
     ):
@@ -463,6 +539,8 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
 
     p_stats = _stat_thresholds(p_text)
     k_stats = _stat_thresholds(k_text)
+    if p_stats and k_stats and p_stats.keys().isdisjoint(k_stats.keys()):
+        return False
     for stat in p_stats.keys() & k_stats.keys():
         p_vals = p_stats[stat]
         k_vals = k_stats[stat]
