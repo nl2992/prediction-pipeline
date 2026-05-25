@@ -222,6 +222,29 @@ def _rates(text: str) -> set[str]:
     return set(re.findall(r"\b\d+(?:\.\d+)?\s*%|\b\d+\.\d+\b", text))
 
 
+def _stat_thresholds(text: str) -> dict[str, set[float]]:
+    low = _ascii_lower(text)
+    stats = {
+        "points": r"\b(points?|pts)\b",
+        "rebounds": r"\b(rebounds?|rbs?)\b",
+        "assists": r"\b(assists?|asts?)\b",
+        "hits": r"\bhits?\b",
+        "runs": r"\bruns?\b",
+        "goals": r"\bgoals?\b",
+    }
+    nums = {float(n) for n in re.findall(r"\b(\d+(?:\.\d+)?)\s*(?:\+|o/u|over|under)?", low)}
+    found: dict[str, set[float]] = {}
+    for stat, pat in stats.items():
+        if nums and re.search(pat, low):
+            found[stat] = nums
+    return found
+
+
+def _has_over_under(text: str) -> bool:
+    low = _ascii_lower(text)
+    return bool(re.search(r"\bo/u\b|\bover\s*/\s*under\b|\bover\b|\bunder\b", low))
+
+
 _NAME_STOP = {
     "will", "who", "which", "what", "when", "where", "how", "republican",
     "democratic", "democrat", "republicans", "democrats", "senate", "house",
@@ -248,6 +271,22 @@ def _proper_names(text: str) -> set[str]:
 def _contract_actions(text: str) -> set[str]:
     low = _ascii_lower(text)
     actions: set[str] = set()
+    if re.search(r"\b(rain|snow|temperature|temp|weather)\b", low):
+        actions.add("weather")
+    if re.search(r"\bipo\b|initial public offering|publicly list", low):
+        actions.add("ipo")
+    if re.search(r"\b(largest|biggest|top|best|rank|ranking)\b.*\b(company|model|ai)\b|\b(company|model|ai)\b.*\b(largest|biggest|top|best|rank|ranking)\b", low):
+        actions.add("rank")
+    if re.search(r"\b(launch|expansion|available in)\b", low):
+        actions.add("launch")
+    if re.search(r"\brelocat(?:e|ed|ion)|moved away|away from\b", low):
+        actions.add("relocate")
+    if re.search(r"\bplayed in\b|\bhost\b|\bheld in\b|\btake place in\b", low):
+        actions.add("host_location")
+    if re.search(r"\b(unemployment|jobs report|payroll|nonfarm)\b", low):
+        actions.add("labor_stats")
+    if re.search(r"\b(rate hike|rate cut|interest rate|bps|fomc|ecb|bank of england|bank of japan|fed)\b", low):
+        actions.add("monetary_policy")
     if re.search(r"\b(run|runs|running|declare|declares|first this list)\b", low):
         actions.add("run_or_declare")
     if re.search(r"\b(win|wins|winner)\b.*\b(nominee|nomination)\b|\b(nominee|nomination)\b.*\b(win|wins|winner)\b", low):
@@ -352,6 +391,16 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
     k_rates = _rates(k_text)
     if p_rates and k_rates and p_rates.isdisjoint(k_rates):
         return False
+
+    p_stats = _stat_thresholds(p_text)
+    k_stats = _stat_thresholds(k_text)
+    for stat in p_stats.keys() & k_stats.keys():
+        p_vals = p_stats[stat]
+        k_vals = k_stats[stat]
+        if p_vals and k_vals and min(abs(pv - kv) for pv in p_vals for kv in k_vals) > 0.75:
+            return False
+        if _has_over_under(p_text) != _has_over_under(k_text) and p_vals != k_vals:
+            return False
 
     return True
 
