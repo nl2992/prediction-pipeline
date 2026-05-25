@@ -234,20 +234,23 @@ class KalshiClient:
 
     def get_all_markets(
         self,
-        max_pages: int = 5,
+        max_pages: int | None = None,
         page_size: int = 200,
         series_ticker: str | None = None,
         event_ticker: str | None = None,
         status: str = "open",
     ) -> list[dict]:
         """
-        Paginate through markets up to ``max_pages`` pages.
+        Paginate through markets until the API cursor is exhausted.
+
+        Pass ``max_pages`` to deliberately cap traversal for smoke tests.
 
         Each market already contains top-of-book bid/ask prices inline.
         """
         all_markets: list[dict] = []
         cursor: str | None = None
-        for _ in range(max_pages):
+        pages = 0
+        while max_pages is None or pages < max_pages:
             resp = self.get_markets(
                 limit=page_size,
                 cursor=cursor,
@@ -258,6 +261,7 @@ class KalshiClient:
             batch = resp.get("markets", [])
             all_markets.extend(batch)
             cursor = resp.get("cursor")
+            pages += 1
             if not cursor or not batch:
                 break
         return all_markets
@@ -288,15 +292,16 @@ class KalshiClient:
 
     def get_all_events(
         self,
-        max_pages: int = 5,
+        max_pages: int | None = None,
         page_size: int = 200,
         series_ticker: str | None = None,
         status: str | None = None,
     ) -> list[dict]:
-        """Paginate through all events up to ``max_pages`` pages."""
+        """Paginate through events until exhausted, unless ``max_pages`` caps it."""
         all_events: list[dict] = []
         cursor: str | None = None
-        for _ in range(max_pages):
+        pages = 0
+        while max_pages is None or pages < max_pages:
             resp = self.get_events(
                 limit=page_size,
                 cursor=cursor,
@@ -306,6 +311,7 @@ class KalshiClient:
             batch = resp.get("events", [])
             all_events.extend(batch)
             cursor = resp.get("cursor")
+            pages += 1
             if not cursor or not batch:
                 break
         return all_events

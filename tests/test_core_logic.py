@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from arb import find_arb
 from discover import _match_outcomes_within_group, _parse_dt as discover_parse_dt
 from executor import TradeIntent, check_price_still_valid
+from kalshi.client import KalshiClient
 from matcher import (
     MatchedPair,
     _confidence,
@@ -16,6 +17,7 @@ from matcher import (
 )
 from monitor import _resolve_poly_token, _verify_kalshi_clob
 from pipeline import MarketSnapshot, OrderBook, PriceLevel, _parse_kalshi_full_book
+from polymarket.client import PolymarketClient
 
 
 def snap(source: str, market_id: str, bid: float, ask: float, extra: dict | None = None) -> MarketSnapshot:
@@ -315,6 +317,47 @@ class CoreLogicTests(unittest.TestCase):
 
         self.assertFalse(is_compatible_match(poly, kalshi))
         self.assertEqual(match_markets([poly], [kalshi], min_title_similarity=0.1), [])
+
+    def test_kalshi_get_all_events_runs_until_cursor_exhausted(self) -> None:
+        client = KalshiClient()
+        pages = [
+            {"events": [{"event_ticker": "E1"}], "cursor": "next"},
+            {"events": [{"event_ticker": "E2"}], "cursor": ""},
+        ]
+        client.get_events = MagicMock(side_effect=pages)
+
+        events = client.get_all_events(max_pages=None, page_size=1, status="open")
+
+        self.assertEqual([e["event_ticker"] for e in events], ["E1", "E2"])
+        self.assertEqual(client.get_events.call_count, 2)
+
+    def test_kalshi_get_all_markets_runs_until_cursor_exhausted(self) -> None:
+        client = KalshiClient()
+        pages = [
+            {"markets": [{"ticker": "M1"}], "cursor": "next"},
+            {"markets": [{"ticker": "M2"}], "cursor": ""},
+        ]
+        client.get_markets = MagicMock(side_effect=pages)
+
+        markets = client.get_all_markets(max_pages=None, page_size=1, status="open")
+
+        self.assertEqual([m["ticker"] for m in markets], ["M1", "M2"])
+        self.assertEqual(client.get_markets.call_count, 2)
+
+    def test_polymarket_search_events_runs_until_empty_page(self) -> None:
+        client = PolymarketClient()
+        client.get_events = MagicMock(
+            side_effect=[
+                [{"title": "Elon Musk trillionaire", "slug": "one"}],
+                [{"title": "Unrelated event", "slug": "two"}],
+                [],
+            ]
+        )
+
+        events = client.search_events(["trillionaire"], max_offset=None, page_size=1)
+
+        self.assertEqual([e["slug"] for e in events], ["one"])
+        self.assertEqual(client.get_events.call_count, 3)
 
     @patch("kalshi.client.KalshiClient")
     def test_verify_kalshi_clob_checks_derived_yes_ask(self, client_cls: MagicMock) -> None:

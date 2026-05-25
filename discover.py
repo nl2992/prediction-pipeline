@@ -9,7 +9,7 @@ No manual slug or series configuration.  Just run it.
 
 Usage
 -----
-    python discover.py                          # everything, 365-day horizon
+    python discover.py                          # everything active, no horizon cap
     python discover.py --category election      # Senate/House/Governor/primary
     python discover.py --category sports        # NBA/MLB/NFL/NHL/soccer/etc.
     python discover.py --category economic      # Fed/crypto/GDP/CPI/jobs
@@ -29,7 +29,7 @@ winners, economic indicators, entertainment, politics) is included.
 
 Algorithm
 ---------
-1. Fetch all active Kalshi events (~3000, ~6s)
+1. Fetch all active Kalshi events until the API cursor is exhausted
 2. Exclude multi-event parlays; filter by category and close-date horizon
 3. For each event, fetch its markets and auto-derive Polymarket search keywords
 4. Search Polymarket with those keywords (paginated catalog scan)
@@ -662,11 +662,11 @@ def _match_groups_then_individual(
 
 def discover(
     category: str = "all",
-    days: int = 365,
+    days: int | None = None,
     min_sim: float = 0.30,
     show_prices: bool = False,
-    max_poly_offset: int = 3000,
-    max_events_to_search: int = 400,
+    max_poly_offset: int | None = None,
+    max_events_to_search: int | None = None,
 ) -> list[dict]:
     """
     Run organic cross-exchange discovery and return matched pairs as dicts.
@@ -678,14 +678,14 @@ def discover(
     from polymarket.client import PolymarketClient
 
     now = datetime.now(timezone.utc)
-    horizon = now + timedelta(days=days)
+    horizon = now + timedelta(days=days) if days is not None else None
     fetched_at = now.isoformat()
 
     # ── 1. Kalshi event catalog ─────────────────────────────────────────────
     print("[1/5] Fetching Kalshi event catalog…", flush=True)
     kc = KalshiClient()
     t0 = time.time()
-    all_events = kc.get_all_events(max_pages=15, page_size=200, status="open")
+    all_events = kc.get_all_events(max_pages=None, page_size=200, status="open")
     print(f"      {len(all_events):,} events in {time.time()-t0:.1f}s")
 
     # ── 2. Filter events ─────────────────────────────────────────────────────
@@ -705,7 +705,7 @@ def discover(
         # regardless of their stated close date.
         if close and close < now:
             continue
-        if close and close > horizon and ev_cat != "sports":
+        if horizon is not None and close and close > horizon and ev_cat != "sports":
             continue
         filtered.append(ev)
 
@@ -715,14 +715,16 @@ def discover(
         return dt if dt else now + timedelta(days=9999)
 
     filtered.sort(key=_sort_key)
-    filtered = filtered[:max_events_to_search]
+    if max_events_to_search is not None:
+        filtered = filtered[:max_events_to_search]
 
     cat_counts: dict[str, int] = {}
     for ev in filtered:
         c = _category(ev)
         cat_counts[c] = cat_counts.get(c, 0) + 1
 
-    print(f"[2/5] Filtered to {len(filtered)} events within {days} days  "
+    horizon_label = f"within {days} days" if days is not None else "with no day limit"
+    print(f"[2/5] Filtered to {len(filtered)} events {horizon_label}  "
           f"({', '.join(f'{c}={n}' for c, n in sorted(cat_counts.items()))})")
     if not filtered:
         print("      Nothing to scan.  Try --category all or --days 730.")
@@ -739,8 +741,7 @@ def discover(
         et = ev.get("event_ticker", "")
         event_title = ev.get("title", "")
         try:
-            resp = kc.get_markets(limit=50, event_ticker=et, status="open")
-            mkts = resp.get("markets", [])
+            mkts = kc.get_all_markets(event_ticker=et, status="open", page_size=200)
         except Exception:
             continue
         for m in mkts:
@@ -751,17 +752,16 @@ def discover(
         kws = _derive_keywords(event_title)
         k_keywords.extend(kws)
 
-    # Deduplicate + cap keywords from the events scan (before supplemental)
+    # Deduplicate keywords from the events scan (before supplemental)
     k_keywords = [kw for kw in dict.fromkeys(k_keywords) if len(kw) > 2]
     k_keywords.sort(key=len, reverse=True)
-    k_keywords = k_keywords[:80]
 
     # ── Supplemental: known sports series not in the events catalog ───────────
     # Kalshi's active championship markets (NBA Finals, NHL, MLB, NFL) are stored
     # under KXNBA / KXNHL / KXMLB / KXNFL series_tickers but may not appear in
     # the events catalog.  Fetch them directly when the category allows sports.
-    # Important: supplemental keywords are added AFTER the cap so short but
-    # high-value terms like "NBA" or "Oklahoma City" are never crowded out.
+    # Supplemental keywords are merged after event-derived keywords so short but
+    # high-value terms like "NBA" or "Oklahoma City" are always present.
     supplemental_kws: list[str] = []
     if category in ("all", "sports"):
         _SPORTS_SERIES = [
@@ -774,8 +774,7 @@ def discover(
         seen_tickers = {s.market_id for s in k_snaps}
         for series_ticker, extra_kws in _SPORTS_SERIES:
             try:
-                resp = kc.get_markets(limit=100, series_ticker=series_ticker, status="open")
-                mkts = resp if isinstance(resp, list) else resp.get("markets", [])
+                mkts = kc.get_all_markets(series_ticker=series_ticker, status="open", page_size=200)
                 for m in mkts:
                     if m.get("ticker", "") in seen_tickers:
                         continue
@@ -789,7 +788,7 @@ def discover(
                     supplemental_kws.extend(extra_kws)
             except Exception:
                 pass
-    # Merge supplemental keywords without re-applying the length cap
+    # Merge supplemental keywords without applying any keyword-count cap.
     all_kws_seen = set(k_keywords)
     for kw in supplemental_kws:
         if kw not in all_kws_seen and len(kw) > 2:
@@ -808,7 +807,8 @@ def discover(
     # markets in one call.  This enables two-level (event → outcome) matching
     # for categorical markets (Fed rate, FIFA World Cup, Senate primaries, …).
     # Fall back to the legacy /markets search for any keywords not matched.
-    print(f"[4/5] Searching Polymarket events ({max_poly_offset:,}-event catalog scan)…", flush=True)
+    poly_scan_label = f"{max_poly_offset:,}-event catalog scan" if max_poly_offset is not None else "full event catalog scan"
+    print(f"[4/5] Searching Polymarket events ({poly_scan_label})…", flush=True)
     t0 = time.time()
     pc = PolymarketClient()
 
@@ -816,7 +816,7 @@ def discover(
         keywords=k_keywords,
         active=True,
         closed=False,
-        max_offset=min(max_poly_offset, 2000),  # events catalog is smaller than markets
+        max_offset=max_poly_offset,
     )
 
     p_snaps: list = []
@@ -988,16 +988,16 @@ def main() -> None:
     p.add_argument("--category", default="all",
                    choices=["all", "election", "sports", "economic", "political", "pop"],
                    help="Event category filter")
-    p.add_argument("--days", type=int, default=365,
-                   help="Only scan events closing within this many days")
+    p.add_argument("--days", type=int, default=None,
+                   help="Only scan events closing within this many days; omit for no day limit")
     p.add_argument("--min-sim", type=float, default=0.30,
                    help="Minimum Jaccard title similarity to report a pair")
     p.add_argument("--show-prices", action="store_true",
                    help="Fetch live orderbooks for matched pairs (slower)")
-    p.add_argument("--max-events", type=int, default=400,
-                   help="Maximum Kalshi events to scan (caps API calls)")
-    p.add_argument("--poly-scan", type=int, default=3000,
-                   help="Polymarket catalog depth (max offset to paginate)")
+    p.add_argument("--max-events", type=int, default=None,
+                   help="Maximum Kalshi events to scan; omit for no event limit")
+    p.add_argument("--poly-scan", type=int, default=None,
+                   help="Polymarket catalog depth (max offset); omit for no catalog offset limit")
     p.add_argument("--output", default=None,
                    help="Save matched pairs to this JSON file")
     args = p.parse_args()

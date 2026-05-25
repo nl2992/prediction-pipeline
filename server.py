@@ -56,7 +56,7 @@ def _load_signals(n: int = 200) -> list[dict]:
 def _run_scan(
     category: str = "all",
     min_sim: float = 0.30,
-    max_events: int = 200,
+    max_events: int | None = None,
     show_prices: bool = True,
 ) -> dict:
     t0 = time.time()
@@ -64,7 +64,7 @@ def _run_scan(
         from discover import discover
         pairs = discover(
             category=category,
-            days=365,
+            days=None,
             min_sim=min_sim,
             show_prices=show_prices,
             max_events_to_search=max_events,
@@ -90,7 +90,7 @@ def _run_scan(
 def api_scan(
     category: str = "all",
     min_sim: float = 0.30,
-    max_events: int = 200,
+    max_events: int | None = None,
 ):
     """Run a full organic discover scan and return matched pairs."""
     return JSONResponse(_run_scan(category=category, min_sim=min_sim,
@@ -100,7 +100,7 @@ def api_scan(
 @app.get("/api/scan/fast")
 def api_scan_fast(category: str = "all"):
     """Quick scan — no live orderbook enrichment, uses catalog mid-prices only."""
-    return JSONResponse(_run_scan(category=category, max_events=150, show_prices=False))
+    return JSONResponse(_run_scan(category=category, show_prices=False))
 
 
 @app.get("/api/signals")

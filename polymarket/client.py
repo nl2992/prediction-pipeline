@@ -124,7 +124,7 @@ class PolymarketClient:
         keywords: list[str],
         active: bool = True,
         closed: bool = False,
-        max_offset: int = 3000,
+        max_offset: int | None = None,
         page_size: int = 100,
     ) -> list[dict]:
         """
@@ -142,14 +142,15 @@ class PolymarketClient:
         keywords   : list of substring patterns to match in the question field
         active     : only return active markets (default True)
         closed     : include closed markets (default False)
-        max_offset : stop paginating after this many records (default 3000)
+        max_offset : optional stop offset; None scans until the catalog ends
         page_size  : records per API request (max 100 on Gamma, default 100)
         """
         kw_lower = [k.lower() for k in keywords]
         results: list[dict] = []
         seen: set[str] = set()
 
-        for offset in range(0, max_offset + 1, page_size):
+        offset = 0
+        while max_offset is None or offset <= max_offset:
             try:
                 batch = self.get_markets(
                     limit=page_size,
@@ -172,10 +173,11 @@ class PolymarketClient:
                 if any(kw in question for kw in kw_lower):
                     results.append(mkt)
                     seen.add(cid)
+            offset += page_size
 
         logger.info(
-            "search_markets: scanned offset 0–%d, found %d matching markets for keywords %s",
-            min(offset, max_offset), len(results), keywords,
+            "search_markets: scanned through offset %d, found %d matching markets for keywords %s",
+            offset, len(results), keywords,
         )
         return results
 
@@ -184,7 +186,7 @@ class PolymarketClient:
         keywords: list[str],
         active: bool = True,
         closed: bool = False,
-        max_offset: int = 2000,
+        max_offset: int | None = None,
         page_size: int = 100,
     ) -> list[dict]:
         """
@@ -200,14 +202,15 @@ class PolymarketClient:
         keywords   : list of substring patterns to match in the event title
         active     : only return active events (default True)
         closed     : include closed events (default False)
-        max_offset : stop paginating after this many records (default 2000)
+        max_offset : optional stop offset; None scans until the catalog ends
         page_size  : records per API request (default 100)
         """
         kw_lower = [k.lower() for k in keywords]
         results: list[dict] = []
         seen: set[str] = set()
 
-        for offset in range(0, max_offset + 1, page_size):
+        offset = 0
+        while max_offset is None or offset <= max_offset:
             try:
                 batch = self.get_events(
                     limit=page_size,
@@ -230,6 +233,7 @@ class PolymarketClient:
                 if any(kw in title for kw in kw_lower):
                     results.append(ev)
                     seen.add(slug)
+            offset += page_size
 
         logger.info(
             "search_events: found %d events for keywords %s",
