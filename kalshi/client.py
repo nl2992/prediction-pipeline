@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.elections.kalshi.com/trade-api/v2"
 DEFAULT_TIMEOUT = 15
+DEFAULT_MAX_RETRIES = 8
 
 
 def _load_private_key(pem_path: str):
@@ -141,22 +142,22 @@ class KalshiClient:
         # Retry on 429 with exponential backoff
         backoff = 5
         resp = None
-        for attempt in range(4):
+        for attempt in range(DEFAULT_MAX_RETRIES):
             try:
                 resp = self.session.get(
                     url, params=params, headers=headers, timeout=self.timeout
                 )
             except requests.RequestException:
-                if attempt == 3:
+                if attempt == DEFAULT_MAX_RETRIES - 1:
                     raise
                 import time as _time
                 _time.sleep(backoff)
-                backoff *= 2
+                backoff = min(backoff * 2, 60)
                 continue
             if resp.status_code == 429:
                 import time as _time
                 _time.sleep(backoff)
-                backoff *= 2
+                backoff = min(backoff * 2, 60)
                 continue
             resp.raise_for_status()
             return resp.json()
