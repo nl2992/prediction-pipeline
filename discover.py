@@ -42,7 +42,6 @@ Algorithm
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import re
 import time
@@ -732,80 +731,69 @@ def discover(
         print("      Nothing to scan.  Try --category all or --days 730.")
         return []
 
-    # ── 3. Fetch Kalshi markets per event ────────────────────────────────────
-    print(f"[3/5] Fetching Kalshi markets for {len(filtered)} events…", flush=True)
+    # ── 3. Fetch Kalshi markets ──────────────────────────────────────────────
+    print("[3/5] Fetching full Kalshi market catalog…", flush=True)
     t0 = time.time()
     k_snaps: list = []
     k_keywords: list[str] = []
     skipped_parlay = 0
 
-    def _fetch_event_markets(ev: dict) -> tuple[list, list[str], int]:
-        et = ev.get("event_ticker", "")
-        event_title = ev.get("title", "")
-        snaps: list = []
-        skipped = 0
-        try:
-            mkts = kc.get_all_markets(event_ticker=et, status="open", page_size=200)
-        except Exception:
-            return [], _derive_keywords(event_title), 0
-        for m in mkts:
-            if _is_parlay_market(m):
-                skipped += 1
-                continue
-            snaps.append(_k_snap(m, fetched_at, event_title=event_title))
-        return snaps, _derive_keywords(event_title), skipped
+    for ev in filtered:
+        k_keywords.extend(_derive_keywords(ev.get("title", "")))
 
-    worker_count = max(1, min(kalshi_workers, len(filtered)))
-    with ThreadPoolExecutor(max_workers=worker_count) as pool:
-        futures = [pool.submit(_fetch_event_markets, ev) for ev in filtered]
-        for future in as_completed(futures):
-            snaps, kws, skipped = future.result()
-            k_snaps.extend(snaps)
-            k_keywords.extend(kws)
-            skipped_parlay += skipped
+    filtered_by_ticker = {
+        ev.get("event_ticker", ""): ev
+        for ev in filtered
+        if ev.get("event_ticker")
+    }
+    all_kalshi_markets: list[dict] = []
+    if max_events_to_search is not None and len(filtered) <= 100:
+        for ev in filtered:
+            et = ev.get("event_ticker", "")
+            if et:
+                all_kalshi_markets.extend(
+                    kc.get_all_markets(event_ticker=et, status="open", page_size=200)
+                )
+    else:
+        cursor: str | None = None
+        seen_cursors: set[str] = set()
+        page = 0
+        while True:
+            resp = kc.get_markets(limit=1000, cursor=cursor, status="open")
+            batch = resp.get("markets", [])
+            all_kalshi_markets.extend(batch)
+            page += 1
+            if page % 25 == 0:
+                print(f"      fetched {len(all_kalshi_markets):,} Kalshi market rows…", flush=True)
+            next_cursor = resp.get("cursor")
+            if not batch or not next_cursor or next_cursor in seen_cursors:
+                break
+            seen_cursors.add(next_cursor)
+            cursor = next_cursor
+
+    for m in all_kalshi_markets:
+        event_ticker = m.get("event_ticker", "")
+        event = filtered_by_ticker.get(event_ticker)
+        event_title = (event or {}).get("title") or m.get("event_title") or m.get("title", "")
+        if event is None:
+            market_cat = _category({"title": event_title or m.get("title", "")})
+            if category != "all" and market_cat != category:
+                continue
+            close = _parse_dt(m.get("close_time") or m.get("expiration_time"))
+            if close and close < now:
+                continue
+            if horizon is not None and close and close > horizon and market_cat != "sports":
+                continue
+        if _is_parlay_market(m):
+            skipped_parlay += 1
+            continue
+        k_snaps.append(_k_snap(m, fetched_at, event_title=event_title))
+        k_keywords.extend(_derive_keywords(event_title))
+        k_keywords.extend(_derive_keywords(m.get("title", "")))
 
     # Deduplicate keywords from the events scan (before supplemental)
     k_keywords = [kw for kw in dict.fromkeys(k_keywords) if len(kw) > 2]
     k_keywords.sort(key=len, reverse=True)
-
-    # ── Supplemental: known sports series not in the events catalog ───────────
-    # Kalshi's active championship markets (NBA Finals, NHL, MLB, NFL) are stored
-    # under KXNBA / KXNHL / KXMLB / KXNFL series_tickers but may not appear in
-    # the events catalog.  Fetch them directly when the category allows sports.
-    # Supplemental keywords are merged after event-derived keywords so short but
-    # high-value terms like "NBA" or "Oklahoma City" are always present.
-    supplemental_kws: list[str] = []
-    if category in ("all", "sports"):
-        _SPORTS_SERIES = [
-            ("KXNBA",  ["NBA", "Pro Basketball"]),
-            ("KXNHL",  ["NHL", "Stanley Cup"]),
-            ("KXMLB",  ["MLB", "World Series"]),
-            ("KXNFL",  ["NFL", "Super Bowl"]),
-            ("KXNFLSB", ["NFL", "Super Bowl"]),
-        ]
-        seen_tickers = {s.market_id for s in k_snaps}
-        for series_ticker, extra_kws in _SPORTS_SERIES:
-            try:
-                mkts = kc.get_all_markets(series_ticker=series_ticker, status="open", page_size=200)
-                for m in mkts:
-                    if m.get("ticker", "") in seen_tickers:
-                        continue
-                    if _is_parlay_market(m):
-                        skipped_parlay += 1
-                        continue
-                    snap = _k_snap(m, fetched_at, event_title=m.get("title", ""))
-                    k_snaps.append(snap)
-                    seen_tickers.add(snap.market_id)
-                    supplemental_kws.extend(_derive_keywords(m.get("title", "")))
-                    supplemental_kws.extend(extra_kws)
-            except Exception:
-                pass
-    # Merge supplemental keywords without applying any keyword-count cap.
-    all_kws_seen = set(k_keywords)
-    for kw in supplemental_kws:
-        if kw not in all_kws_seen and len(kw) > 2:
-            k_keywords.append(kw)
-            all_kws_seen.add(kw)
 
     elapsed = time.time() - t0
     print(f"      {len(k_snaps):,} Kalshi markets ({skipped_parlay} parlay-format skipped) in {elapsed:.1f}s")
