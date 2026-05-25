@@ -700,7 +700,7 @@ function renderDetail(p) {
   const kalshiEventLine = p.kalshi_event_title ? `<div class="detail-row"><span class="detail-key">  EVENT</span><span class="detail-val dim">${esc(p.kalshi_event_title)}</span></div>` : '';
 
   const polyUrl   = p.poly_slug          ? `https://polymarket.com/event/${encodeURIComponent(p.poly_slug)}` : '';
-  const kalshiUrl = p.kalshi_event_ticker ? `https://kalshi.com/markets/${p.kalshi_event_ticker.toLowerCase()}` : '';
+  const kalshiUrl = p.kalshi_ticker ? `https://kalshi.com/markets/${encodeURIComponent(p.kalshi_ticker)}` : '';
   const polyLink   = polyUrl   ? `<a href="${polyUrl}"   target="_blank" rel="noopener" class="ex-link">↗ OPEN</a>` : '';
   const kalshiLink = kalshiUrl ? `<a href="${kalshiUrl}" target="_blank" rel="noopener" class="ex-link">↗ OPEN</a>` : '';
 
