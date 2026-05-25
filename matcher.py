@@ -321,6 +321,24 @@ def _proper_names(text: str) -> set[str]:
     return names
 
 
+_ENTITY_STOP = _NAME_STOP | {
+    "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+    "roland garros", "nba playoffs", "atp", "wta", "mlb", "ufc", "fifa", "world cup",
+    "set winner", "exact match", "match score",
+}
+
+
+def _named_entities(text: str) -> set[str]:
+    ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    entities = set(_proper_names(ascii_text))
+    for match in re.finditer(r"\b([A-Z][A-Za-z0-9]{2,}(?:\s+[A-Z][A-Za-z0-9]{1,})?)\b", ascii_text):
+        entity = match.group(1).lower()
+        if entity not in _ENTITY_STOP:
+            entities.add(entity)
+    return entities
+
+
 def _contract_actions(text: str) -> set[str]:
     low = _ascii_lower(text)
     actions: set[str] = set()
@@ -350,9 +368,11 @@ def _contract_actions(text: str) -> set[str]:
         actions.add("host_location")
     if re.search(r"\b(unemployment|jobs report|payroll|nonfarm)\b", low):
         actions.add("labor_stats")
+    if re.search(r"\binflation\b|\bcpi\b", low):
+        actions.add("inflation")
     if re.search(r"\b(rate hike|rate cut|interest rate|bps|fomc|ecb|bank of england|bank of japan|fed)\b", low):
         actions.add("monetary_policy")
-    if re.search(r"\b(points?|pts|rebounds?|rbs?|assists?|asts?|hits?|strikeouts?|blocks?|threes?|three[-\s]?pointers?|3[-\s]?pointers?|runs?|goals?)\b", low):
+    if re.search(r"\b(points?|pts|rebounds?|rbs?|assists?|asts?|hits?|strikeouts?|blocks?|steals?|stls?|threes?|three[-\s]?pointers?|3[-\s]?pointers?|runs?|goals?)\b", low):
         actions.add("stat_prop")
     if re.search(r"\b(leader|lead|era leader)\b", low) and ("stat_prop" in actions or "era" in low):
         actions.add("stat_leader")
@@ -360,22 +380,34 @@ def _contract_actions(text: str) -> set[str]:
         actions.add("award")
     if re.search(r"\brelease\b.*\balbums?\b|\balbums?\b.*\brelease\b", low):
         actions.add("album_release")
+    if re.search(r"\brelease\b.*\bsongs?\b|\bsongs?\b.*\brelease\b", low):
+        actions.add("song_release")
     if re.search(r"#\s*1\s+albums?|\bnumber one albums?\b|\btop albums?\b", low):
         actions.add("album_chart")
     if re.search(r"#\s*1\s+artists?|\bbillboard\s+#?\s*1\s+artists?|\btop artists?\b", low):
         actions.add("artist_chart")
-    if re.search(r"#\s*1\s+songs?|\bbillboard\s+#?\s*1\s+songs?|\btop songs?\b", low):
+    if re.search(r"#\s*1\s+(songs?|hits?)|\bbillboard\s+#?\s*1\s+(songs?|hits?)|\btop (songs?|hits?)\b", low):
         actions.add("song_chart")
     if re.search(r"\bfight next\b|\bnext fight\b", low):
         actions.add("fight_next")
+    if re.search(r"\blaunch a token\b|\btoken before\b|\btoken this year\b", low):
+        actions.add("token_launch")
     if re.search(r"\bdraft\b|\boverall pick\b|\bpicked\s+\d+", low):
         actions.add("draft_pick")
     if re.search(r"\bteam to draft\b|\bdrafted by\b", low):
         actions.add("draft_team")
     if re.search(r"\bexact match score\b|\bset score\b|\bscore of \d+-\d+\b", low):
         actions.add("exact_score")
+    if re.search(r"\bset\s+\d+\s+o/u\b|\bset\s+\d+\s+(?:total|over|under)\b", low):
+        actions.add("set_total")
     if re.search(r"\bhandicap\b", low):
         actions.add("handicap")
+    if re.search(r"\bwedding\b|\bbridesmaids?\b|\battend\b", low):
+        actions.add("wedding_attendance")
+    if re.search(r"\bhow many\b|\bnumber of\b", low):
+        actions.add("count")
+    if re.search(r"\bwin more\b|\bmore .* than\b", low):
+        actions.add("comparison")
     if re.search(r"\bwinless\b", low):
         actions.add("winless")
     if re.search(r"\bgroup [a-h]\b.*\bwin\b|\bteam from group\b", low):
@@ -480,6 +512,10 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
         return False
     if ("deadline" in p_actions) != ("deadline" in k_actions):
         return False
+    if ("comparison" in p_actions) != ("comparison" in k_actions):
+        return False
+    if ("count" in p_actions) != ("count" in k_actions):
+        return False
     if _is_generic_match_winner(p_text) != _is_generic_match_winner(k_text):
         return False
     if _is_unselected_vs_winner(p_text) != _is_unselected_vs_winner(k_text):
@@ -498,6 +534,11 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
         if p_event_names and k_names and p_event_names.isdisjoint(k_names) and not (p_names & k_names):
             return False
         if k_event_names and p_names and k_event_names.isdisjoint(p_names) and not (p_names & k_names):
+            return False
+    if "token_launch" in p_actions and "token_launch" in k_actions:
+        p_entities = _named_entities(p_text)
+        k_entities = _named_entities(k_text)
+        if p_entities and k_entities and p_entities.isdisjoint(k_entities):
             return False
     p_selected_names = _selected_names(p_text)
     k_selected_names = _selected_names(k_text)
