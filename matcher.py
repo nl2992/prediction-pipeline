@@ -507,6 +507,11 @@ def match_markets(
 
     poly_tok = {s.market_id: _tokens(s.title) for s in remaining_poly}
     kalshi_tok = {s.market_id: _tokens(s.title) for s in remaining_kalshi}
+    kalshi_by_id = {s.market_id: s for s in remaining_kalshi}
+    kalshi_by_token: dict[str, set[str]] = {}
+    for k in remaining_kalshi:
+        for tok in kalshi_tok[k.market_id]:
+            kalshi_by_token.setdefault(tok, set()).add(k.market_id)
 
     # Score all candidate pairs.
     # Close-time delta is a scoring signal only — never a hard exclusion gate.
@@ -516,11 +521,11 @@ def match_markets(
     scored: list[tuple[float, "MarketSnapshot", "MarketSnapshot"]] = []
     for p in remaining_poly:
         p_toks = poly_tok[p.market_id]
-        for k in remaining_kalshi:
-            if not is_compatible_match(p, k):
-                continue
-            if not is_close_time_compatible(p, k):
-                continue
+        candidate_ids: set[str] = set()
+        for tok in p_toks:
+            candidate_ids.update(kalshi_by_token.get(tok, ()))
+        for kalshi_id in candidate_ids:
+            k = kalshi_by_id[kalshi_id]
             k_toks = kalshi_tok[k.market_id]
             sim = _jaccard(p_toks, k_toks)
             if sim < min_title_similarity:
@@ -532,6 +537,10 @@ def match_markets(
                 longer  = max(len(p_toks), len(k_toks))
                 if shorter / longer < min_token_ratio:
                     continue
+            if not is_compatible_match(p, k):
+                continue
+            if not is_close_time_compatible(p, k):
+                continue
             delta_h = _close_delta_hours(p.close_time, k.close_time)
             score = _confidence(sim, delta_h, max_close_delta_hours)
             scored.append((score, p, k))

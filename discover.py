@@ -602,6 +602,11 @@ def _match_groups_then_individual(
         eid: (snaps[0].extra.get("event_title") or snaps[0].title)
         for eid, snaps in p_groups.items()
     }
+    p_etoks = {eid: _tokens(title) for eid, title in p_etitles.items()}
+    p_events_by_token: dict[str, set[str]] = {}
+    for p_eid, toks in p_etoks.items():
+        for tok in toks:
+            p_events_by_token.setdefault(tok, set()).add(p_eid)
 
     # ── Step 1: match event groups ────────────────────────────────────────────
     event_scores: list[tuple[float, str, str]] = []
@@ -609,8 +614,11 @@ def _match_groups_then_individual(
         k_toks = _tokens(k_et)
         if not k_toks:
             continue
-        for p_eid, p_et in p_etitles.items():
-            p_toks = _tokens(p_et)
+        candidate_p_eids: set[str] = set()
+        for tok in k_toks:
+            candidate_p_eids.update(p_events_by_token.get(tok, ()))
+        for p_eid in candidate_p_eids:
+            p_toks = p_etoks[p_eid]
             sim = _jaccard(k_toks, p_toks)
             if sim >= min_sim:
                 event_scores.append((sim, k_eid, p_eid))
