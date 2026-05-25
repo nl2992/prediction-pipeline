@@ -566,7 +566,7 @@ async function runScan() {
   btn.textContent = '⟳ SCANNING...';
   const t0 = Date.now();
   try {
-    const r = await fetch(`/api/scan?category=${currentCat}&min_sim=0.30&max_events=300`);
+    const r = await fetch(`/api/scan?category=${currentCat}&min_sim=0.30`);
     const d = await r.json();
     if (d.error) throw new Error(d.error);
     allPairs = d.pairs || [];
