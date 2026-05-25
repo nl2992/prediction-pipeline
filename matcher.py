@@ -64,12 +64,14 @@ _ELECTION_TERMS = frozenset({
     "governor", "governorship", "gubernatorial", "primary", "nominee",
     "nomination", "democratic", "democratics", "democrat", "republican",
     "republicans", "attorney", "general", "secretary", "state", "mayor",
+    "minister", "parliament", "parliamentary",
 })
 
 _ECON_TERMS = frozenset({
     "fed", "federal", "funds", "rate", "rates", "cut", "cuts", "hike",
     "hikes", "inflation", "cpi", "gdp", "bitcoin", "btc", "ethereum",
-    "eth", "oil", "gold", "nasdaq", "dow",
+    "eth", "oil", "gold", "nasdaq", "dow", "trillionaire", "billionaire",
+    "debt",
 })
 
 _OFFICE_PATTERNS: tuple[tuple[str, str], ...] = (
@@ -80,6 +82,7 @@ _OFFICE_PATTERNS: tuple[tuple[str, str], ...] = (
     ("attorney_general", r"\battorney\s+general\b"),
     ("secretary_state", r"\bsecretary\s+of\s+state\b"),
     ("mayor", r"\b(mayor|mayoral)\b"),
+    ("prime_minister", r"\b(prime\s+minister|pm)\b"),
 )
 
 _COUNTRY_ALIASES: dict[str, tuple[str, ...]] = {
@@ -90,6 +93,8 @@ _COUNTRY_ALIASES: dict[str, tuple[str, ...]] = {
     "moldova": ("moldova", "moldovan"),
     "philippines": ("philippines", "philippine", "filipino"),
     "turkey": ("turkey", "turkish"),
+    "united kingdom": ("united kingdom", "uk", "britain", "british"),
+    "israel": ("israel", "israeli"),
 }
 
 _US_STATE_ALIASES: dict[str, tuple[str, ...]] = {
@@ -290,6 +295,8 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
     k_domains = _domains(k_text)
     if p_domains and k_domains and p_domains.isdisjoint(k_domains):
         return False
+    if (p_domains == {"election"} and not k_domains) or (k_domains == {"election"} and not p_domains):
+        return False
 
     if "election" in p_domains and "election" in k_domains:
         p_offices = _offices(p_text)
@@ -395,6 +402,28 @@ def _confidence(title_sim: float, delta_h: float | None, max_delta: float) -> fl
     return 0.70 * title_sim + 0.30 * time_score
 
 
+def is_close_time_compatible(
+    poly: "MarketSnapshot",
+    kalshi: "MarketSnapshot",
+    max_non_sports_delta_hours: float = 24 * 400,
+) -> bool:
+    """
+    Reject non-sports pairs with clearly incompatible resolution horizons.
+
+    Sports markets often carry contractual far-out expiry dates, so they keep
+    the old soft-scoring behavior. For political/election/pop markets, a
+    multi-year close-date gap usually means a different market scope, not a
+    tradable equivalent.
+    """
+    delta_h = _close_delta_hours(poly.close_time, kalshi.close_time)
+    if delta_h is None:
+        return True
+    domains = _domains(_snapshot_text(poly)) | _domains(_snapshot_text(kalshi))
+    if "sports" in domains:
+        return True
+    return delta_h <= max_non_sports_delta_hours
+
+
 # ---------------------------------------------------------------------------
 # Match result
 # ---------------------------------------------------------------------------
@@ -484,6 +513,8 @@ def match_markets(
         p_toks = poly_tok[p.market_id]
         for k in remaining_kalshi:
             if not is_compatible_match(p, k):
+                continue
+            if not is_close_time_compatible(p, k):
                 continue
             k_toks = kalshi_tok[k.market_id]
             sim = _jaccard(p_toks, k_toks)
