@@ -6,7 +6,14 @@ from unittest.mock import MagicMock, patch
 from arb import find_arb
 from discover import _match_outcomes_within_group, _parse_dt as discover_parse_dt
 from executor import TradeIntent, check_price_still_valid
-from matcher import MatchedPair, _confidence, _parse_dt as matcher_parse_dt, is_compatible_match, match_markets
+from matcher import (
+    MatchedPair,
+    _confidence,
+    _parse_dt as matcher_parse_dt,
+    is_close_time_compatible,
+    is_compatible_match,
+    match_markets,
+)
 from monitor import _resolve_poly_token, _verify_kalshi_clob
 from pipeline import MarketSnapshot, OrderBook, PriceLevel, _parse_kalshi_full_book
 
@@ -26,6 +33,19 @@ def snap(source: str, market_id: str, bid: float, ask: float, extra: dict | None
         ),
         extra=extra or {},
     )
+
+
+def titled_snap(
+    source: str,
+    market_id: str,
+    title: str,
+    close_time: str,
+    extra: dict | None = None,
+) -> MarketSnapshot:
+    s = snap(source, market_id, 0.4, 0.5, extra=extra)
+    s.title = title
+    s.close_time = close_time
+    return s
 
 
 class CoreLogicTests(unittest.TestCase):
@@ -236,6 +256,44 @@ class CoreLogicTests(unittest.TestCase):
         kalshi.title = "Who will win the next presidential election?"
 
         self.assertEqual(_match_outcomes_within_group([kalshi], [poly], group_sim=0.9), [])
+
+    def test_matcher_rejects_election_vs_trillionaire_topic(self) -> None:
+        poly = titled_snap(
+            "polymarket",
+            "poly-elon-president",
+            "Elon Musk",
+            "2028-11-07T00:00:00Z",
+            extra={"event_title": "Presidential Election Winner 2028"},
+        )
+        kalshi = titled_snap(
+            "kalshi",
+            "kalshi-elon-trillionaire",
+            "Will Elon Musk be a trillionaire before 2028?",
+            "2028-01-01T00:00:00Z",
+            extra={"event_title": "When will Elon Musk become a trillionaire?"},
+        )
+
+        self.assertFalse(is_compatible_match(poly, kalshi))
+        self.assertEqual(match_markets([poly], [kalshi], min_title_similarity=0.1), [])
+
+    def test_matcher_rejects_non_sports_resolution_horizon_gap(self) -> None:
+        poly = titled_snap(
+            "polymarket",
+            "poly-uk-pm-2026",
+            "Andy Burnham",
+            "2026-12-31T00:00:00Z",
+            extra={"event_title": "Next UK Prime Minister in 2026?"},
+        )
+        kalshi = titled_snap(
+            "kalshi",
+            "kalshi-uk-pm-2030",
+            "Will Andy Burnham be the next Prime Minister of United Kingdom?",
+            "2030-01-01T00:00:00Z",
+            extra={"event_title": "Who will be the next Prime Minister of the UK?"},
+        )
+
+        self.assertFalse(is_close_time_compatible(poly, kalshi))
+        self.assertEqual(match_markets([poly], [kalshi], min_title_similarity=0.1), [])
 
     @patch("kalshi.client.KalshiClient")
     def test_verify_kalshi_clob_checks_derived_yes_ask(self, client_cls: MagicMock) -> None:

@@ -496,7 +496,13 @@ def _match_outcomes_within_group(
 
     Returns a list of MatchedPair objects (already deduplicated 1-to-1).
     """
-    from matcher import _jaccard, MatchedPair, _close_delta_hours, is_compatible_match
+    from matcher import (
+        _jaccard,
+        MatchedPair,
+        _close_delta_hours,
+        is_close_time_compatible,
+        is_compatible_match,
+    )
 
     scored = []
     for k in k_outcomes:
@@ -504,6 +510,8 @@ def _match_outcomes_within_group(
         k_mid = k.orderbook.mid or k.orderbook.best_bid
         for p in p_outcomes:
             if not is_compatible_match(p, k):
+                continue
+            if not is_close_time_compatible(p, k):
                 continue
             p_toks = _normalise_tokens(p.title)
             p_mid = p.orderbook.mid or p.orderbook.best_bid
