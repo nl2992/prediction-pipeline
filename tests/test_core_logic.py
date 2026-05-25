@@ -330,6 +330,42 @@ class CoreLogicTests(unittest.TestCase):
 
         self.assertFalse(is_arb_eligible(poly, kalshi))
 
+    def test_matcher_rejects_draw_against_winner_market(self) -> None:
+        poly = titled_snap(
+            "polymarket",
+            "poly-draw",
+            "Draw (DR Congo vs. Uzbekistan)",
+            "2026-06-01T00:00:00Z",
+            extra={"event_title": "DR Congo vs. Uzbekistan"},
+        )
+        kalshi = titled_snap(
+            "kalshi",
+            "kalshi-winner",
+            "Congo DR vs Uzbekistan Winner?",
+            "2026-06-01T00:00:00Z",
+            extra={"event_title": "Congo DR vs Uzbekistan"},
+        )
+
+        self.assertFalse(is_compatible_match(poly, kalshi))
+
+    def test_matcher_rejects_same_prop_on_different_fixtures(self) -> None:
+        poly = titled_snap(
+            "polymarket",
+            "poly-btts",
+            "Both Teams to Score",
+            "2026-06-01T00:00:00Z",
+            extra={"event_title": "Club Guabirá vs. CDT RealOruro - More Markets"},
+        )
+        kalshi = titled_snap(
+            "kalshi",
+            "kalshi-btts",
+            "Will both teams score?",
+            "2026-06-01T00:00:00Z",
+            extra={"event_title": "PSG vs Arsenal: BTTS"},
+        )
+
+        self.assertFalse(is_compatible_match(poly, kalshi))
+
     def test_group_matcher_requires_outcome_label_overlap(self) -> None:
         poly = snap(
             "polymarket",

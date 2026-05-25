@@ -325,6 +325,24 @@ def _has_no_ipo(text: str) -> bool:
     return bool(re.search(r"\bno ipo\b|\bwithout an ipo\b", _ascii_lower(text)))
 
 
+def _clean_matchup_side(side: str) -> frozenset[str]:
+    side = re.split(r"[:\\-]", _ascii_lower(side), maxsplit=1)[0]
+    side = re.sub(r"\b(winner|wins?|btts|both teams to score|more markets)\b", " ", side)
+    return frozenset(t for t in re.split(r"\W+", side) if len(t) > 1)
+
+
+def _matchup_signature(text: str) -> frozenset[frozenset[str]] | None:
+    low = _ascii_lower(text)
+    match = re.search(r"(.+?)\s+(?:vs\.?|at)\s+(.+)", low)
+    if not match:
+        return None
+    left = _clean_matchup_side(match.group(1))
+    right = _clean_matchup_side(match.group(2))
+    if not left or not right:
+        return None
+    return frozenset((left, right))
+
+
 def _selected_names(text: str) -> set[str]:
     low = _LEADING_QUESTION_WORDS.sub("", text)
     low_ascii = _ascii_lower(low)
@@ -382,6 +400,10 @@ def _contract_actions(text: str) -> set[str]:
     actions: set[str] = set()
     if re.search(r"\b(rain|snow|temperature|temp|weather)\b", low):
         actions.add("weather")
+    if re.search(r"\bdraw\b", low):
+        actions.add("draw")
+    if re.search(r"\bbtts\b|\bboth teams to score\b", low):
+        actions.add("btts")
     if re.search(r"\bipo\b|initial public offering|publicly list", low):
         actions.add("ipo")
     if re.search(r"\bbankrupt(?:cy)?\b", low):
@@ -511,6 +533,10 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
     p_all_juris = _jurisdictions(p_text)
     k_all_juris = _jurisdictions(k_text)
     if p_all_juris and k_all_juris and p_all_juris.isdisjoint(k_all_juris):
+        return False
+    p_matchup = _matchup_signature(p_text)
+    k_matchup = _matchup_signature(k_text)
+    if p_matchup and k_matchup and p_matchup != k_matchup:
         return False
 
     if "election" in p_domains and "election" in k_domains:
