@@ -11,6 +11,7 @@ from matcher import (
     MatchedPair,
     _confidence,
     _parse_dt as matcher_parse_dt,
+    is_arb_eligible,
     is_close_time_compatible,
     is_compatible_match,
     match_markets,
@@ -238,6 +239,96 @@ class CoreLogicTests(unittest.TestCase):
         )
 
         self.assertFalse(is_compatible_match(poly, kalshi))
+
+    def test_arb_gate_rejects_related_but_different_contract_types(self) -> None:
+        poly = titled_snap(
+            "polymarket",
+            "poly-mvp",
+            "Jalen Brunson",
+            "2026-06-01T00:00:00Z",
+            extra={"event_title": "NBA Playoffs: Eastern Conference Finals MVP"},
+        )
+        kalshi = titled_snap(
+            "kalshi",
+            "kalshi-steals",
+            "Jalen Brunson: 3+ steals",
+            "2026-06-01T00:00:00Z",
+            extra={"event_title": "New York at Cleveland: Steals"},
+        )
+
+        self.assertFalse(is_arb_eligible(poly, kalshi))
+
+    def test_arb_gate_requires_specific_outcome_identity(self) -> None:
+        poly = titled_snap(
+            "polymarket",
+            "poly-okx",
+            "OKX IPO in 2026?",
+            "2026-12-31T00:00:00Z",
+            extra={"event_title": "OKX IPO in 2026?"},
+        )
+        kalshi = titled_snap(
+            "kalshi",
+            "kalshi-generic-ipo",
+            "Who will IPO in 2026?",
+            "2026-12-31T00:00:00Z",
+            extra={"event_title": "Which Companies will officially announce an IPO this year?"},
+        )
+
+        self.assertFalse(is_arb_eligible(poly, kalshi))
+
+    def test_arb_gate_allows_exact_specific_contract(self) -> None:
+        poly = titled_snap(
+            "polymarket",
+            "poly-temp",
+            "80-81°F",
+            "2026-05-25T00:00:00Z",
+            extra={"event_title": "Lowest temperature in Miami on May 25?"},
+        )
+        kalshi = titled_snap(
+            "kalshi",
+            "kalshi-temp",
+            "Will the minimum temperature be 80-81° on May 25, 2026?",
+            "2026-05-25T00:00:00Z",
+            extra={"event_title": "Lowest temperature in Miami on May 25, 2026?"},
+        )
+
+        self.assertTrue(is_arb_eligible(poly, kalshi))
+
+    def test_arb_gate_rejects_time_scope_mismatch(self) -> None:
+        poly = titled_snap(
+            "polymarket",
+            "poly-hit-may",
+            "Olivia Dean",
+            "2026-05-31T00:00:00Z",
+            extra={"event_title": "Which artists will have #1 hits in May?"},
+        )
+        kalshi = titled_snap(
+            "kalshi",
+            "kalshi-hit-year",
+            "Will Olivia Dean have a #1 hit this year?",
+            "2026-12-31T00:00:00Z",
+            extra={"event_title": "Who will have a #1 hit this year?"},
+        )
+
+        self.assertFalse(is_arb_eligible(poly, kalshi))
+
+    def test_arb_gate_rejects_weather_date_mismatch(self) -> None:
+        poly = titled_snap(
+            "polymarket",
+            "poly-temp-may27",
+            "66-67°F",
+            "2026-05-27T00:00:00Z",
+            extra={"event_title": "Highest temperature in San Francisco on May 27?"},
+        )
+        kalshi = titled_snap(
+            "kalshi",
+            "kalshi-temp-may24",
+            "Will the maximum temperature be 66-67° on May 24, 2026?",
+            "2026-05-24T00:00:00Z",
+            extra={"event_title": "Highest temperature in San Francisco on May 24, 2026?"},
+        )
+
+        self.assertFalse(is_arb_eligible(poly, kalshi))
 
     def test_group_matcher_requires_outcome_label_overlap(self) -> None:
         poly = snap(

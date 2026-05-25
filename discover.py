@@ -883,6 +883,8 @@ def discover(
         _enrich_polymarket([p.poly for p in pairs])
 
     # ── Format results ────────────────────────────────────────────────────────
+    from matcher import is_arb_eligible
+
     FEE = 0.07  # conservative worst-case fee
     results = []
     for pair in sorted(pairs, key=lambda x: -x.confidence):
@@ -892,14 +894,16 @@ def discover(
         ka = pair.kalshi.orderbook.best_ask
 
         arb_dir = arb_profit = None
-        if pa is not None and kb is not None:
-            profit = round(1.0 - (pa + 1.0 - kb) - FEE, 4)
-            if profit > 0:
-                arb_dir, arb_profit = "poly_yes + kalshi_no", profit
-        if ka is not None and pb is not None:
-            profit = round(1.0 - (ka + 1.0 - pb) - FEE, 4)
-            if profit > 0 and (arb_profit is None or profit > arb_profit):
-                arb_dir, arb_profit = "kalshi_yes + poly_no", profit
+        arb_eligible = is_arb_eligible(pair.poly, pair.kalshi)
+        if arb_eligible:
+            if pa is not None and kb is not None:
+                profit = round(1.0 - (pa + 1.0 - kb) - FEE, 4)
+                if profit > 0:
+                    arb_dir, arb_profit = "poly_yes + kalshi_no", profit
+            if ka is not None and pb is not None:
+                profit = round(1.0 - (ka + 1.0 - pb) - FEE, 4)
+                if profit > 0 and (arb_profit is None or profit > arb_profit):
+                    arb_dir, arb_profit = "kalshi_yes + poly_no", profit
 
         # Categorise using the event title (not the short outcome label like
         # "France" or "No change" which would always return "pop").
@@ -926,6 +930,7 @@ def discover(
             "kalshi_close":     (pair.kalshi.close_time or "")[:10],
             "kalshi_bid":       kb,
             "kalshi_ask":       ka,
+            "arb_eligible":     arb_eligible,
             "arb_direction":    arb_dir,
             "arb_net_profit":   arb_profit,
         })

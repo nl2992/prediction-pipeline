@@ -258,6 +258,43 @@ def _comparison_bounds(text: str) -> dict[str, set[float]]:
     }
 
 
+_MONTHS = {
+    "jan": "jan", "january": "jan",
+    "feb": "feb", "february": "feb",
+    "mar": "mar", "march": "mar",
+    "apr": "apr", "april": "apr",
+    "may": "may",
+    "jun": "jun", "june": "jun",
+    "jul": "jul", "july": "jul",
+    "aug": "aug", "august": "aug",
+    "sep": "sep", "sept": "sep", "september": "sep",
+    "oct": "oct", "october": "oct",
+    "nov": "nov", "november": "nov",
+    "dec": "dec", "december": "dec",
+}
+
+
+def _time_scopes(text: str) -> set[str]:
+    low = _ascii_lower(text)
+    scopes: set[str] = set()
+    for month, day in re.findall(
+        r"\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+        r"jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
+        r"\s+(\d{1,2})\b",
+        low,
+    ):
+        scopes.add(f"day:{_MONTHS[month]}-{int(day):02d}")
+    for month in re.findall(
+        r"\bin\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+        r"jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b",
+        low,
+    ):
+        scopes.add(f"month:{_MONTHS[month]}")
+    if not scopes and re.search(r"\bthis year\b|\bin 20\d{2}\b|\bduring 20\d{2}\b", low):
+        scopes.add("year")
+    return scopes
+
+
 def _set_numbers(text: str) -> set[str]:
     low = _ascii_lower(text)
     return set(re.findall(r"\bset\s*(\d+)\b", low))
@@ -325,12 +362,13 @@ _ENTITY_STOP = _NAME_STOP | {
     "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
     "roland garros", "nba playoffs", "atp", "wta", "mlb", "ufc", "fifa", "world cup",
-    "set winner", "exact match", "match score",
+    "set winner", "exact match", "match score", "ipo",
 }
 
 
 def _named_entities(text: str) -> set[str]:
     ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    ascii_text = _LEADING_QUESTION_WORDS.sub("", ascii_text)
     entities = set(_proper_names(ascii_text))
     for match in re.finditer(r"\b([A-Z][A-Za-z0-9]{2,}(?:\s+[A-Z][A-Za-z0-9]{1,})?)\b", ascii_text):
         entity = match.group(1).lower()
@@ -588,6 +626,107 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
         if p_vals and k_vals and min(abs(pv - kv) for pv in p_vals for kv in k_vals) > 0.75:
             return False
         if _has_over_under(p_text) != _has_over_under(k_text) and p_vals != k_vals:
+            return False
+
+    return True
+
+
+_ARB_ACTIONS = frozenset({
+    "weather",
+    "ipo",
+    "bankruptcy",
+    "government_stake",
+    "rank",
+    "revenue",
+    "ai_benchmark",
+    "review_score",
+    "box_office",
+    "launch",
+    "relocate",
+    "host_location",
+    "labor_stats",
+    "inflation",
+    "monetary_policy",
+    "stat_prop",
+    "stat_leader",
+    "award",
+    "album_release",
+    "song_release",
+    "album_chart",
+    "artist_chart",
+    "song_chart",
+    "fight_next",
+    "token_launch",
+    "draft_pick",
+    "draft_team",
+    "exact_score",
+    "set_total",
+    "handicap",
+    "wedding_attendance",
+    "count",
+    "comparison",
+    "winless",
+    "group_winner",
+    "starting_qb",
+    "run_or_declare",
+    "win_nomination",
+    "nomination",
+    "head_to_head",
+    "win",
+    "finish_position",
+    "ticket",
+    "occur",
+    "leave_role",
+    "meeting_location",
+    "become_pm",
+})
+
+
+def _arb_signature(text: str) -> set[str]:
+    actions = _contract_actions(text) & _ARB_ACTIONS
+    signature = set(actions)
+
+    for stat in _stat_thresholds(text):
+        signature.add(f"stat:{stat}")
+    for set_num in _set_numbers(text):
+        signature.add(f"set:{set_num}")
+    for pick_num in _draft_pick_numbers(text):
+        signature.add(f"pick:{pick_num}")
+    bounds = _comparison_bounds(text)
+    for side, values in bounds.items():
+        for value in values:
+            signature.add(f"{side}:{value:g}")
+    for rate in _rates(text):
+        signature.add(f"rate:{rate}")
+    for scope in _time_scopes(text):
+        signature.add(f"time:{scope}")
+
+    return signature
+
+
+def is_arb_eligible(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> bool:
+    """
+    Return True only when a pair is specific enough to promote to arb output.
+
+    ``is_compatible_match`` is intentionally permissive enough to produce a
+    review list.  Arbitrage display must be stricter: contract type, outcome
+    side, and named entity evidence need to line up so broad related markets do
+    not become false trade signals.
+    """
+    if not is_compatible_match(poly, kalshi):
+        return False
+
+    p_text = _snapshot_text(poly)
+    k_text = _snapshot_text(kalshi)
+    p_sig = _arb_signature(p_text)
+    k_sig = _arb_signature(k_text)
+    if not p_sig or not k_sig or p_sig != k_sig:
+        return False
+
+    p_entities = _named_entities(p_text)
+    k_entities = _named_entities(k_text)
+    if p_entities or k_entities:
+        if not p_entities or not k_entities or p_entities != k_entities:
             return False
 
     return True
