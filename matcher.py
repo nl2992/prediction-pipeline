@@ -161,6 +161,7 @@ def _snapshot_text(s: "MarketSnapshot") -> str:
         str(x)
         for x in (
             getattr(s, "title", ""),
+            getattr(s, "event_id", ""),
             extra.get("event_title", ""),
             extra.get("full_question", ""),
         )
@@ -210,7 +211,11 @@ def _jurisdictions(text: str) -> set[str]:
 
 
 def _years(text: str) -> set[str]:
-    return set(re.findall(r"\b(20\d{2})\b", text))
+    years = set(re.findall(r"\b(20\d{2})\b", text))
+    for yy in re.findall(r"(?:^|[-\s])(\d{2})(?:$|[-\s])", text):
+        if 20 <= int(yy) <= 49:
+            years.add(f"20{yy}")
+    return years
 
 
 def _rates(text: str) -> set[str]:

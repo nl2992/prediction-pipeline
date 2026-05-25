@@ -295,6 +295,27 @@ class CoreLogicTests(unittest.TestCase):
         self.assertFalse(is_close_time_compatible(poly, kalshi))
         self.assertEqual(match_markets([poly], [kalshi], min_title_similarity=0.1), [])
 
+    def test_matcher_uses_event_ids_for_year_mismatch(self) -> None:
+        poly = titled_snap(
+            "polymarket",
+            "poly-nh-gov-2026",
+            "Republican",
+            "",
+            extra={"event_title": "New Hampshire Governor Election Winner"},
+        )
+        poly.event_id = "new-hampshire-governor-winner-2026"
+        kalshi = titled_snap(
+            "kalshi",
+            "kalshi-nh-gov-2028",
+            "Will the Republican party win the governorship in New Hampshire",
+            "2029-11-07T00:00:00Z",
+            extra={"event_title": "New Hampshire Governor winner?"},
+        )
+        kalshi.event_id = "GOVPARTYNH-28"
+
+        self.assertFalse(is_compatible_match(poly, kalshi))
+        self.assertEqual(match_markets([poly], [kalshi], min_title_similarity=0.1), [])
+
     @patch("kalshi.client.KalshiClient")
     def test_verify_kalshi_clob_checks_derived_yes_ask(self, client_cls: MagicMock) -> None:
         client = client_cls.return_value
