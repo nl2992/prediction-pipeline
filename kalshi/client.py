@@ -140,10 +140,19 @@ class KalshiClient:
         )
         # Retry on 429 with exponential backoff
         backoff = 5
+        resp = None
         for attempt in range(4):
-            resp = self.session.get(
-                url, params=params, headers=headers, timeout=self.timeout
-            )
+            try:
+                resp = self.session.get(
+                    url, params=params, headers=headers, timeout=self.timeout
+                )
+            except requests.RequestException:
+                if attempt == 3:
+                    raise
+                import time as _time
+                _time.sleep(backoff)
+                backoff *= 2
+                continue
             if resp.status_code == 429:
                 import time as _time
                 _time.sleep(backoff)
@@ -152,6 +161,8 @@ class KalshiClient:
             resp.raise_for_status()
             return resp.json()
         # Final attempt — let it raise
+        if resp is None:
+            raise RuntimeError("Kalshi GET failed before a response was received")
         resp.raise_for_status()
         return resp.json()
 
