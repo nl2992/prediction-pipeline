@@ -693,15 +693,10 @@ function kalshiSlug(value) {
 }
 
 function kalshiMarketUrl(p) {
-  const ticker = kalshiSlug(p.kalshi_ticker);
-  if (!ticker) return '';
-
   const eventTicker = kalshiSlug(p.kalshi_event_ticker);
-  const eventSlug = kalshiSlug(p.kalshi_event_title || p.kalshi_title);
-  if (eventTicker && eventSlug) {
-    return `https://kalshi.com/markets/${eventTicker}/${eventSlug}/${ticker}`;
-  }
-  return `https://kalshi.com/markets/${ticker}`;
+  const ticker = kalshiSlug(p.kalshi_ticker);
+  const marketPath = eventTicker || ticker;
+  return marketPath ? `https://kalshi.com/markets/${marketPath}` : '';
 }
 
 function renderDetail(p) {
