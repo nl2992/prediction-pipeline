@@ -42,6 +42,7 @@ Algorithm
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import re
 import time
@@ -667,6 +668,7 @@ def discover(
     show_prices: bool = False,
     max_poly_offset: int | None = None,
     max_events_to_search: int | None = None,
+    kalshi_workers: int = 24,
 ) -> list[dict]:
     """
     Run organic cross-exchange discovery and return matched pairs as dicts.
@@ -737,20 +739,30 @@ def discover(
     k_keywords: list[str] = []
     skipped_parlay = 0
 
-    for ev in filtered:
+    def _fetch_event_markets(ev: dict) -> tuple[list, list[str], int]:
         et = ev.get("event_ticker", "")
         event_title = ev.get("title", "")
+        snaps: list = []
+        skipped = 0
         try:
             mkts = kc.get_all_markets(event_ticker=et, status="open", page_size=200)
         except Exception:
-            continue
+            return [], _derive_keywords(event_title), 0
         for m in mkts:
             if _is_parlay_market(m):
-                skipped_parlay += 1
+                skipped += 1
                 continue
-            k_snaps.append(_k_snap(m, fetched_at, event_title=event_title))
-        kws = _derive_keywords(event_title)
-        k_keywords.extend(kws)
+            snaps.append(_k_snap(m, fetched_at, event_title=event_title))
+        return snaps, _derive_keywords(event_title), skipped
+
+    worker_count = max(1, min(kalshi_workers, len(filtered)))
+    with ThreadPoolExecutor(max_workers=worker_count) as pool:
+        futures = [pool.submit(_fetch_event_markets, ev) for ev in filtered]
+        for future in as_completed(futures):
+            snaps, kws, skipped = future.result()
+            k_snaps.extend(snaps)
+            k_keywords.extend(kws)
+            skipped_parlay += skipped
 
     # Deduplicate keywords from the events scan (before supplemental)
     k_keywords = [kw for kw in dict.fromkeys(k_keywords) if len(kw) > 2]
@@ -998,6 +1010,8 @@ def main() -> None:
                    help="Maximum Kalshi events to scan; omit for no event limit")
     p.add_argument("--poly-scan", type=int, default=None,
                    help="Polymarket catalog depth (max offset); omit for no catalog offset limit")
+    p.add_argument("--kalshi-workers", type=int, default=24,
+                   help="Concurrent workers for Kalshi event-market fetches")
     p.add_argument("--output", default=None,
                    help="Save matched pairs to this JSON file")
     args = p.parse_args()
@@ -1012,6 +1026,7 @@ def main() -> None:
         show_prices=args.show_prices,
         max_poly_offset=args.poly_scan,
         max_events_to_search=args.max_events,
+        kalshi_workers=args.kalshi_workers,
     )
 
     _print_results(results, show_prices=args.show_prices)
