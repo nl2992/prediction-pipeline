@@ -366,6 +366,61 @@ class CoreLogicTests(unittest.TestCase):
 
         self.assertFalse(is_compatible_match(poly, kalshi))
 
+    def test_matcher_allows_championship_winner_option(self) -> None:
+        poly = titled_snap(
+            "polymarket",
+            "poly-iihf",
+            "Finland",
+            "2026-06-01T00:00:00Z",
+            extra={"event_title": "Hockey: 2026 IIHF Championship Winner"},
+        )
+        kalshi = titled_snap(
+            "kalshi",
+            "kalshi-iihf",
+            "Will Finland win the IIHF World Championship?",
+            "2026-06-01T00:00:00Z",
+            extra={"event_title": "IIHF World Championship Winner"},
+        )
+
+        self.assertTrue(is_compatible_match(poly, kalshi))
+
+    def test_matcher_does_not_treat_in_as_indiana(self) -> None:
+        poly = titled_snap(
+            "polymarket",
+            "poly-bitcoin",
+            "Bitcoin all time high by December 31, 2026",
+            "2026-12-31T00:00:00Z",
+            extra={"event_title": "Bitcoin all time high by ___?"},
+        )
+        kalshi = titled_snap(
+            "kalshi",
+            "kalshi-bitcoin",
+            "Will BTC be above $85000.00 by 11:59 PM ET on May 31, 2026?",
+            "2026-05-31T00:00:00Z",
+            extra={"event_title": "How high will Bitcoin get in May?"},
+        )
+
+        self.assertNotIn("indiana", __import__("matcher")._jurisdictions(poly.title))
+        self.assertTrue(is_compatible_match(poly, kalshi))
+
+    def test_matcher_allows_lula_name_alias(self) -> None:
+        poly = titled_snap(
+            "polymarket",
+            "poly-lula",
+            "Lula da Silva - Brazil President",
+            "2027-01-01T00:00:00Z",
+            extra={"event_title": "Next leader out of power before 2027?"},
+        )
+        kalshi = titled_snap(
+            "kalshi",
+            "kalshi-lula",
+            "Will Luiz Inácio Lula da Silva leave President of Brazil before Jan 1, 2027?",
+            "2027-01-01T00:00:00Z",
+            extra={"event_title": "Which leaders will leave office in 2026?"},
+        )
+
+        self.assertTrue(is_compatible_match(poly, kalshi))
+
     def test_group_matcher_requires_outcome_label_overlap(self) -> None:
         poly = snap(
             "polymarket",

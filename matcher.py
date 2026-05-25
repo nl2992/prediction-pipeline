@@ -110,15 +110,15 @@ _US_STATE_ALIASES: dict[str, tuple[str, ...]] = {
     "delaware": ("delaware", " de "),
     "florida": ("florida", " fl "),
     "georgia": ("georgia", " ga "),
-    "hawaii": ("hawaii", " hi "),
+    "hawaii": ("hawaii",),
     "idaho": ("idaho", " id "),
     "illinois": ("illinois", " il "),
-    "indiana": ("indiana", " in "),
+    "indiana": ("indiana",),
     "iowa": ("iowa", " ia "),
     "kansas": ("kansas", " ks "),
     "kentucky": ("kentucky", " ky "),
-    "louisiana": ("louisiana", " la "),
-    "maine": ("maine", " me "),
+    "louisiana": ("louisiana",),
+    "maine": ("maine",),
     "maryland": ("maryland", " md "),
     "massachusetts": ("massachusetts", " ma "),
     "michigan": ("michigan", " mi "),
@@ -136,7 +136,7 @@ _US_STATE_ALIASES: dict[str, tuple[str, ...]] = {
     "north dakota": ("north dakota", " nd "),
     "ohio": ("ohio", " oh "),
     "oklahoma": ("oklahoma", " ok "),
-    "oregon": ("oregon", " or "),
+    "oregon": ("oregon",),
     "pennsylvania": ("pennsylvania", " pa "),
     "rhode island": ("rhode island", " ri "),
     "south carolina": ("south carolina", " sc "),
@@ -358,7 +358,14 @@ _NAME_STOP = {
     "democratic", "democrat", "republicans", "democrats", "senate", "house",
     "governor", "president", "presidential", "new york", "north carolina",
     "south carolina", "south dakota", "north dakota", "united states",
+    "championship winner", "world championship", "constructors champion",
+    "drivers champion", "silver ball", "most valuable", "brazil president",
 }
+_GENERIC_NAME_TERMS = frozenset({
+    "championship", "champion", "winner", "drivers", "constructors",
+    "hockey", "world", "silver", "ball", "award", "nominee", "primary",
+    "president", "senate", "race", "iihf",
+})
 
 _LEADING_QUESTION_WORDS = re.compile(
     r"\b(Will|Who|Which|What|When|Where|How|Does|Is|Are|Can|Should)\b\s+"
@@ -369,11 +376,21 @@ def _proper_names(text: str) -> set[str]:
     ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
     ascii_text = _LEADING_QUESTION_WORDS.sub("", ascii_text)
     names = set()
-    for match in re.finditer(r"\b([A-Z][a-z]{2,}(?:\s+(?:de|la|le|van|von|the))?\s+[A-Z][A-Za-z]{1,})\b", ascii_text):
+    for match in re.finditer(
+        r"\b([A-Z][A-Za-z]{2,}(?:\s+(?:de|da|la|le|van|von|the|[A-Z][A-Za-z]{1,})){1,4})\b",
+        ascii_text,
+    ):
         name = match.group(1).lower()
-        if name not in _NAME_STOP:
+        toks = _tokens(name)
+        if _offices(name) and _jurisdictions(name):
+            continue
+        if name not in _NAME_STOP and not (toks and toks <= _GENERIC_NAME_TERMS):
             names.add(name)
     return names
+
+
+def _names_overlap(a_names: set[str], b_names: set[str]) -> bool:
+    return any(a == b or a in b or b in a for a in a_names for b in b_names)
 
 
 _ENTITY_STOP = _NAME_STOP | {
@@ -557,7 +574,7 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
 
         p_names = _proper_names(p_text)
         k_names = _proper_names(k_text)
-        if p_names and k_names and p_names.isdisjoint(k_names):
+        if p_names and k_names and not _names_overlap(p_names, k_names):
             return False
         if (p_names and not k_names and _is_generic_winner_market(k_text)) or (
             k_names and not p_names and _is_generic_winner_market(p_text)
@@ -593,11 +610,11 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
         k_names = _proper_names(k_text)
         p_event_names = _proper_names((getattr(poly, "extra", {}) or {}).get("event_title", ""))
         k_event_names = _proper_names((getattr(kalshi, "extra", {}) or {}).get("event_title", ""))
-        if p_event_names and k_event_names and p_event_names.isdisjoint(k_event_names):
+        if p_event_names and k_event_names and not _names_overlap(p_event_names, k_event_names):
             return False
-        if p_event_names and k_names and p_event_names.isdisjoint(k_names) and not (p_names & k_names):
+        if p_event_names and k_names and not _names_overlap(p_event_names, k_names) and not _names_overlap(p_names, k_names):
             return False
-        if k_event_names and p_names and k_event_names.isdisjoint(p_names) and not (p_names & k_names):
+        if k_event_names and p_names and not _names_overlap(k_event_names, p_names) and not _names_overlap(p_names, k_names):
             return False
     if "token_launch" in p_actions and "token_launch" in k_actions:
         p_entities = _named_entities(p_text)
@@ -606,7 +623,7 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
             return False
     p_selected_names = _selected_names(p_text)
     k_selected_names = _selected_names(k_text)
-    if p_selected_names and k_selected_names and p_selected_names.isdisjoint(k_selected_names):
+    if p_selected_names and k_selected_names and not _names_overlap(p_selected_names, k_selected_names):
         return False
     if (_proper_names(p_text) and _is_generic_location_market(k_text)) or (
         _proper_names(k_text) and _is_generic_location_market(p_text)
