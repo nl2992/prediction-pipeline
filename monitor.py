@@ -549,9 +549,9 @@ def run_one_scan(
 
 def run_discover_scan(
     category: str = "all",
-    days: int = 365,
+    days: int | None = None,
     min_sim: float = 0.28,
-    max_events: int = 400,
+    max_events: int | None = None,
     fee_poly: float = 0.02,
     fee_kalshi: float = 0.07,
     min_profit_pct: float = 0.5,
@@ -963,10 +963,10 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--discover-category", default="all",
                    choices=["all", "election", "sports", "economic", "political", "pop"],
                    help="Category filter for discover mode (default: all)")
-    p.add_argument("--discover-days", type=int, default=365,
-                   help="Horizon in days for discover mode (default: 365)")
-    p.add_argument("--discover-max-events", type=int, default=400,
-                   help="Max Kalshi events to scan per discovery cycle (default: 400)")
+    p.add_argument("--discover-days", type=int, default=None,
+                   help="Horizon in days for discover mode; omit for no day limit")
+    p.add_argument("--discover-max-events", type=int, default=None,
+                   help="Max Kalshi events to scan per discovery cycle; omit for no event limit")
     return p.parse_args()
 
 

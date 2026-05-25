@@ -94,7 +94,9 @@ _COUNTRY_ALIASES: dict[str, tuple[str, ...]] = {
     "philippines": ("philippines", "philippine", "filipino"),
     "turkey": ("turkey", "turkish"),
     "united kingdom": ("united kingdom", "uk", "britain", "british"),
+    "united states": ("united states", " us ", " usa ", " u s "),
     "israel": ("israel", "israeli"),
+    "taiwan": ("taiwan", "taiwanese"),
 }
 
 _US_STATE_ALIASES: dict[str, tuple[str, ...]] = {
@@ -161,6 +163,7 @@ def _snapshot_text(s: "MarketSnapshot") -> str:
         str(x)
         for x in (
             getattr(s, "title", ""),
+            getattr(s, "event_id", ""),
             extra.get("event_title", ""),
             extra.get("full_question", ""),
         )
@@ -210,11 +213,60 @@ def _jurisdictions(text: str) -> set[str]:
 
 
 def _years(text: str) -> set[str]:
-    return set(re.findall(r"\b(20\d{2})\b", text))
+    years = set(re.findall(r"\b(20\d{2})\b", text))
+    for yy in re.findall(r"(?:^|[-\s])(\d{2})(?:$|[-\s])", text):
+        if 20 <= int(yy) <= 49:
+            years.add(f"20{yy}")
+    return years
 
 
 def _rates(text: str) -> set[str]:
     return set(re.findall(r"\b\d+(?:\.\d+)?\s*%|\b\d+\.\d+\b", text))
+
+
+def _stat_thresholds(text: str) -> dict[str, set[float]]:
+    low = _ascii_lower(text)
+    stats = {
+        "points": r"\b(points?|pts)\b",
+        "rebounds": r"\b(rebounds?|rbs?)\b",
+        "assists": r"\b(assists?|asts?)\b",
+        "hits": r"\bhits?\b",
+        "strikeouts": r"\b(strikeouts?|ks?)\b",
+        "blocks": r"\b(blocks?|blks?)\b",
+        "runs": r"\bruns?\b",
+        "goals": r"\bgoals?\b",
+    }
+    nums = {float(n) for n in re.findall(r"\b(\d+(?:\.\d+)?)\s*(?:\+|o/u|over|under)?", low)}
+    found: dict[str, set[float]] = {}
+    for stat, pat in stats.items():
+        if nums and re.search(pat, low):
+            found[stat] = nums
+    return found
+
+
+def _has_over_under(text: str) -> bool:
+    low = _ascii_lower(text)
+    return bool(re.search(r"\bo/u\b|\bover\s*/\s*under\b|\bover\b|\bunder\b", low))
+
+
+def _comparison_bounds(text: str) -> dict[str, set[float]]:
+    low = _ascii_lower(text)
+    return {
+        "lt": {float(n) for n in re.findall(r"(?:<|less than|under|below)\s*(\d+(?:\.\d+)?)\s*%?", low)},
+        "gt": {float(n) for n in re.findall(r"(?:>|more than|over|above)\s*(\d+(?:\.\d+)?)\s*%?", low)},
+    }
+
+
+def _set_numbers(text: str) -> set[str]:
+    low = _ascii_lower(text)
+    return set(re.findall(r"\bset\s*(\d+)\b", low))
+
+
+def _draft_pick_numbers(text: str) -> set[str]:
+    low = _ascii_lower(text)
+    nums = set(re.findall(r"\b(\d+)(?:st|nd|rd|th)?\s+(?:overall\s+)?pick\b", low))
+    nums.update(re.findall(r"\bpicked\s+(\d+)(?:st|nd|rd|th)?\b", low))
+    return nums
 
 
 _NAME_STOP = {
@@ -243,6 +295,44 @@ def _proper_names(text: str) -> set[str]:
 def _contract_actions(text: str) -> set[str]:
     low = _ascii_lower(text)
     actions: set[str] = set()
+    if re.search(r"\b(rain|snow|temperature|temp|weather)\b", low):
+        actions.add("weather")
+    if re.search(r"\bipo\b|initial public offering|publicly list", low):
+        actions.add("ipo")
+    if re.search(r"\b(largest|biggest|highest|second-highest|third-highest|top|best|rank|ranking|#\s*\d+)\b.*\b(company|model|ai|movie|opening|album|revenue|ipo|market cap)\b|\b(company|model|ai|movie|opening|album|revenue|ipo|market cap)\b.*\b(largest|biggest|highest|second-highest|third-highest|top|best|rank|ranking|#\s*\d+)\b", low):
+        actions.add("rank")
+    if re.search(r"\brevenue\b", low):
+        actions.add("revenue")
+    if re.search(r"\b(chatbot arena|elo|benchmark|ai model)\b", low):
+        actions.add("ai_benchmark")
+    if re.search(r"\b(rotten tomatoes|metacritic|review score|critic score|audience score)\b", low):
+        actions.add("review_score")
+    if re.search(r"\b(opening weekend|opening week|box office)\b", low):
+        actions.add("box_office")
+    if re.search(r"\b(launch|expansion|available in)\b", low):
+        actions.add("launch")
+    if re.search(r"\brelocat(?:e|ed|ion)|moved away|away from\b", low):
+        actions.add("relocate")
+    if re.search(r"\bplayed in\b|\bhost\b|\bheld in\b|\btake place in\b", low):
+        actions.add("host_location")
+    if re.search(r"\b(unemployment|jobs report|payroll|nonfarm)\b", low):
+        actions.add("labor_stats")
+    if re.search(r"\b(rate hike|rate cut|interest rate|bps|fomc|ecb|bank of england|bank of japan|fed)\b", low):
+        actions.add("monetary_policy")
+    if re.search(r"\b(points?|pts|rebounds?|rbs?|assists?|asts?|hits?|strikeouts?|blocks?|runs?|goals?)\b", low):
+        actions.add("stat_prop")
+    if re.search(r"\bleader\b|\blead\b", low) and "stat_prop" in actions:
+        actions.add("stat_leader")
+    if re.search(r"\bmvp\b|\bmost valuable player\b|\baward\b", low):
+        actions.add("award")
+    if re.search(r"\brelease\b.*\balbums?\b|\balbums?\b.*\brelease\b", low):
+        actions.add("album_release")
+    if re.search(r"#\s*1\s+albums?|\bnumber one albums?\b|\btop albums?\b", low):
+        actions.add("album_chart")
+    if re.search(r"\bdraft\b|\boverall pick\b|\bpicked\s+\d+", low):
+        actions.add("draft_pick")
+    if re.search(r"\bstarting qb\b|\bquarterback\b", low):
+        actions.add("starting_qb")
     if re.search(r"\b(run|runs|running|declare|declares|first this list)\b", low):
         actions.add("run_or_declare")
     if re.search(r"\b(win|wins|winner)\b.*\b(nominee|nomination)\b|\b(nominee|nomination)\b.*\b(win|wins|winner)\b", low):
@@ -297,6 +387,10 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
         return False
     if (p_domains == {"election"} and not k_domains) or (k_domains == {"election"} and not p_domains):
         return False
+    p_all_juris = _jurisdictions(p_text)
+    k_all_juris = _jurisdictions(k_text)
+    if p_all_juris and k_all_juris and p_all_juris.isdisjoint(k_all_juris):
+        return False
 
     if "election" in p_domains and "election" in k_domains:
         p_offices = _offices(p_text)
@@ -329,6 +423,10 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
     k_actions = _contract_actions(k_text)
     if p_actions and k_actions and p_actions.isdisjoint(k_actions):
         return False
+    if ("rank" in p_actions) != ("rank" in k_actions):
+        return False
+    if ("stat_leader" in p_actions) != ("stat_leader" in k_actions):
+        return False
     if (_proper_names(p_text) and _is_generic_location_market(k_text)) or (
         _proper_names(k_text) and _is_generic_location_market(p_text)
     ):
@@ -347,6 +445,31 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
     k_rates = _rates(k_text)
     if p_rates and k_rates and p_rates.isdisjoint(k_rates):
         return False
+
+    p_bounds = _comparison_bounds(p_text)
+    k_bounds = _comparison_bounds(k_text)
+    if (p_bounds["lt"] & k_bounds["gt"]) or (p_bounds["gt"] & k_bounds["lt"]):
+        return False
+
+    p_sets = _set_numbers(p_text)
+    k_sets = _set_numbers(k_text)
+    if p_sets and k_sets and p_sets.isdisjoint(k_sets):
+        return False
+
+    p_picks = _draft_pick_numbers(p_text)
+    k_picks = _draft_pick_numbers(k_text)
+    if p_picks and k_picks and p_picks.isdisjoint(k_picks):
+        return False
+
+    p_stats = _stat_thresholds(p_text)
+    k_stats = _stat_thresholds(k_text)
+    for stat in p_stats.keys() & k_stats.keys():
+        p_vals = p_stats[stat]
+        k_vals = k_stats[stat]
+        if p_vals and k_vals and min(abs(pv - kv) for pv in p_vals for kv in k_vals) > 0.75:
+            return False
+        if _has_over_under(p_text) != _has_over_under(k_text) and p_vals != k_vals:
+            return False
 
     return True
 
@@ -502,6 +625,11 @@ def match_markets(
 
     poly_tok = {s.market_id: _tokens(s.title) for s in remaining_poly}
     kalshi_tok = {s.market_id: _tokens(s.title) for s in remaining_kalshi}
+    kalshi_by_id = {s.market_id: s for s in remaining_kalshi}
+    kalshi_by_token: dict[str, set[str]] = {}
+    for k in remaining_kalshi:
+        for tok in kalshi_tok[k.market_id]:
+            kalshi_by_token.setdefault(tok, set()).add(k.market_id)
 
     # Score all candidate pairs.
     # Close-time delta is a scoring signal only — never a hard exclusion gate.
@@ -511,11 +639,11 @@ def match_markets(
     scored: list[tuple[float, "MarketSnapshot", "MarketSnapshot"]] = []
     for p in remaining_poly:
         p_toks = poly_tok[p.market_id]
-        for k in remaining_kalshi:
-            if not is_compatible_match(p, k):
-                continue
-            if not is_close_time_compatible(p, k):
-                continue
+        candidate_ids: set[str] = set()
+        for tok in p_toks:
+            candidate_ids.update(kalshi_by_token.get(tok, ()))
+        for kalshi_id in candidate_ids:
+            k = kalshi_by_id[kalshi_id]
             k_toks = kalshi_tok[k.market_id]
             sim = _jaccard(p_toks, k_toks)
             if sim < min_title_similarity:
@@ -527,6 +655,10 @@ def match_markets(
                 longer  = max(len(p_toks), len(k_toks))
                 if shorter / longer < min_token_ratio:
                     continue
+            if not is_compatible_match(p, k):
+                continue
+            if not is_close_time_compatible(p, k):
+                continue
             delta_h = _close_delta_hours(p.close_time, k.close_time)
             score = _confidence(sim, delta_h, max_close_delta_hours)
             scored.append((score, p, k))
