@@ -895,7 +895,7 @@ def discover(
 
         arb_dir = arb_profit = None
         arb_eligible = is_arb_eligible(pair.poly, pair.kalshi)
-        if arb_eligible:
+        if show_prices and arb_eligible:
             if pa is not None and kb is not None:
                 profit = round(1.0 - (pa + 1.0 - kb) - FEE, 4)
                 if profit > 0:

@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from arb import find_arb
 from discover import _match_outcomes_within_group, _parse_dt as discover_parse_dt
+from discover import discover
 from executor import TradeIntent, check_price_still_valid
 from kalshi.client import KalshiClient
 from matcher import (
@@ -293,6 +294,145 @@ class CoreLogicTests(unittest.TestCase):
         )
 
         self.assertTrue(is_arb_eligible(poly, kalshi))
+
+    def test_arb_gate_ignores_market_ids_for_entity_identity(self) -> None:
+        poly = titled_snap(
+            "polymarket",
+            "poly-opec",
+            "Will another country leave OPEC in 2026?",
+            "2027-01-01T00:00:00Z",
+            extra={"event_title": "Will another country leave OPEC in 2026?"},
+        )
+        kalshi = titled_snap(
+            "kalshi",
+            "KXLEAVEOPEC-27",
+            "Will another country leave OPEC in 2026?",
+            "2027-01-01T00:00:00Z",
+            extra={"event_title": "Will another country leave OPEC in 2026?"},
+        )
+
+        self.assertTrue(is_arb_eligible(poly, kalshi))
+
+    def test_arb_gate_allows_exact_engagement_contract(self) -> None:
+        poly = titled_snap(
+            "polymarket",
+            "poly-timothee-kylie",
+            "Kylie Jenner and Timothée Chalamet engaged in 2026?",
+            "2026-12-31T00:00:00Z",
+            extra={"event_title": "Kylie Jenner and Timothée Chalamet engaged in 2026?"},
+        )
+        kalshi = titled_snap(
+            "kalshi",
+            "KXENGAGEMENTTIMOTHEEKYLIE-26",
+            "Will Timothée Chalamet and Kylie Jenner be engaged in 2026?",
+            "2026-12-31T00:00:00Z",
+            extra={"event_title": "Will Timothée Chalamet and Kylie Jenner be engaged in 2026?"},
+        )
+
+        self.assertTrue(is_arb_eligible(poly, kalshi))
+
+    def test_arb_gate_allows_exact_comparison_contract(self) -> None:
+        poly = titled_snap(
+            "polymarket",
+            "poly-btc-gold",
+            "Will Bitcoin outperform Gold in 2026?",
+            "2026-12-31T00:00:00Z",
+            extra={"event_title": "Will Bitcoin outperform Gold in 2026?"},
+        )
+        kalshi = titled_snap(
+            "kalshi",
+            "KXBTCVSGOLD-26",
+            "Will Bitcoin outperform gold in 2026?",
+            "2026-12-31T00:00:00Z",
+            extra={"event_title": "Will Bitcoin outperform gold in 2026?"},
+        )
+
+        self.assertTrue(is_arb_eligible(poly, kalshi))
+
+    @patch("discover._enrich_kalshi")
+    @patch("discover._enrich_polymarket")
+    @patch("discover._match_groups_then_individual")
+    @patch("polymarket.client.PolymarketClient.search_markets")
+    @patch("polymarket.client.PolymarketClient.search_events")
+    @patch("kalshi.client.KalshiClient.get_markets")
+    @patch("kalshi.client.KalshiClient.get_all_events")
+    def test_discover_fast_scan_does_not_emit_catalog_price_arbs(
+        self,
+        mock_events,
+        mock_markets,
+        mock_poly_events,
+        mock_poly_markets,
+        mock_match,
+        mock_enrich_poly,
+        mock_enrich_kalshi,
+    ) -> None:
+        poly = titled_snap(
+            "polymarket",
+            "poly-opec",
+            "Will another country leave OPEC in 2026?",
+            "2027-01-01T00:00:00Z",
+            extra={"event_title": "Will another country leave OPEC in 2026?"},
+        )
+        poly.orderbook = OrderBook(
+            bids=[PriceLevel(0.95, 10.0)],
+            asks=[PriceLevel(0.95, 10.0)],
+        )
+        kalshi = titled_snap(
+            "kalshi",
+            "KXLEAVEOPEC-27",
+            "Will another country leave OPEC in 2026?",
+            "2027-01-01T00:00:00Z",
+            extra={"event_title": "Will another country leave OPEC in 2026?"},
+        )
+        kalshi.orderbook = OrderBook(
+            bids=[PriceLevel(0.10, 10.0)],
+            asks=[PriceLevel(0.10, 10.0)],
+        )
+        mock_events.return_value = [
+            {
+                "title": "Will another country leave OPEC in 2026?",
+                "event_ticker": "KXLEAVEOPEC-27",
+                "close_time": "2027-01-01T00:00:00Z",
+            }
+        ]
+        mock_markets.return_value = {
+            "markets": [
+                {
+                    "ticker": "KXLEAVEOPEC-27",
+                    "event_ticker": "KXLEAVEOPEC-27",
+                    "title": "Will another country leave OPEC in 2026?",
+                    "status": "active",
+                    "close_time": "2027-01-01T00:00:00Z",
+                    "yes_bid_dollars": "0.10",
+                    "yes_ask_dollars": "0.10",
+                }
+            ],
+            "cursor": None,
+        }
+        mock_poly_events.return_value = [
+            {
+                "title": "Will another country leave OPEC in 2026?",
+                "slug": "will-another-country-leave-opec-in-2026",
+                "markets": [
+                    {
+                        "conditionId": "poly-opec",
+                        "active": True,
+                        "question": "Will another country leave OPEC in 2026?",
+                        "outcomePrices": ["0.95", "0.05"],
+                    }
+                ],
+            }
+        ]
+        mock_poly_markets.return_value = []
+        mock_match.return_value = [MatchedPair(poly, kalshi, 1.0, 1.0, 0.0)]
+
+        rows = discover(show_prices=False)
+
+        self.assertTrue(rows[0]["arb_eligible"])
+        self.assertIsNone(rows[0]["arb_direction"])
+        self.assertIsNone(rows[0]["arb_net_profit"])
+        mock_enrich_poly.assert_not_called()
+        mock_enrich_kalshi.assert_not_called()
 
     def test_arb_gate_rejects_time_scope_mismatch(self) -> None:
         poly = titled_snap(

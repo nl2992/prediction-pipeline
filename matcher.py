@@ -171,6 +171,19 @@ def _snapshot_text(s: "MarketSnapshot") -> str:
     )
 
 
+def _contract_text(s: "MarketSnapshot") -> str:
+    extra = getattr(s, "extra", {}) or {}
+    return " ".join(
+        str(x)
+        for x in (
+            getattr(s, "title", ""),
+            extra.get("event_title", ""),
+            extra.get("full_question", ""),
+        )
+        if x
+    )
+
+
 def _domains(text: str) -> set[str]:
     toks = _tokens(text)
     found: set[str] = set()
@@ -290,7 +303,10 @@ def _time_scopes(text: str) -> set[str]:
         low,
     ):
         scopes.add(f"month:{_MONTHS[month]}")
-    if not scopes and re.search(r"\bthis year\b|\bin 20\d{2}\b|\bduring 20\d{2}\b", low):
+    if not scopes and re.search(
+        r"\bthis year\b|\bin 20\d{2}\b|\bduring 20\d{2}\b|\bby end of 20\d{2}\b",
+        low,
+    ):
         scopes.add("year")
     return scopes
 
@@ -405,6 +421,10 @@ def _named_entities(text: str) -> set[str]:
     ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
     ascii_text = _LEADING_QUESTION_WORDS.sub("", ascii_text)
     entities = set(_proper_names(ascii_text))
+    low = ascii_text.lower()
+    for entity in ("bitcoin", "btc", "ethereum", "eth", "gold", "silver", "opec"):
+        if re.search(rf"\b{entity}\b", low):
+            entities.add(entity)
     for match in re.finditer(r"\b([A-Z][A-Za-z0-9]{2,}(?:\s+[A-Z][A-Za-z0-9]{1,})?)\b", ascii_text):
         entity = match.group(1).lower()
         if entity not in _ENTITY_STOP:
@@ -487,6 +507,16 @@ def _contract_actions(text: str) -> set[str]:
         actions.add("comparison")
     if re.search(r"\bwinless\b", low):
         actions.add("winless")
+    if re.search(r"\bengag(?:e|ed|ement)\b", low):
+        actions.add("engagement")
+    if re.search(r"\barrest(?:ed)?\b", low):
+        actions.add("arrest")
+    if re.search(r"\btrillionaire\b|\bbillionaire\b", low):
+        actions.add("wealth_status")
+    if re.search(r"\bminimum wage\b|\bwage\b", low):
+        actions.add("wage_policy")
+    if re.search(r"\boutperform\b", low):
+        actions.add("comparison")
     if re.search(r"\bgroup [a-h]\b.*\bwin\b|\bteam from group\b", low):
         actions.add("group_winner")
     if re.search(r"\bbefore\b|by\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|q[1-4]|\d{1,2})", low):
@@ -709,6 +739,10 @@ _ARB_ACTIONS = frozenset({
     "count",
     "comparison",
     "winless",
+    "engagement",
+    "arrest",
+    "wealth_status",
+    "wage_policy",
     "group_winner",
     "starting_qb",
     "run_or_declare",
@@ -759,8 +793,8 @@ def is_arb_eligible(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> bool:
     if not is_compatible_match(poly, kalshi):
         return False
 
-    p_text = _snapshot_text(poly)
-    k_text = _snapshot_text(kalshi)
+    p_text = _contract_text(poly)
+    k_text = _contract_text(kalshi)
     p_sig = _arb_signature(p_text)
     k_sig = _arb_signature(k_text)
     if not p_sig or not k_sig or p_sig != k_sig:
