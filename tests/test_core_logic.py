@@ -1134,5 +1134,114 @@ class CoreLogicTests(unittest.TestCase):
         self.assertEqual(intent.venue_limit_price, 0.73)
 
 
+class CrossPlatformFixtureRegressions(unittest.TestCase):
+    """Locks in the cross-exchange pairings hardened against pairs_fixture.json.
+
+    Each case mirrors a fixture pair that previously misaligned. They encode the
+    *behaviour* (the wording shapes), not the fixture's arbitrary tickers, so the
+    matcher cannot silently regress on these patterns.
+    """
+
+    def _pm(self, title: str, close: str = "2026-12-31T04:00:00Z") -> MarketSnapshot:
+        return titled_snap("polymarket", "pm", title, close)
+
+    def _k(self, title: str, close: str = "2026-12-31T04:00:00Z") -> MarketSnapshot:
+        return titled_snap("kalshi", "k", title, close)
+
+    # --- true matches that must survive (paraphrase / ticker-clip wording) ---
+
+    def test_solana_etf_ticker_clip_matches(self) -> None:
+        # PAIR-016: "Solana ETF" vs "SOL ETFs" — anchor-token + synonym bridge.
+        self.assertTrue(is_compatible_match(
+            self._pm("Will a US spot Solana ETF have over $5B AUM by Dec 31, 2026?"),
+            self._k("SOL ETFs above $5B AUM by end of 2026?"),
+        ))
+
+    def test_cpi_paraphrase_matches(self) -> None:
+        # PAIR-021: "CPI YoY" vs "June CPI"; same month, same 3.0% threshold.
+        self.assertTrue(is_compatible_match(
+            self._pm("Will US CPI YoY for June 2026 print above 3.0%?"),
+            self._k("June CPI above 3.0% (released July)?"),
+        ))
+
+    def test_bond_actor_qualifier_does_not_block(self) -> None:
+        # PAIR-046: "James Bond" vs "New Bond" — "new" is a qualifier, not anchor.
+        self.assertTrue(is_compatible_match(
+            self._pm("Will the next James Bond actor be announced in 2026?"),
+            self._k("New Bond actor named in 2026?"),
+        ))
+
+    def test_btc_strike_with_thousands_separator_matches(self) -> None:
+        # PAIR-011: "$150,000" vs "$150k" must tokenise to the same level.
+        self.assertTrue(is_compatible_match(
+            self._pm("Will Bitcoin be above $150,000 on December 31, 2026?"),
+            self._k("BTC above $150k at year-end 2026?"),
+        ))
+
+    def test_inverted_touch_vs_hold_stays_compatible(self) -> None:
+        # PAIR-017: "dip below $80k anytime" vs "stay above $80k all year" are
+        # logical complements at one level — an inverted pair, not a strike clash.
+        self.assertTrue(is_compatible_match(
+            self._pm("Will Bitcoin dip below $80,000 at any point in 2026?"),
+            self._k("BTC to stay above $80k for all of 2026?"),
+        ))
+
+    # --- traps that must keep being rejected ---
+
+    def test_anthropic_claude_not_openai_gpt(self) -> None:
+        # PAIR-041: different org AND product — entity mismatch.
+        self.assertFalse(is_compatible_match(
+            self._pm("Will Anthropic release a model called Claude 6 in 2026?"),
+            self._k("OpenAI to release GPT-6 in 2026?"),
+        ))
+
+    def test_btc_touch_vs_close_on_date_is_settlement_mismatch(self) -> None:
+        # PAIR-015: "above $175k ON Dec 31" (point) vs "touch $175k anytime".
+        self.assertFalse(is_compatible_match(
+            self._pm("Will Bitcoin be above $175,000 on Dec 31, 2026?"),
+            self._k("BTC to touch $175k in 2026?"),
+        ))
+
+    def test_gta_midyear_deadline_not_calendar_year(self) -> None:
+        # PAIR-045: "before June 30, 2026" (H1 cutoff) vs "in calendar 2026".
+        self.assertFalse(is_compatible_match(
+            self._pm("Will GTA VI release before June 30, 2026?", "2026-06-30T04:00:00Z"),
+            self._k("GTA 6 released in calendar 2026?"),
+        ))
+
+    def test_fed_month_mismatch_rejected(self) -> None:
+        # PAIR-020: September FOMC vs July FOMC are different meetings.
+        self.assertFalse(is_compatible_match(
+            self._pm("Will the Fed cut rates at the September 2026 FOMC meeting?", "2026-09-23T04:00:00Z"),
+            self._k("Fed rate cut in July 2026?", "2026-07-29T04:00:00Z"),
+        ))
+
+    def test_indiana_pacers_not_treated_as_india(self) -> None:
+        # PAIR-028: "Indiana" must not trigger the India foreign-country veto.
+        self.assertTrue(is_compatible_match(
+            self._pm("Will the Indiana Pacers win the 2026 NBA Finals?", "2026-06-21T04:00:00Z"),
+            self._k("Pacers to win 2026 NBA Championship?", "2026-06-21T04:00:00Z"),
+        ))
+
+    def test_openai_gpt6_cluster_prefers_openai_kalshi(self) -> None:
+        # Global-assignment behaviour for the GPT-6 cluster: the OpenAI PM pairs
+        # with an OpenAI GPT-6 Kalshi market, and the Anthropic PM matches
+        # neither. Both Kalshi listings are valid OpenAI partners, so we assert
+        # the *shape* of the outcome rather than a specific ticker.
+        openai_pm = titled_snap("polymarket", "pm-openai",
+                                 "Will OpenAI release GPT-6 before Dec 31, 2026?", "2026-12-31T04:00:00Z")
+        anthropic_pm = titled_snap("polymarket", "pm-anthropic",
+                                    "Will Anthropic release a model called Claude 6 in 2026?", "2026-12-31T04:00:00Z")
+        k_plain = titled_snap("kalshi", "k-plain", "GPT-6 released in 2026?", "2026-12-31T04:00:00Z")
+        k_openai = titled_snap("kalshi", "k-openai", "OpenAI to release GPT-6 in 2026?", "2026-12-31T04:00:00Z")
+
+        pairs = match_markets([openai_pm, anthropic_pm], [k_plain, k_openai],
+                              min_title_similarity=0.30, max_close_delta_hours=9999)
+        by_poly = {mp.poly.market_id: mp.kalshi.market_id for mp in pairs}
+
+        self.assertIn(by_poly.get("pm-openai"), {"k-plain", "k-openai"})
+        self.assertNotIn("pm-anthropic", by_poly)
+
+
 if __name__ == "__main__":
     unittest.main()

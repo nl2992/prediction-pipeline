@@ -4,8 +4,36 @@
 - **Test Date**: 2026-06-11
 - **Pairwise accuracy: 100% (50/50)** — all 42 should-match pairs matched, all 8 traps rejected
 - **Global 1-1 assignment: 98% (49/50)** — single miss is an unwinnable duplicate-title trap
-- **Repo test suite: 65/65 passing** (no regressions)
+- **Repo test suite: 76/76 passing** (65 original + 11 new cross-platform regression tests)
 - **Test Data**: `pairs_fixture.json` — 50 Polymarket↔Kalshi candidate pairs (42 should match, 8 should not)
+
+## Iteration log — 2026-06-11 (loop run 3)
+Re-extracted `files.zip`; fixture + generator byte-identical to prior runs (no new
+test data). Baseline reconfirmed: 100% pairwise, 65/65 tests.
+
+**Investigated the global 49/50 "miss" (PAIR-035).** Traced it conclusively: PM-035
+"Will OpenAI release GPT-6 before Dec 31, 2026?" matches K(GPT6-26X) "OpenAI to
+release GPT-6 in 2026?" at **0.714** similarity vs only **0.375** for its
+fixture-designated partner "GPT-6 released in 2026?". Both Kalshi listings are
+genuinely OpenAI-GPT-6-in-2026 markets, so the matcher's pairing is *more* correct,
+not wrong. The Anthropic PM correctly stays unmatched. **Confirmed: fixture artifact,
+not a defect — declined to overfit by forcing the lower-scoring designated pair.**
+
+**Locked in behaviour with 11 new regression tests** (`CrossPlatformFixtureRegressions`
+in `tests/test_core_logic.py`) covering every previously-misaligned shape: Solana/SOL
+ticker-clip, CPI paraphrase, James/New Bond qualifier, $150,000/$150k separator,
+touch-vs-hold inversion, Anthropic-vs-OpenAI veto, touch-vs-close settlement trap,
+GTA mid-year deadline, Fed month mismatch, Indiana≠India, and the GPT-6 cluster shape.
+
+**Fixed two latent `_stat_thresholds` bugs** surfaced while writing those tests:
+1. "at any **point**" / "point in time" was parsed as a basketball *points* prop —
+   now stripped as a time idiom before stat matching.
+2. Bare "**k**"/"ks" was a *strikeouts* alias, colliding with the thousands suffix
+   ("$80k", "$150k") and stray initials — now requires spelled-out "strikeout(s)".
+   Real strikeout-prop titles spell it out; bare-k matching was pure liability in a
+   market set saturated with `$Nk` crypto strikes.
+Both were silent hazards (they only escaped the fixture because the *counterpart* side
+happened to carry no stat); the full suite + fixture stay green after the fix.
 
 ## Evaluation methodology
 The fixture's own description states "ground_truth.should_match is the matcher label" —

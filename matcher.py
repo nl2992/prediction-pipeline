@@ -411,12 +411,20 @@ def _rates(text: str) -> set[str]:
 
 def _stat_thresholds(text: str) -> dict[str, set[float]]:
     low = _ascii_lower(text)
+    # "at any/this/some point", "point in time", "to the point" are time/idiom
+    # phrases, not a basketball points prop — strip them before stat matching so
+    # "dip below $80k at any point in 2026" is not read as a points line.
+    low = re.sub(r"\b(?:at\s+)?(?:any|this|some|that)\s+point\b", " ", low)
+    low = re.sub(r"\bpoint\s+in\s+time\b", " ", low)
     stats = {
         "points": r"\b(points?|pts)\b",
         "rebounds": r"\b(rebounds?|rbs?)\b",
         "assists": r"\b(assists?|asts?)\b",
         "hits": r"\bhits?\b",
-        "strikeouts": r"\b(strikeouts?|ks?)\b",
+        # Bare "k"/"ks" is intentionally NOT an alias: it collides with the
+        # thousands suffix that pervades these markets ("$80k", "$150k") and
+        # with stray initials. Real strikeout-prop titles spell it out.
+        "strikeouts": r"\bstrikeouts?\b",
         "blocks": r"\b(blocks?|blks?)\b",
         "threes": r"\b(threes?|three[-\s]?pointers?|3[-\s]?pointers?)\b",
         "runs": r"\bruns?\b",
