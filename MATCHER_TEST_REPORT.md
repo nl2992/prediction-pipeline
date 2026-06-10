@@ -9,6 +9,30 @@
 - **Arb engine (`fee_model="kalshi_variable"`): reproduces the fixture's economics exactly — all 42 `best_edge_net` match, 14/14 arbs detected**
 - **Test Data**: `pairs_fixture.json` — 50 Polymarket↔Kalshi candidate pairs (42 should match, 8 should not)
 
+## Iteration log — 2026-06-11 (loop run 7) — winner-subject veto (single-name contestants)
+
+Implemented the fix proposed (but deliberately deferred) in run 6: single-word proper
+nouns evading the name vetoes, so "Lakers win 2026 NBA title" vs "Celtics win 2026 NBA
+title" and "Biden win 2028 nomination" vs "Newsom win 2028 nomination" falsely matched.
+
+**Approach — validated in a standalone probe BEFORE touching matcher.py.** Rather than a
+blanket single-name veto (rejected in run 6 — it broke 9 fixture pairs), extract only the
+*winner-subject*: the capitalised entity between the leading question phrase and a
+win/seek/nominee trigger ("Will the Lakers **win**…" → {lakers}; "Newsom **to win**…" →
+{newsom}). Generic/stop/jurisdiction/office words are stripped and ticker synonyms
+applied. Veto fires only when BOTH sides name a winner-subject and they share no token.
+
+The probe confirmed up front: **0 wrongful vetoes across all 42 fixture matches** (every
+"win" pair shares its subject — Newsom⊂{gavin,newsom}, Thunder⊂{city,thunder},
+Yankees⊂{new,york,yankees}, Vance, Pacers, Scheffler, Alcaraz), while both target false
+positives are caught. Common-noun price markets (Moon, Category) have no win-trigger so
+are untouched — the exact failure mode that sank the blunt approach.
+
+`matcher._winner_subject()` + a veto in `is_compatible_match`. Added 3 regression tests
+(different teams rejected, different candidates rejected, same-contestant long-vs-short
+still matches). Suite 90/90, matcher 100% pairwise (50/50), no regressions. The run-6
+"known limitation" is now closed.
+
 ## Iteration log — 2026-06-11 (loop run 6) — robustness probing beyond the fixture
 
 The 50-pair fixture is fully satisfied (matching + arb), so this run stress-tested the

@@ -1223,6 +1223,23 @@ class CrossPlatformFixtureRegressions(unittest.TestCase):
         k = self._k("Fed rate hike at March 2026 meeting?", "2026-03-18T04:00:00Z")
         self.assertFalse(match_markets([pm], [k], min_title_similarity=0.30, max_close_delta_hours=9999))
 
+    def test_different_teams_same_title_rejected(self) -> None:
+        # Winner-subject veto: single-word team names _proper_names misses.
+        pm = self._pm("Will the Lakers win the 2026 NBA title?", "2026-06-21T04:00:00Z")
+        k = self._k("Will the Celtics win the 2026 NBA title?", "2026-06-21T04:00:00Z")
+        self.assertFalse(match_markets([pm], [k], min_title_similarity=0.30, max_close_delta_hours=9999))
+
+    def test_different_candidates_same_race_rejected(self) -> None:
+        pm = self._pm("Will Biden win the 2028 Democratic nomination?", "2028-08-01T04:00:00Z")
+        k = self._k("Will Newsom win the 2028 Democratic nomination?", "2028-08-01T04:00:00Z")
+        self.assertFalse(match_markets([pm], [k], min_title_similarity=0.30, max_close_delta_hours=9999))
+
+    def test_same_contestant_single_vs_full_name_still_matches(self) -> None:
+        # The veto must NOT fire when the contestant is the same, written long vs short.
+        pm = self._pm("Will the Oklahoma City Thunder win the 2026 NBA Finals?", "2026-06-21T04:00:00Z")
+        k = self._k("Thunder to win 2026 NBA Championship?", "2026-06-21T04:00:00Z")
+        self.assertTrue(match_markets([pm], [k], min_title_similarity=0.30, max_close_delta_hours=9999))
+
     def test_fed_month_mismatch_rejected(self) -> None:
         # PAIR-020: September FOMC vs July FOMC are different meetings.
         self.assertFalse(is_compatible_match(

@@ -796,6 +796,45 @@ def _names_overlap(a_names: set[str], b_names: set[str]) -> bool:
     return False
 
 
+_WIN_TRIGGERS = re.compile(
+    r"\b(?:to\s+win|wins?|winning|to\s+seek|to\s+capture|to\s+claim|"
+    r"be\s+the\b[^?]*\bnomin\w+|win\s+the\b)",
+    re.I,
+)
+_LEAD_WIN = re.compile(
+    r"^\s*(?:will|who|which|what|does|is|are|can|should)\s+(?:the\s+)?", re.I
+)
+
+
+def _winner_subject(text: str) -> set[str]:
+    """Significant tokens naming the entity claimed to WIN/be nominated.
+
+    Captures the capitalised subject between the leading question phrase and a
+    win/seek/nominee trigger ("Will the Lakers win …" → {lakers}; "Newsom to
+    win …" → {newsom}). Strips generic/stop/jurisdiction/office words and applies
+    ticker synonyms, so a winner-subject veto fires only on genuinely different
+    contestants — never on common-noun price markets (Moon, Category) that lack
+    a win-trigger, and never when only one side names a contestant.
+    """
+    ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    m = _WIN_TRIGGERS.search(ascii_text)
+    if not m:
+        return set()
+    head = _LEAD_WIN.sub("", ascii_text[: m.start()])
+    out: set[str] = set()
+    for tok in re.findall(r"\b([A-Z][A-Za-z]{2,})\b", head):
+        t = tok.lower()
+        if t in _NAME_STOP or t in _GENERIC_NAME_TERMS or t in _STOPWORDS:
+            continue
+        if _jurisdictions(t) or _offices(t):
+            continue
+        t = _ROMAN_NUMERALS.get(t, t)
+        for syn in _TOKEN_SYNONYMS.get(t, (t,)):
+            if len(syn) >= 3:
+                out.add(syn)
+    return out
+
+
 _ENTITY_STOP = _NAME_STOP | {
     "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
@@ -1193,6 +1232,14 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
     p_selected_names = _selected_names(p_text)
     k_selected_names = _selected_names(k_text)
     if p_selected_names and k_selected_names and not _names_overlap(p_selected_names, k_selected_names):
+        return False
+    # Winner-subject veto: two markets each naming a DIFFERENT contestant to win
+    # the same contest ("Lakers to win" vs "Celtics to win", "Biden" vs "Newsom")
+    # are different contracts. Catches single-word names that _proper_names misses.
+    # Fires only when BOTH sides name a winner-subject and they share no token.
+    p_winner = _winner_subject(p_text)
+    k_winner = _winner_subject(k_text)
+    if p_winner and k_winner and not _names_overlap(p_winner, k_winner):
         return False
     if (_proper_names(p_text) and _is_generic_location_market(k_text)) or (
         _proper_names(k_text) and _is_generic_location_market(p_text)
