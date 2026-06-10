@@ -1,20 +1,23 @@
 # Prediction Market Matcher Test Report
 
 ## Current Status
-- **Test Date**: 2026-06-10
-- **Accuracy**: 70% (27/42 matches correct, 8/8 non-matches correct)
+- **Test Date**: 2026-06-10 (Updated)
+- **Accuracy**: 72% (28/42 matches correct, 8/8 non-matches correct)
 - **Test Data**: 50 Polymarket-Kalshi pairs (42 should match, 8 should not)
 
 ## Test Results Summary
 ```
-Correct matches: 27 / 42 (64%)
+Correct matches: 28 / 42 (67%)
 Correct non-matches: 8 / 8 (100%)
 False positives: 0
-False negatives: 15
-Overall accuracy: 70%
+False negatives: 14
+Overall accuracy: 72%
 ```
 
-## Recent Improvements
+## Latest Fix
+- ✅ **Fixed deadline action detection** - Movies with "by Dec 31" dates were incorrectly tagged with "deadline" action instead of "box_office", causing action mismatch rejection. Now correctly skips deadline tagging in movie/box office contexts.
+
+## Previous Improvements
 1. ✅ **Fixed India/Indiana disambiguation** - "Indiana" state was incorrectly matched as "India" country, triggering foreign country veto
 2. ✅ **Added month-mismatch detection** - Pairs with conflicting timeframes (e.g., September vs July) are now correctly rejected
 3. ✅ **Expanded entity synonyms**:
@@ -75,7 +78,24 @@ Significant semantic gaps with low token overlap:
 - "Starship reach orbit and land both stages" vs "full success"
 - "operate paid robotaxis in NYC" vs "paid service live in New York City"
 
+## Critical Architecture Issue Discovered
+
+**Problem**: Threshold-led acceptance gate doesn't work for some pairs because `is_compatible_match` is called AFTER threshold-led acceptance but can still reject them.
+
+**Example**: PAIR-016 (Solana ETF)
+- Title similarity: 0.214 (below 0.30 threshold)
+- Qualifies for threshold-led acceptance: ✅ Matching thresholds ($5B) + Shared entity (solana)
+- Fails `is_compatible_match`: ❌ Unknown reason (compatibility check is too strict)
+- Result: Not matched despite meeting acceptance criteria
+
+**Impact**: This blocks approximately 3-4 pairs that should match via the threshold-led path.
+
+**Solution**: Relax `is_compatible_match` constraints for threshold-led pairs, or skip compatibility check when thresholds align perfectly.
+
 ## Recommendations for Next Iteration
+
+### Critical Priority
+1. **Fix threshold-led acceptance architecture** - Allow pairs with matching thresholds + shared entities to bypass or relax compatibility checks
 
 ### High Priority
 1. Implement better tie-breaking in greedy matching (PAIR-011, 019, 035, 044)
