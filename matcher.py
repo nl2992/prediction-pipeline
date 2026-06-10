@@ -722,8 +722,13 @@ def _contract_actions(text: str) -> set[str]:
         actions.add("comparison")
     if re.search(r"\bgroup [a-h]\b.*\bwin\b|\bteam from group\b", low):
         actions.add("group_winner")
+    # "deadline" is only added if there's a temporal constraint (before/by date) that's NOT
+    # part of a box office or similar context. Avoid false positives on "by Dec 31" in box office
+    # questions, where the deadline is just the end of the measurement period.
     if re.search(r"\bbefore\b|by\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|q[1-4]|\d{1,2})", low):
-        actions.add("deadline")
+        # Skip if this is clearly a box office/movie context with a date
+        if not re.search(r"\b(box office|movie|film|release|gross)\b", low):
+            actions.add("deadline")
     if re.search(r"\bstarting qb\b|\bquarterback\b", low):
         actions.add("starting_qb")
     if re.search(r"\b(run|runs|running|declare|declares|first this list)\b", low):
