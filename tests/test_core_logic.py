@@ -23,6 +23,7 @@ from matcher import (
     is_compatible_match,
     is_inverted_pair,
     match_markets,
+    _tokens,
 )
 from monitor import _resolve_poly_token, _verify_kalshi_clob
 from pipeline import (
@@ -1260,6 +1261,30 @@ class CrossPlatformFixtureRegressions(unittest.TestCase):
         pm = self._pm("Will Bitcoin be above $110,000 on Dec 31, 2026?", "2026-12-31T17:00:00Z")
         k = self._k("BTC to touch $110k at any point in 2026?", "2026-12-31T17:00:00Z")
         self.assertFalse(match_markets([pm], [k], min_title_similarity=0.30, max_close_delta_hours=9999))
+
+    def test_cpi_inflation_pct_paraphrase_matches(self) -> None:
+        # Run-1 robustness: "inflation above 3%" == "CPI exceed 3.0%". Needs the
+        # cpi->inflation synonym AND 3% == 3.0% decimal canonicalisation.
+        pm = self._pm("Will US inflation be above 3% in 2026?")
+        k = self._k("Will CPI exceed 3.0% in 2026?")
+        self.assertTrue(match_markets([pm], [k], min_title_similarity=0.30, max_close_delta_hours=9999))
+
+    def test_jobless_unemployment_paraphrase_matches(self) -> None:
+        # "unemployment rate top 5%" == "jobless rate above 5.0%".
+        pm = self._pm("Will the unemployment rate top 5% in 2026?")
+        k = self._k("Jobless rate above 5.0% in 2026?")
+        self.assertTrue(match_markets([pm], [k], min_title_similarity=0.30, max_close_delta_hours=9999))
+
+    def test_resign_not_matched_to_impeach(self) -> None:
+        # Distinct political events sharing scaffolding must not match.
+        pm = self._pm("Will Trump resign before 2027?", "2027-01-01T00:00:00Z")
+        k = self._k("Will Trump be impeached before 2027?", "2027-01-01T00:00:00Z")
+        self.assertFalse(match_markets([pm], [k], min_title_similarity=0.30, max_close_delta_hours=9999))
+
+    def test_decimal_trailing_zero_canonicalisation(self) -> None:
+        # 3% and 3.0% tokenise identically; 3.5% stays distinct from 3%.
+        self.assertEqual(_tokens("above 3%"), _tokens("above 3.0%"))
+        self.assertNotEqual(_tokens("above 3%"), _tokens("above 3.5%"))
 
     def test_fed_month_mismatch_rejected(self) -> None:
         # PAIR-020: September FOMC vs July FOMC are different meetings.

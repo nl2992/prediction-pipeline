@@ -66,6 +66,11 @@ _TOKEN_SYNONYMS: dict[str, tuple[str, ...]] = {
     # Singularise high-frequency plurals so "rates" == "rate", "hikes" == "hike".
     "rates": ("rate",),
     "hikes": ("hike",),
+    # Econ-stat synonyms so the two exchanges' wordings share tokens:
+    # "CPI" == "inflation", "jobless" == "unemployment".
+    "cpi": ("inflation",),
+    "jobless": ("unemployment",),
+    "unemployed": ("unemployment",),
 }
 
 # Multi-word phrase canonicalisation, applied to the raw (lowercased) title
@@ -95,7 +100,15 @@ def _tokens(title: str) -> frozenset[str]:
     title = re.sub(r"\$?\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?)", lambda m: " " + m.group(1).replace(",", ""), title)
     # Expand k-suffixed amounts so "150k" == "150,000" == "150000".
     title = re.sub(r"\b(\d+(?:\.\d+)?)k\b", lambda m: str(int(float(m.group(1)) * 1000)), title)
-    title = re.sub(r"\b(\d+\.\d+)%?", lambda m: m.group(1).replace(".", "_"), title)
+    # Canonicalise decimals by dropping trailing-zero fractions so "3.0%" == "3%"
+    # and "5.0" == "5" tokenise identically (the off-by-rounding levels "3.5",
+    # "5.25" keep their distinct fractional tokens). Without this, "above 3%" and
+    # "exceed 3.0%" stay just under the Jaccard gate despite being the same level.
+    def _decnorm(m: "re.Match[str]") -> str:
+        whole, frac = m.group(1), m.group(2)
+        frac = frac.rstrip("0")
+        return whole if not frac else f"{whole}_{frac}"
+    title = re.sub(r"\b(\d+)\.(\d+)%?", _decnorm, title)
     # Strip other punctuation
     title = re.sub(r"[^\w\s]", " ", title)
     # Keep single-character digits ("GTA 6", "Round 1") — they are meaningful and
@@ -913,7 +926,7 @@ def _contract_actions(text: str) -> set[str]:
         actions.add("relocate")
     if re.search(r"\bplayed in\b|\bhost\b|\bheld in\b|\btake place in\b", low):
         actions.add("host_location")
-    if re.search(r"\b(unemployment|jobs report|payroll|nonfarm)\b", low):
+    if re.search(r"\b(unemployment|unemployed|jobless|jobs report|payroll|nonfarm)\b", low):
         actions.add("labor_stats")
     if re.search(r"\binflation\b|\bcpi\b", low):
         actions.add("inflation")
@@ -1042,7 +1055,13 @@ def _contract_actions(text: str) -> set[str]:
 # specific one and they disagree, the markets are about different events even
 # when subject, timing, and most tokens match.
 _POLITICAL_EVENT_ACTIONS = frozenset(
-    {"impeach", "martial_law", "govt_shutdown", "national_emergency", "pardon", "indicted"}
+    # Distinct, mutually-exclusive political outcomes. leave_role (resign/step
+    # down/ousted) is included so a resignation market is never matched to an
+    # impeachment/pardon/indictment one — different events that share generic
+    # scaffolding ("Will <person> ___ before 2027?"). Same-action pairs
+    # (resign vs resign) are unaffected; the veto fires only on DIFFERENT ones.
+    {"impeach", "martial_law", "govt_shutdown", "national_emergency", "pardon",
+     "indicted", "leave_role"}
 )
 
 
