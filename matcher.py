@@ -43,10 +43,13 @@ _ROMAN_NUMERALS = {
 
 def _tokens(title: str) -> frozenset[str]:
     title = title.lower()
-    # Preserve decimal numbers (e.g. "5.25%", "4.75") as single tokens before
-    # stripping punctuation — otherwise "5.25" splits into "5" (dropped, len=1)
-    # and "25", making different rate levels match each other.
+    # Preserve numbers (with decimals and thousands separators) as single tokens.
+    # E.g. "$150,000" / "150k" / "5.25%" all become single tokens to avoid
+    # splitting into ['150', '000'] or ['5', '25'].
+    # Process: replace common number formats with sanitized versions
+    title = re.sub(r"\$?\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?)", lambda m: m.group(1).replace(",", ""), title)
     title = re.sub(r"\b(\d+\.\d+)%?", lambda m: m.group(1).replace(".", "_"), title)
+    # Strip other punctuation
     title = re.sub(r"[^\w\s]", " ", title)
     # Keep single-character digits ("GTA 6", "Round 1") — they are meaningful and
     # must align with roman-numeral normalisation ("GTA VI" -> "6").
@@ -267,10 +270,17 @@ def _parties(text: str) -> set[str]:
 def _jurisdictions(text: str) -> set[str]:
     low = f" {_ascii_lower(text)} "
     found: set[str] = set()
-    for canonical, aliases in _COUNTRY_ALIASES.items():
+    # Check states first to avoid "indiana" matching "india"
+    state_matches = set()
+    for canonical, aliases in _US_STATE_ALIASES.items():
         if any(alias in low for alias in aliases):
             found.add(canonical)
-    for canonical, aliases in _US_STATE_ALIASES.items():
+            state_matches.add(canonical)
+    # Check countries, but skip "india" if "indiana" was found
+    for canonical, aliases in _COUNTRY_ALIASES.items():
+        # Special case: skip "india" if "indiana" state was found
+        if canonical == "india" and "indiana" in state_matches:
+            continue
         if any(alias in low for alias in aliases):
             found.add(canonical)
     return found
@@ -441,6 +451,19 @@ def _time_scopes(text: str) -> set[str]:
     return scopes
 
 
+def _month_names(text: str) -> set[str]:
+    """Extract all month names mentioned in text, regardless of context."""
+    low = _ascii_lower(text)
+    months = set()
+    for month in re.findall(
+        r"\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+        r"jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b",
+        low,
+    ):
+        months.add(_MONTHS[month])
+    return months
+
+
 def _set_numbers(text: str) -> set[str]:
     low = _ascii_lower(text)
     return set(re.findall(r"\bset\s*(\d+)\b", low))
@@ -581,6 +604,10 @@ def _named_entities(text: str) -> set[str]:
         "sol": "solana", "solana": "solana",
         "xrp": "ripple", "ripple": "ripple",
         "doge": "dogecoin", "dogecoin": "dogecoin",
+        "gpt": "gpt", "gpt6": "gpt",
+        "scotus": "supreme court", "supreme court": "supreme court",
+        "gop": "republican", "republican": "republican",
+        "dem": "democratic", "democratic": "democratic",
     }
     for alias, canonical in _ENTITY_SYNONYMS.items():
         if re.search(rf"\b{alias}\b", low):
@@ -1005,6 +1032,14 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
             return False
         if _has_over_under(p_text) != _has_over_under(k_text) and p_vals != k_vals:
             return False
+
+    # Month mismatch: if both markets mention specific months, they must be the same
+    # (unless they're within the same ~72h window, which suggests the same deadline
+    # expressed differently). Close-time delta is authoritative.
+    p_months = _month_names(p_text)
+    k_months = _month_names(k_text)
+    if not _same_horizon and p_months and k_months and p_months.isdisjoint(k_months):
+        return False
 
     return True
 
