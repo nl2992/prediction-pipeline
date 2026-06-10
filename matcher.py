@@ -495,6 +495,60 @@ def _known_products(text: str) -> set[str]:
     return {p for p in _KNOWN_AI_PRODUCTS if re.search(rf"\b{p}\b", low)}
 
 
+# Antonym cue groups for logical-inversion detection: one side asserts the
+# "negative" state, the other the "positive" state of the SAME event. Each tuple
+# is (negative_pattern, positive_pattern). Kept deliberately small and specific
+# so normal (non-inverted) pairs are never flagged.
+_INVERSION_ANTONYMS: tuple[tuple[str, str], ...] = (
+    (r"\b(banned|ban|prohibited|outlawed|illegal|blocked|shut down|shutdown)\b",
+     r"\b(legal|legally|operating|allowed|permitted|available|stay online|remain online)\b"),
+    (r"\bnot\s+reach\b|\bfails?\s+to\b|\bmiss(?:es)?\b",
+     r"\breach(?:es)?\b|\bhits?\b|\bachiev(?:e|es)\b"),
+)
+
+
+def is_inverted_pair(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> bool:
+    """True when the two markets price LOGICALLY OPPOSITE outcomes of the same
+    event — i.e. Polymarket-YES is economically Kalshi-NO.
+
+    Two precise signals only (both must concern the same underlying event, which
+    the caller has already established via is_compatible_match):
+
+    1. Threshold direction flip at the SAME level with touch-vs-hold settlement:
+       "dip below $80k at any point" (touch, down) vs "stay above $80k all year"
+       (hold, up). One resolves YES exactly when the other resolves NO.
+    2. Antonym state cue: one side says banned/illegal/blocked, the other
+       legal/operating/allowed ("TikTok banned" vs "TikTok operating legally").
+
+    Detection is text-only (never price-based): a price gap is what arb trades on,
+    so inferring inversion from prices would corrupt genuine arbitrage signals.
+    """
+    p_text = _contract_text(poly)
+    k_text = _contract_text(kalshi)
+
+    # Signal 1: threshold direction flip + touch/hold complement.
+    p_thr = _numeric_threshold(p_text)
+    k_thr = _numeric_threshold(k_text)
+    if p_thr and k_thr and p_thr[0] != k_thr[0] and p_thr[2] == k_thr[2]:
+        if abs(p_thr[1] - k_thr[1]) / max(p_thr[1], k_thr[1], 1.0) <= 0.001:
+            if {_settlement_type(p_text), _settlement_type(k_text)} == {"touch", "hold"}:
+                return True
+
+    # Signal 2: explicit antonym state cues (one negative, one positive).
+    p_low = _ascii_lower(p_text)
+    k_low = _ascii_lower(k_text)
+    for neg, pos in _INVERSION_ANTONYMS:
+        p_neg, p_pos = bool(re.search(neg, p_low)), bool(re.search(pos, p_low))
+        k_neg, k_pos = bool(re.search(neg, k_low)), bool(re.search(pos, k_low))
+        # Exactly one side negative and the other positive (not both-mixed).
+        if (p_neg and k_pos and not p_pos and not k_neg) or (
+            k_neg and p_pos and not k_pos and not p_neg
+        ):
+            return True
+
+    return False
+
+
 def _comparison_bounds(text: str) -> dict[str, set[float]]:
     low = _ascii_lower(text)
     return {
@@ -1433,6 +1487,7 @@ class MatchedPair:
     close_delta_hours: float | None   # |close_time difference| in hours; None if unknown
     confidence: float                 # combined score [0, 1]
     via_override: bool = False        # True if paired by manual override, not heuristic
+    inverted: bool = False            # True if Polymarket-YES is economically Kalshi-NO
 
 
 # ---------------------------------------------------------------------------
@@ -1486,6 +1541,7 @@ def match_markets(
                     close_delta_hours=_close_delta_hours(p.close_time, k.close_time),
                     confidence=1.0,
                     via_override=True,
+                    inverted=is_inverted_pair(p, k),
                 ))
                 used_poly.add(poly_id)
                 used_kalshi.add(kalshi_id)
@@ -1563,6 +1619,7 @@ def match_markets(
             title_similarity=_jaccard(_tokens(p.title), _tokens(k.title)),
             close_delta_hours=_close_delta_hours(p.close_time, k.close_time),
             confidence=score,
+            inverted=is_inverted_pair(p, k),
         ))
         matched_poly.add(p.market_id)
         matched_kalshi.add(k.market_id)

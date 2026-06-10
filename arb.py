@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from matcher import MatchedPair
+    from pipeline import OrderBook
 
 FEE_POLY_DEFAULT: float = 0.02
 FEE_KALSHI_DEFAULT: float = 0.07
@@ -98,6 +99,17 @@ def find_arb(
     for pair in pairs:
         p_ob = pair.poly.orderbook
         k_ob = pair.kalshi.orderbook
+
+        # Inversion handling. For a normal pair Polymarket-YES ≡ Kalshi-YES, so a
+        # market-neutral hedge crosses sides (YES here + NO there). For an
+        # INVERTED pair Polymarket-YES ≡ Kalshi-NO, so we first re-express the
+        # Kalshi book in its complement ("effective YES" = original NO): every
+        # YES bid@p becomes an effective ask@(1-p) and vice-versa, sizes carried
+        # along. After this flip the downstream math (prices AND liquidity) is
+        # identical to the normal case. Without it an inverted pair shows a
+        # phantom ~(1 - 2·price) edge — a catastrophic false signal.
+        if pair.inverted:
+            k_ob = _complement_book(k_ob)
 
         p_ask = p_ob.best_ask
         p_bid = p_ob.best_bid
@@ -168,6 +180,24 @@ def find_arb(
 
     opps.sort(key=lambda x: x.net_profit, reverse=True)
     return opps
+
+
+def _complement_book(ob: "OrderBook") -> "OrderBook":
+    """Re-express a YES order book as its complement (NO viewed as 'effective YES').
+
+    Used for inverted pairs, where Kalshi-NO is economically Polymarket-YES.
+    A YES bid@p (someone buys YES at p ⇒ you can buy NO at 1-p) becomes an
+    effective-YES ask@(1-p); a YES ask@p becomes an effective-YES bid@(1-p).
+    Sizes carry across so downstream liquidity figures stay accurate. Ordering is
+    preserved (original asks ascending → complement bids descending, and vice
+    versa), matching OrderBook's best-first convention.
+    """
+    from pipeline import OrderBook, PriceLevel
+
+    return OrderBook(
+        bids=[PriceLevel(round(1.0 - lvl.price, 6), lvl.size) for lvl in ob.asks],
+        asks=[PriceLevel(round(1.0 - lvl.price, 6), lvl.size) for lvl in ob.bids],
+    )
 
 
 def _min_size(a: float | None, b: float | None) -> float | None:

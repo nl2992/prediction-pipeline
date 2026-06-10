@@ -21,6 +21,7 @@ from matcher import (
     is_arb_eligible,
     is_close_time_compatible,
     is_compatible_match,
+    is_inverted_pair,
     match_markets,
 )
 from monitor import _resolve_poly_token, _verify_kalshi_clob
@@ -1241,6 +1242,68 @@ class CrossPlatformFixtureRegressions(unittest.TestCase):
 
         self.assertIn(by_poly.get("pm-openai"), {"k-plain", "k-openai"})
         self.assertNotIn("pm-anthropic", by_poly)
+
+
+class InvertedPairArbRegressions(unittest.TestCase):
+    """Inverted cross-platform pairs (Polymarket-YES == Kalshi-NO) must be
+    detected AND priced correctly by the arb engine. Before this was handled,
+    find_arb treated YES==YES and reported a catastrophic phantom edge.
+    """
+
+    def _book(self, yes_bid: float, yes_ask: float) -> OrderBook:
+        return OrderBook(bids=[PriceLevel(yes_bid, 1000.0)], asks=[PriceLevel(yes_ask, 1000.0)])
+
+    def _snap(self, source: str, title: str, yes_bid: float, yes_ask: float) -> MarketSnapshot:
+        s = snap(source, source, yes_bid, yes_ask)
+        s.title = title
+        s.orderbook = self._book(yes_bid, yes_ask)
+        s.close_time = "2026-12-31T04:00:00Z"
+        return s
+
+    def test_detects_threshold_flip_inversion(self) -> None:
+        # PAIR-017: "dip below $80k anytime" vs "stay above $80k all year".
+        p = self._snap("polymarket", "Will Bitcoin dip below $80,000 at any point in 2026?", 0.285, 0.295)
+        k = self._snap("kalshi", "BTC to stay above $80k for all of 2026?", 0.65, 0.68)
+        self.assertTrue(is_inverted_pair(p, k))
+
+    def test_detects_antonym_inversion(self) -> None:
+        # PAIR-039: "TikTok banned" vs "TikTok operating legally".
+        p = self._snap("polymarket", "Will TikTok be banned in the US on Dec 31, 2026?", 0.144, 0.156)
+        k = self._snap("kalshi", "TikTok operating legally in the US at end of 2026?", 0.8, 0.83)
+        self.assertTrue(is_inverted_pair(p, k))
+
+    def test_normal_pair_not_flagged_inverted(self) -> None:
+        # Same-direction price market must NOT be misread as inverted.
+        p = self._snap("polymarket", "Will Bitcoin be above $150,000 on December 31, 2026?", 0.305, 0.315)
+        k = self._snap("kalshi", "BTC above $150k at year-end 2026?", 0.28, 0.30)
+        self.assertFalse(is_inverted_pair(p, k))
+
+    def test_arb_engine_prices_inverted_pair_without_phantom_edge(self) -> None:
+        # The crux: an inverted pair must hedge SAME-side (YES+YES / NO+NO).
+        # PAIR-017 quotes: PM yes 0.285/0.295, Kalshi yes 0.65/0.68.
+        # Naive YES-vs-NO crossing would invent a ~0.35 "edge"; the correct
+        # same-side hedge cost is pm_yes_ask + k_yes_ask = 0.295 + 0.68 = 0.975,
+        # gross edge 0.025.
+        p = self._snap("polymarket", "Will Bitcoin dip below $80,000 at any point in 2026?", 0.285, 0.295)
+        k = self._snap("kalshi", "BTC to stay above $80k for all of 2026?", 0.65, 0.68)
+        mp = MatchedPair(poly=p, kalshi=k, title_similarity=1.0, close_delta_hours=0,
+                         confidence=1.0, inverted=is_inverted_pair(p, k))
+        self.assertTrue(mp.inverted)
+        opps = find_arb([mp], fee_poly=0.0, fee_kalshi=0.0, min_net_profit_pct=-1000)
+        best_gross = max(o.gross_profit for o in opps)
+        self.assertAlmostEqual(best_gross, 0.025, places=4)
+        self.assertLess(best_gross, 0.05)  # no phantom mega-edge
+
+    def test_inverted_flag_defaults_false_and_arb_unaffected_for_normal(self) -> None:
+        # Normal pair: inverted defaults False, classic YES/NO crossing applies.
+        p = self._snap("polymarket", "Will X happen in 2026?", 0.40, 0.42)
+        k = self._snap("kalshi", "X to happen in 2026?", 0.38, 0.40)
+        mp = MatchedPair(poly=p, kalshi=k, title_similarity=1.0, close_delta_hours=0, confidence=1.0)
+        self.assertFalse(mp.inverted)
+        # Direction A normal: pm_yes_ask 0.42 + (1 - k_yes_bid 0.38)=0.62 → 1.04 cost, negative edge.
+        opps = find_arb([mp], fee_poly=0.0, fee_kalshi=0.0, min_net_profit_pct=-1000)
+        a = next(o for o in opps if o.direction == "poly_yes__kalshi_no")
+        self.assertAlmostEqual(a.gross_cost, 1.04, places=4)
 
 
 if __name__ == "__main__":

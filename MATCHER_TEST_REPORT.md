@@ -4,8 +4,45 @@
 - **Test Date**: 2026-06-11
 - **Pairwise accuracy: 100% (50/50)** — all 42 should-match pairs matched, all 8 traps rejected
 - **Global 1-1 assignment: 98% (49/50)** — single miss is an unwinnable duplicate-title trap
-- **Repo test suite: 76/76 passing** (65 original + 11 new cross-platform regression tests)
+- **Repo test suite: 81/81 passing** (65 original + 11 cross-platform + 5 inverted-pair arb regression tests)
+- **Arb engine: all 42 matched-pair gross edges match fixture exactly** (incl. inverted pairs)
 - **Test Data**: `pairs_fixture.json` — 50 Polymarket↔Kalshi candidate pairs (42 should match, 8 should not)
+
+## Iteration log — 2026-06-11 (loop run 4) — ARB ENGINE, inverted pairs
+
+Extended testing beyond matching into the fixture's **arb ground truth** (every pair
+carries `arb.direction_a/b.edge_gross` and `arb_exists`). Built a probe comparing the
+engine's gross two-leg edge against the fixture for all 42 should-match pairs.
+
+**Found a serious cross-platform misalignment bug.** Gross-edge math matched 40/42 —
+the 2 misses were **both inverted pairs** (PAIR-017, PAIR-039), where the engine
+reported phantom edges of **0.355** and **0.644** versus the true **0.025** / **0.014**.
+Root cause: `find_arb` assumed Polymarket-YES ≡ Kalshi-YES and crossed sides (YES here +
+NO there). For an inverted pair Polymarket-YES ≡ Kalshi-**NO**, so the hedge must be
+SAME-side (YES+YES or NO+NO). Treating the logically-opposite contract as identical
+invents a ~(1 − 2·price) edge — in live trading this is a money-losing false signal,
+the worst possible class of bug for an arb engine.
+
+**Fix (3 parts):**
+1. `matcher.is_inverted_pair(poly, kalshi)` — conservative, **text-only** detector
+   (never price-based, since a price gap is exactly what arb trades on). Two precise
+   signals: (a) threshold direction-flip at the same level with touch-vs-hold
+   settlement ("dip below $80k anytime" vs "stay above $80k all year"); (b) explicit
+   antonym state cues ("banned/illegal" vs "legal/operating").
+2. `MatchedPair.inverted` field, set by `match_markets` for both override and heuristic
+   pairings.
+3. `arb._complement_book()` — when `pair.inverted`, re-expresses the Kalshi book in its
+   complement (prices AND sizes), after which the existing two-direction math is exact.
+
+**Verified:** inversion detected 2/2; 0/40 normal pairs false-flagged; **all 42
+matched-pair gross edges now equal the fixture exactly.** Added 5 regression tests
+(`InvertedPairArbRegressions`). Suite 81/81, matcher 100% pairwise (50/50).
+
+**Noted (not changed):** `find_arb`'s default fee is a flat `max(fee_poly, fee_kalshi)`
+of the $1 payout, ~4× Kalshi's real `0.07·p·(1−p)` taker fee, so it flags only 2 of the
+fixture's 14 net-positive arbs. This is a deliberate *conservative* modeling choice
+(fewer false trade signals), independent of the matching task — left as-is rather than
+loosening a live-money safety margin to fit a fixture.
 
 ## Iteration log — 2026-06-11 (loop run 3)
 Re-extracted `files.zip`; fixture + generator byte-identical to prior runs (no new
