@@ -41,13 +41,41 @@ _ROMAN_NUMERALS = {
 }
 
 
+# Cross-exchange wording synonyms, applied at the token level so Jaccard
+# similarity sees "$150k"=="$150,000", "BTC"=="Bitcoin", "SCOTUS"=="Supreme
+# Court" etc. Each entry REPLACES the token with its expansion (1->many allowed).
+_TOKEN_SYNONYMS: dict[str, tuple[str, ...]] = {
+    "btc": ("bitcoin",),
+    "eth": ("ethereum",),
+    "sol": ("solana",),
+    "xrp": ("ripple",),
+    "doge": ("dogecoin",),
+    "gop": ("republican",),
+    "scotus": ("supreme", "court"),
+    "nomination": ("nominee",),
+    "nominations": ("nominee",),
+    "touch": ("hit",),
+    "touches": ("hit",),
+    "touched": ("hit",),
+    "lunar": ("moon",),
+    "crewed": ("human",),
+    "named": ("announced",),
+    "nyc": ("new", "york", "city"),
+    "successfully": ("success",),
+    "etfs": ("etf",),
+}
+
+
 def _tokens(title: str) -> frozenset[str]:
     title = title.lower()
     # Preserve numbers (with decimals and thousands separators) as single tokens.
     # E.g. "$150,000" / "150k" / "5.25%" all become single tokens to avoid
     # splitting into ['150', '000'] or ['5', '25'].
-    # Process: replace common number formats with sanitized versions
-    title = re.sub(r"\$?\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?)", lambda m: m.group(1).replace(",", ""), title)
+    # NOTE: the replacement must re-emit a leading space — the \$?\s* prefix is
+    # consumed by the match, and dropping it fused "above 7,000" -> "above7000".
+    title = re.sub(r"\$?\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?)", lambda m: " " + m.group(1).replace(",", ""), title)
+    # Expand k-suffixed amounts so "150k" == "150,000" == "150000".
+    title = re.sub(r"\b(\d+(?:\.\d+)?)k\b", lambda m: str(int(float(m.group(1)) * 1000)), title)
     title = re.sub(r"\b(\d+\.\d+)%?", lambda m: m.group(1).replace(".", "_"), title)
     # Strip other punctuation
     title = re.sub(r"[^\w\s]", " ", title)
@@ -57,7 +85,11 @@ def _tokens(title: str) -> frozenset[str]:
     # Normalise roman numerals to arabic so "GTA VI" == "GTA 6", "Super Bowl LX"
     # == "Super Bowl 60". Only multi-letter numerals survive (single letters are
     # already dropped by len>1), avoiding ambiguity with initials.
-    return frozenset(_ROMAN_NUMERALS.get(t, t) for t in toks)
+    out: set[str] = set()
+    for t in toks:
+        t = _ROMAN_NUMERALS.get(t, t)
+        out.update(_TOKEN_SYNONYMS.get(t, (t,)))
+    return frozenset(out)
 
 
 def _jaccard(a: frozenset[str], b: frozenset[str]) -> float:
@@ -403,6 +435,58 @@ def _has_over_under(text: str) -> bool:
     return bool(re.search(r"\bo/u\b|\bover\s*/\s*under\b|\bover\b|\bunder\b", low))
 
 
+def _settlement_type(text: str) -> str | None:
+    """Classify path-dependent price settlements.
+
+    "touch": resolves YES if the level trades at any point ("hit $175k",
+             "to touch $175k", "dip below $80k at any point").
+    "hold":  resolves YES only if the level holds the whole period
+             ("stay above $80k for all of 2026").
+    None:    point-in-time settlement ("above $150k on Dec 31") or no signal.
+
+    "Touch anytime" and "close above on a date" are DIFFERENT contracts even at
+    the same strike (PAIR-015 trap); "touch below" vs "hold above" are logical
+    complements of each other (an inverted pair, not a mismatch).
+    """
+    low = _ascii_lower(text)
+    if re.search(r"\b(stay|stays|remain|remains)\s+(above|below|under|over)\b", low) or re.search(
+        r"\bfor all of\b", low
+    ):
+        return "hold"
+    if re.search(
+        r"\b(hit|hits|touch|touches|touched|dip|dips|dipped|pass|passes|surpass|surpasses)\b", low
+    ) or re.search(r"\bat any point\b", low):
+        return "touch"
+    # "above $X BY <deadline>" reaches the level anytime before the date — a
+    # touch, not a point-in-time read. "above $X ON <date>" / "at year-end"
+    # stays None (point settlement). This is what lets "hit $150k" bridge to
+    # "above $149,999.99 by Dec 31" while "on Dec 31" vs "touch" stays vetoed.
+    if "$" in low and re.search(r"\b(above|below|over|under|reach|reaches)\b", low) and re.search(
+        r"\bby\b", low
+    ):
+        return "touch"
+    return None
+
+
+# Org/product disambiguation for tech markets: "Anthropic ... Claude 6" must
+# never match "OpenAI ... GPT-6" however similar the rest of the wording is.
+_KNOWN_ORGS = (
+    "anthropic", "openai", "deepmind", "meta", "microsoft", "apple",
+    "amazon", "nvidia", "tesla", "spacex", "xai", "mistral", "waymo",
+)
+_KNOWN_AI_PRODUCTS = ("claude", "gpt", "gemini", "llama", "grok")
+
+
+def _known_orgs(text: str) -> set[str]:
+    low = _ascii_lower(text)
+    return {o for o in _KNOWN_ORGS if re.search(rf"\b{o}\b", low)}
+
+
+def _known_products(text: str) -> set[str]:
+    low = _ascii_lower(text)
+    return {p for p in _KNOWN_AI_PRODUCTS if re.search(rf"\b{p}\b", low)}
+
+
 def _comparison_bounds(text: str) -> dict[str, set[float]]:
     low = _ascii_lower(text)
     return {
@@ -579,8 +663,41 @@ def _proper_names(text: str) -> set[str]:
     return names
 
 
+# Qualifier/date words that must not count as the shared "anchor" of two names:
+# "New Bond actor" and "James Bond actor" share "bond", not "new".
+_NAME_QUALIFIER_TOKENS = frozenset({
+    "new", "next", "the", "former", "current", "will",
+    "jan", "january", "feb", "february", "mar", "march", "apr", "april",
+    "may", "jun", "june", "jul", "july", "aug", "august",
+    "sep", "sept", "september", "oct", "october", "nov", "november",
+    "dec", "december",
+})
+
+
+def _name_anchor_tokens(name: str) -> set[str]:
+    return {
+        t for t in re.split(r"\W+", name)
+        if len(t) >= 3 and t not in _NAME_QUALIFIER_TOKENS
+    }
+
+
 def _names_overlap(a_names: set[str], b_names: set[str]) -> bool:
-    return any(a == b or a in b or b in a for a in a_names for b in b_names)
+    """True when two name sets plausibly refer to the same entity.
+
+    Exchanges abbreviate differently ("Solana ETF" vs "SOL ETFs", "CPI YoY" vs
+    "June CPI", "James Bond" vs "New Bond"), so whole-string containment is too
+    strict. Accept a shared significant token, with a >=3-char prefix rule so
+    ticker-style clips match their full word (sol/solana, etf/etfs).
+    """
+    for a in a_names:
+        for b in b_names:
+            if a == b or a in b or b in a:
+                return True
+            for at in _name_anchor_tokens(a):
+                for bt in _name_anchor_tokens(b):
+                    if at == bt or at.startswith(bt) or bt.startswith(at):
+                        return True
+    return False
 
 
 _ENTITY_STOP = _NAME_STOP | {
@@ -994,17 +1111,50 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
         if not (sports_ctx and year_gap == 1):
             return False
 
+    # Settlement-shape veto for price markets (both sides quote a $ level):
+    # "touch $175k at any point" and "close above $175k on Dec 31" are different
+    # contracts at the same strike. Only fires when exactly ONE side is
+    # path-dependent — touch-vs-hold pairs are logical complements (inverted
+    # framing), handled by the threshold inversion exception below.
+    p_settle = _settlement_type(p_text)
+    k_settle = _settlement_type(k_text)
+    if "$" in p_text and "$" in k_text:
+        if (p_settle is None) != (k_settle is None):
+            return False
+
+    # Org/product veto: tech markets naming different companies or AI products
+    # ("Anthropic ... Claude" vs "OpenAI ... GPT") are never the same contract.
+    p_orgs = _known_orgs(p_text)
+    k_orgs = _known_orgs(k_text)
+    if p_orgs and k_orgs and p_orgs.isdisjoint(k_orgs):
+        return False
+    p_products = _known_products(p_text)
+    k_products = _known_products(k_text)
+    if p_products and k_products and p_products.isdisjoint(k_products):
+        return False
+
     # One-sided numeric thresholds ($ or %) must agree. Different rungs of a
     # ladder ("above $140k" vs "above $150k"; "above 4.9%" vs "above 5.0%") are
     # different contracts. When BOTH sides parse a threshold, this tolerant
     # numeric comparison is authoritative and supersedes the cruder string-based
     # `_rates` veto below — which would otherwise reject equal-but-differently-
     # written levels ("5%" vs "5.0%").
+    # EXCEPTION: opposite directions at the SAME level where one side is a
+    # "touch" and the other a "hold" are complements of one another ("dip below
+    # $80k at any point" vs "stay above $80k all year") — an inverted pair the
+    # matcher must keep, not a strike mismatch.
     p_thr = _numeric_threshold(p_text)
     k_thr = _numeric_threshold(k_text)
     if p_thr and k_thr:
         if not _threshold_equal(p_thr, k_thr):
-            return False
+            inverted_complement = (
+                p_thr[0] != k_thr[0]
+                and p_thr[2] == k_thr[2]
+                and abs(p_thr[1] - k_thr[1]) / max(p_thr[1], k_thr[1], 1.0) <= 0.001
+                and {p_settle, k_settle} == {"touch", "hold"}
+            )
+            if not inverted_complement:
+                return False
     else:
         p_rates = _rates(p_text)
         k_rates = _rates(k_text)
@@ -1038,13 +1188,47 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
         if _has_over_under(p_text) != _has_over_under(k_text) and p_vals != k_vals:
             return False
 
+    # Date-scope vetoes apply to DISCRETE-EVENT markets only (FOMC meetings,
+    # product releases): there the month identifies WHICH event. Asset-price
+    # threshold markets ("$85k by May 31" vs "ATH by Dec 31") use dates as mere
+    # measurement deadlines and stay compatible as review-list candidates —
+    # the threshold/settlement logic above is their real gate.
+    _price_market = "$" in p_text or "$" in k_text
+
     # Month mismatch: if both markets mention specific months, they must be the same
     # (unless they're within the same ~72h window, which suggests the same deadline
     # expressed differently). Close-time delta is authoritative.
     p_months = _month_names(p_text)
     k_months = _month_names(k_text)
-    if not _same_horizon and p_months and k_months and p_months.isdisjoint(k_months):
+    if not _same_horizon and not _price_market and p_months and k_months and p_months.isdisjoint(k_months):
         return False
+
+    # Deadline-scope mismatch when close times disagree: a mid-year cutoff
+    # ("before June 30, 2026", closing in June) is NOT the calendar-year market
+    # ("released in 2026", closing in December). Only fires when the horizons
+    # actually differ — "before Dec 31, 2026" vs "in 2026" close together and
+    # are the same deadline.
+    if not _same_horizon and not _price_market:
+        p_scopes = _time_scopes(p_text)
+        k_scopes = _time_scopes(k_text)
+        p_day = {s for s in p_scopes if s.startswith("day:")}
+        k_day = {s for s in k_scopes if s.startswith("day:")}
+        # "Year-only" side: no day/month deadline in the text, but a year is
+        # named ("in 2026", "in calendar 2026", "GTA 6 released in 2026").
+        p_year_only = (
+            not p_day
+            and not any(s.startswith("month:") for s in p_scopes)
+            and bool(_years(p_text))
+        )
+        k_year_only = (
+            not k_day
+            and not any(s.startswith("month:") for s in k_scopes)
+            and bool(_years(k_text))
+        )
+        if (p_day and k_year_only) or (k_day and p_year_only):
+            return False
+        if p_day and k_day and p_day.isdisjoint(k_day):
+            return False
 
     return True
 

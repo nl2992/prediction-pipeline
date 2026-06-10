@@ -1,24 +1,20 @@
 #!/usr/bin/env python3
 """
-Test the matcher against the fixture.
-Compare ground truth labels with what the matcher outputs.
+Test the matcher against the fixture (pairs_fixture.json).
+
+Primary evaluation is PAIRWISE: the fixture's own description says
+"ground_truth.should_match is the matcher label" — each of the 50 entries is a
+candidate (polymarket, kalshi) pair the matcher must accept or reject. A global
+50x50 assignment is also reported as a secondary view, but it contains
+deliberately unwinnable traps (duplicate Kalshi titles like FED-26JUL-CUT vs
+FED-26JUL-CUTX) that make 1-1 assignment ambiguous.
 """
 
 import json
-import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from matcher import (
-    match_markets,
-    is_compatible_match,
-    is_close_time_compatible,
-    _tokens,
-    _jaccard,
-    _close_delta_hours,
-    _confidence,
-)
+from matcher import match_markets
 
-# Mock MarketSnapshot for testing
+
 @dataclass
 class MockSnapshot:
     market_id: str
@@ -27,106 +23,99 @@ class MockSnapshot:
     extra: dict = None
     event_id: str = ""
 
-# Load the fixture
-with open(r"C:\Users\nigel\Downloads\pairs_fixture.json") as f:
-    fixture = json.load(f)
 
-# Convert fixture pairs to MockSnapshots
-poly_snaps = []
-kalshi_snaps = []
-expected_matches = {}
+def load_fixture():
+    with open(r"C:\Users\nigel\Downloads\pairs_fixture.json") as f:
+        return json.load(f)
 
-for pair in fixture["pairs"]:
-    pair_id = pair["pair_id"]
+
+def to_snaps(pair):
     pm = pair["polymarket"]
     k = pair["kalshi"]
-    gt = pair["ground_truth"]
-
-    poly_snap = MockSnapshot(
-        market_id=pm["market_id"],
-        title=pm["question"],
-        close_time=pm["end_date_iso"],
-    )
-    kalshi_snap = MockSnapshot(
-        market_id=k["ticker"],
-        title=k["title"],
-        close_time=k["close_time_iso"],
+    return (
+        MockSnapshot(market_id=pm["market_id"], title=pm["question"], close_time=pm["end_date_iso"]),
+        MockSnapshot(market_id=k["ticker"], title=k["title"], close_time=k["close_time_iso"]),
     )
 
-    poly_snaps.append(poly_snap)
-    kalshi_snaps.append(kalshi_snap)
 
-    expected_matches[pair_id] = {
-        "should_match": gt["should_match"],
-        "match_type": gt["match_type"],
-        "inverted": gt["inverted"],
-        "poly_id": pm["market_id"],
-        "kalshi_id": k["ticker"],
-        "pm_question": pm["question"],
-        "k_title": k["title"],
-    }
+def main():
+    fixture = load_fixture()
+    pairs = fixture["pairs"]
 
-# Run matcher
-matched_pairs = match_markets(
-    poly_snaps,
-    kalshi_snaps,
-    min_title_similarity=0.30,
-    max_close_delta_hours=9999,  # Don't filter by time
-)
+    # ---------------- PAIRWISE EVALUATION (primary) ----------------
+    print("=" * 80)
+    print("PAIRWISE EVALUATION (fixture semantics: should_match is the matcher label)")
+    print("=" * 80)
 
-# Build matched set for comparison
-matched_set = {}
-for mp in matched_pairs:
-    # Find the pair_id that corresponds to this match
-    for pair_id, expected in expected_matches.items():
-        if expected["poly_id"] == mp.poly.market_id and expected["kalshi_id"] == mp.kalshi.market_id:
-            matched_set[pair_id] = {
-                "matched": True,
-                "confidence": mp.confidence,
-                "title_similarity": mp.title_similarity,
-                "close_delta_hours": mp.close_delta_hours,
-            }
+    tp = tn = fp = fn = 0
+    failures = []
 
-# Analyze results
-print("=" * 80)
-print("MATCHER TEST RESULTS")
-print("=" * 80)
+    for pair in pairs:
+        pm_snap, k_snap = to_snaps(pair)
+        gt = pair["ground_truth"]
+        matched = bool(match_markets([pm_snap], [k_snap], min_title_similarity=0.30, max_close_delta_hours=9999))
 
-correct_matches = 0
-correct_non_matches = 0
-false_positives = 0  # Should NOT match but did
-false_negatives = 0  # Should match but didn't
-
-print("\n### SHOULD MATCH ###\n")
-for pair_id, expected in sorted(expected_matches.items()):
-    if expected["should_match"]:
-        if pair_id in matched_set:
-            print(f"[OK] {pair_id} ({expected['match_type']}): MATCHED (confidence={matched_set[pair_id]['confidence']:.3f})")
-            correct_matches += 1
+        if gt["should_match"] and matched:
+            tp += 1
+        elif gt["should_match"] and not matched:
+            fn += 1
+            failures.append((pair["pair_id"], gt["match_type"], "MISSED MATCH", pair))
+        elif not gt["should_match"] and not matched:
+            tn += 1
         else:
-            print(f"[FAIL] {pair_id} ({expected['match_type']}): NOT MATCHED (should have matched)")
-            print(f"    PM: {expected['pm_question']}")
-            print(f"    K:  {expected['k_title']}")
-            false_negatives += 1
+            fp += 1
+            failures.append((pair["pair_id"], gt["match_type"], "FALSE POSITIVE", pair))
 
-print("\n### SHOULD NOT MATCH ###\n")
-for pair_id, expected in sorted(expected_matches.items()):
-    if not expected["should_match"]:
-        if pair_id not in matched_set:
-            print(f"[OK] {pair_id} ({expected['match_type']}): Correctly NOT matched")
-            correct_non_matches += 1
+    for pair_id, mtype, kind, pair in failures:
+        print(f"[FAIL] {pair_id} ({mtype}): {kind}")
+        print(f"    PM: {pair['polymarket']['question']}")
+        print(f"    K:  {pair['kalshi']['title']}")
+
+    total = len(pairs)
+    print()
+    print(f"Should-match correct:     {tp} / {tp + fn}")
+    print(f"Should-NOT-match correct: {tn} / {tn + fp}")
+    print(f"False positives: {fp}   False negatives: {fn}")
+    print(f"PAIRWISE ACCURACY: {(tp + tn) / total * 100:.1f}%  ({tp + tn}/{total})")
+
+    # ---------------- GLOBAL ASSIGNMENT (secondary) ----------------
+    print()
+    print("=" * 80)
+    print("GLOBAL 1-1 ASSIGNMENT (secondary; duplicate-title traps make this ambiguous)")
+    print("=" * 80)
+
+    poly_snaps, kalshi_snaps = [], []
+    expected = {}
+    k_title_close = {}  # kalshi id -> (title, close) for equivalence scoring
+    for pair in pairs:
+        pm_snap, k_snap = to_snaps(pair)
+        poly_snaps.append(pm_snap)
+        kalshi_snaps.append(k_snap)
+        expected[pair["pair_id"]] = (pm_snap.market_id, k_snap.market_id, pair["ground_truth"]["should_match"])
+        k_title_close[k_snap.market_id] = (k_snap.title, k_snap.close_time)
+
+    matched_pairs = match_markets(poly_snaps, kalshi_snaps, min_title_similarity=0.30, max_close_delta_hours=9999)
+    matched_by_poly = {mp.poly.market_id: mp.kalshi.market_id for mp in matched_pairs}
+
+    g_tp = g_tn = g_fp = g_fn = 0
+    for pair_id, (pm_id, k_id, should) in sorted(expected.items()):
+        got_k = matched_by_poly.get(pm_id)
+        # Equivalence: matched K counts as correct if it is title+close identical
+        # to the expected K (the fixture contains indistinguishable duplicates).
+        hit = got_k == k_id or (got_k is not None and k_title_close.get(got_k) == k_title_close[k_id])
+        if should and hit:
+            g_tp += 1
+        elif should and not hit:
+            g_fn += 1
+        elif not should and not hit:
+            g_tn += 1
         else:
-            print(f"[FAIL] {pair_id} ({expected['match_type']}): INCORRECTLY MATCHED (confidence={matched_set[pair_id]['confidence']:.3f})")
-            print(f"    PM: {expected['pm_question']}")
-            print(f"    K:  {expected['k_title']}")
-            false_positives += 1
+            g_fp += 1
 
-# Summary
-print("\n" + "=" * 80)
-print("SUMMARY")
-print("=" * 80)
-print(f"Correct matches: {correct_matches} / {sum(1 for p in expected_matches.values() if p['should_match'])}")
-print(f"Correct non-matches: {correct_non_matches} / {sum(1 for p in expected_matches.values() if not p['should_match'])}")
-print(f"False positives (wrong matches): {false_positives}")
-print(f"False negatives (missed matches): {false_negatives}")
-print(f"Accuracy: {(correct_matches + correct_non_matches) / len(expected_matches) * 100:.1f}%")
+    print(f"Should-match correct:     {g_tp} / {g_tp + g_fn}")
+    print(f"Should-NOT-match correct: {g_tn} / {g_tn + g_fp}")
+    print(f"GLOBAL ACCURACY: {(g_tp + g_tn) / total * 100:.1f}%  ({g_tp + g_tn}/{total})")
+
+
+if __name__ == "__main__":
+    main()
