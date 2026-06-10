@@ -6,8 +6,21 @@ matches equivalent markets across exchanges, detects two-leg arbitrage
 opportunities, verifies them against live CLOBs, and optionally executes
 orders — all with a single command.
 
-> **Network note**: Polymarket's APIs require a non-US IP.  
-> Install [Cloudflare WARP](https://one.one.one.one/) and run `warp-cli connect` before starting.
+> **Network note**: Polymarket's APIs block many residential IPs (incl. AU/US).
+> The pipeline routes through **Cloudflare WARP by default** — WARP's Cloudflare
+> egress (AS13335) reaches `gamma-api.polymarket.com` where a direct connection
+> times out. One-time setup (Windows):
+>
+> ```powershell
+> winget install --id Cloudflare.Warp --accept-package-agreements --accept-source-agreements
+> & "C:\Program Files\Cloudflare\Cloudflare WARP\warp-cli.exe" registration new
+> & "C:\Program Files\Cloudflare\Cloudflare WARP\warp-cli.exe" connect
+> ```
+>
+> WARP is **Always-On** and its service starts automatically, so it reconnects on
+> boot and every process (this pipeline included) uses it without further action.
+> Verify with `warp-cli status` (→ `Connected`) and the dashboard's `/api/status`
+> (→ `polymarket: ok`).
 
 ---
 

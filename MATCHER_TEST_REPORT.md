@@ -9,6 +9,19 @@
 - **Arb engine (`fee_model="kalshi_variable"`): reproduces the fixture's economics exactly — all 42 `best_edge_net` match, 14/14 arbs detected**
 - **Test Data**: `pairs_fixture.json` — 50 Polymarket↔Kalshi candidate pairs (42 should match, 8 should not)
 
+## Iteration log — 2026-06-11 (run 8b) — Cloudflare WARP installed & default-on
+
+Made the pipeline reach Polymarket by default. Installed Cloudflare WARP
+(`winget install Cloudflare.Warp`), registered (`warp-cli registration new`) and
+connected. Result: `gamma-api.polymarket.com` flips from connect-timeout to **HTTP 200**
+in ~0.27s through WARP's Cloudflare egress (AS13335), even though the visible geo stays
+Sydney/AU — so the block isn't pure geo; WARP's network is what's allow-listed.
+
+WARP is **Always-On** with the `CloudflareWARP` service set to **Automatic**, so it
+reconnects on every boot and all traffic (this pipeline included) uses it with no manual
+step — i.e. the pipeline now defaults to WARP. Dashboard `/api/status` reports both
+`kalshi: ok` and `polymarket: ok`. README network note updated with the exact setup.
+
 ## Iteration log — 2026-06-11 (loop run 8) — LIVE data: launched dashboard, found+fixed a real miss
 
 Launched the FastAPI dashboard (`server.py`, port 8000; installed dev deps fastapi+uvicorn).
