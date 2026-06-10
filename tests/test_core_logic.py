@@ -5,12 +5,18 @@ from unittest.mock import MagicMock, patch
 
 from arb import find_arb
 from discover import _match_outcomes_within_group, _parse_dt as discover_parse_dt
-from discover import discover
+from discover import discover, _is_parlay_market
 from executor import TradeIntent, check_price_still_valid
 from kalshi.client import KalshiClient
 from matcher import (
     MatchedPair,
+    _FOREIGN_COUNTRIES,
     _confidence,
+    _domains,
+    _numeric_threshold,
+    _offices,
+    _proper_names,
+    _threshold_equal,
     _parse_dt as matcher_parse_dt,
     is_arb_eligible,
     is_close_time_compatible,
@@ -18,7 +24,13 @@ from matcher import (
     match_markets,
 )
 from monitor import _resolve_poly_token, _verify_kalshi_clob
-from pipeline import MarketSnapshot, OrderBook, PriceLevel, _parse_kalshi_full_book
+from pipeline import (
+    MarketSnapshot,
+    OrderBook,
+    PriceLevel,
+    _parse_kalshi_full_book,
+    kalshi_market_title,
+)
 from polymarket.client import PolymarketClient
 
 
@@ -204,6 +216,407 @@ class CoreLogicTests(unittest.TestCase):
         )
 
         self.assertFalse(is_compatible_match(poly, kalshi))
+
+    def test_matcher_rejects_different_political_events_same_subject(self) -> None:
+        # Same subject and time scaffolding ("Will Trump ___ before his term
+        # ends?") yields high token overlap, but impeachment and martial law
+        # are different events and must not match.
+        poly = snap(
+            "polymarket",
+            "poly-impeach",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": "Will Trump be impeached before his term ends?"},
+        )
+        kalshi = snap(
+            "kalshi",
+            "kalshi-martial-law",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": "Will Trump impose martial law before his term ends?"},
+        )
+
+        self.assertFalse(is_compatible_match(poly, kalshi))
+
+    def test_matcher_allows_same_political_event_same_subject(self) -> None:
+        poly = snap(
+            "polymarket",
+            "poly-impeach",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": "Will Trump be impeached before his term ends?"},
+        )
+        kalshi = snap(
+            "kalshi",
+            "kalshi-impeach",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": "Will Donald Trump be impeached before the end of his term?"},
+        )
+
+        self.assertTrue(is_compatible_match(poly, kalshi))
+
+    def test_kalshi_title_carries_candidate_subtitle(self) -> None:
+        # Mutually-exclusive event: generic title, candidate in yes_sub_title.
+        self.assertEqual(
+            kalshi_market_title(
+                {"title": "Who will win the next presidential election?",
+                 "yes_sub_title": "J.D. Vance"}
+            ),
+            "Who will win the next presidential election? J.D. Vance",
+        )
+        # No duplication when the subtitle already appears in the title.
+        self.assertEqual(
+            kalshi_market_title({"title": "Will J.D. Vance win?", "yes_sub_title": "J.D. Vance"}),
+            "Will J.D. Vance win?",
+        )
+
+    def test_generic_contest_phrase_is_not_a_proper_name(self) -> None:
+        # "Presidential Election" is a contest, not a person. If it is treated
+        # as a proper name, a Polymarket title like "Will JD Vance win the 2028
+        # US Presidential Election?" (initials too short to extract) ends up
+        # with a phantom name that cannot overlap the Kalshi candidate.
+        self.assertNotIn(
+            "presidential election",
+            _proper_names("Will JD Vance win the 2028 US Presidential Election?"),
+        )
+        # A real two-token person name is still extracted.
+        self.assertIn(
+            "gavin newsom",
+            _proper_names("Will Gavin Newsom win the 2028 US Presidential Election?"),
+        )
+
+    def test_named_poly_matches_kalshi_generic_title_with_subtitle(self) -> None:
+        # Regression: before folding yes_sub_title into the title, every
+        # candidate market looked generic and named Polymarket contracts could
+        # never match (false negative). Same candidate must match; different
+        # candidate must not.
+        poly = snap(
+            "polymarket",
+            "poly-newsom",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": "Will Gavin Newsom win the 2028 US Presidential Election?"},
+        )
+        same = snap(
+            "kalshi",
+            "kalshi-newsom",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": kalshi_market_title(
+                {"title": "Who will win the next presidential election?",
+                 "yes_sub_title": "Gavin Newsom"})},
+        )
+        other = snap(
+            "kalshi",
+            "kalshi-shapiro",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": kalshi_market_title(
+                {"title": "Who will win the next presidential election?",
+                 "yes_sub_title": "Josh Shapiro"})},
+        )
+        self.assertTrue(is_compatible_match(poly, same))
+        self.assertFalse(is_compatible_match(poly, other))
+
+    def test_kalshi_city_only_team_matches_poly_city_plus_nickname(self) -> None:
+        # Kalshi names a finalist by city only and avoids the league trademark
+        # ("Pro Basketball" = NBA); Polymarket uses city + nickname + "NBA".
+        poly = snap(
+            "polymarket",
+            "poly-knicks",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": "Will the New York Knicks win the 2026 NBA Finals?"},
+        )
+        kalshi = snap(
+            "kalshi",
+            "kalshi-ny",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": "Will the New York win the 2026 Pro Basketball Finals?"},
+        )
+        self.assertTrue(is_compatible_match(poly, kalshi))
+
+    def test_matcher_rejects_cross_league_same_city(self) -> None:
+        # Same city, different league (WNBA vs NBA/"Pro Basketball") must not
+        # match — guards the false positive introduced by city-only matching.
+        poly = snap(
+            "polymarket",
+            "poly-liberty",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": "Will New York Liberty win the 2026 WNBA Finals?"},
+        )
+        kalshi = snap(
+            "kalshi",
+            "kalshi-ny",
+            bid=0.4,
+            ask=0.5,
+            extra={"full_question": "Will the New York win the 2026 Pro Basketball Finals?"},
+        )
+        self.assertFalse(is_compatible_match(poly, kalshi))
+
+    def test_impeach_president_vs_trump_same_deadline_matches(self) -> None:
+        # Cross-exchange vocabulary + deadline phrasing differ, but close times
+        # prove the same horizon: "by end of 2026" == "before Jan 1, 2027".
+        poly = titled_snap(
+            "polymarket", "poly-imp",
+            "Will Trump be impeached by end of 2026?",
+            "2026-12-31T00:00:00Z",
+        )
+        kalshi = titled_snap(
+            "kalshi", "kalshi-imp",
+            "Will the President be impeached before Jan 1, 2027?",
+            "2027-01-01T15:00:00Z",
+        )
+        self.assertTrue(is_compatible_match(poly, kalshi))
+
+    def test_close_time_guard_does_not_relax_far_apart_horizons(self) -> None:
+        # The same-horizon relaxation must only apply when close times nearly
+        # coincide. Far-apart deadlines with disjoint year tokens stay rejected
+        # by the year veto (guards against over-relaxation / cycle collisions).
+        poly = titled_snap(
+            "polymarket", "poly-imp3",
+            "Will the President be impeached before Jan 1, 2027?",
+            "2027-01-01T00:00:00Z",
+        )
+        kalshi = titled_snap(
+            "kalshi", "kalshi-imp3",
+            "Will the President be impeached before Jan 1, 2029?",
+            "2029-01-01T15:00:00Z",
+        )
+        self.assertFalse(is_compatible_match(poly, kalshi))
+
+    def test_bare_president_office_is_not_an_election_domain(self) -> None:
+        # "Will the President be impeached?" is about the office holder, not an
+        # election; it must not be vetoed against a non-election counterpart.
+        self.assertNotIn("election", _domains("Will the President be impeached before Jan 1, 2027?"))
+        # A genuine presidential-election market is still detected.
+        self.assertIn("election", _domains("Who will win the 2028 Presidential Election?"))
+
+    def test_numeric_threshold_extraction_and_equality(self) -> None:
+        self.assertEqual(_numeric_threshold("Will Bitcoin hit $150k by Dec 31, 2026?"), ("up", 150000.0, "usd"))
+        self.assertEqual(_numeric_threshold("Will Bitcoin reach $150,000 by Dec 31?"), ("up", 150000.0, "usd"))
+        self.assertEqual(
+            _numeric_threshold("Will Bitcoin be above $149,999.99 by Dec 31, 2026 at 11:59 PM ET?"),
+            ("up", 149999.99, "usd"),
+        )
+        # Percent thresholds, worded differently, same level.
+        self.assertEqual(_numeric_threshold("Will inflation reach more than 5% in 2026?"), ("up", 5.0, "pct"))
+        self.assertEqual(_numeric_threshold("Will CPI inflation be above 5.0% for the year?"), ("up", 5.0, "pct"))
+        # Two-sided range is not a one-sided threshold.
+        self.assertIsNone(_numeric_threshold("GDP growth between 2.0% and 2.5%?"))
+        # "$150k" == "$149,999.99"; "5%" == "5.0%"; adjacent rungs / units differ.
+        self.assertTrue(_threshold_equal(("up", 150000.0, "usd"), ("up", 149999.99, "usd")))
+        self.assertTrue(_threshold_equal(("up", 5.0, "pct"), ("up", 5.0, "pct")))
+        self.assertFalse(_threshold_equal(("up", 150000.0, "usd"), ("up", 139999.99, "usd")))
+        self.assertFalse(_threshold_equal(("up", 5.0, "pct"), ("up", 4.9, "pct")))
+        self.assertFalse(_threshold_equal(("up", 5.0, "pct"), ("up", 5.0, "usd")))
+
+    def test_threshold_led_match_bridges_price_wording(self) -> None:
+        # Same crypto level worded differently, with noise tokens, low title
+        # overlap — must match on exact threshold + asset + same horizon.
+        poly = titled_snap(
+            "polymarket", "poly-btc",
+            "Will Bitcoin hit $150k by December 31, 2026?",
+            "2027-01-01T05:00:00Z",
+        )
+        kalshi = titled_snap(
+            "kalshi", "kalshi-btc",
+            "Will Bitcoin be above $149,999.99 by Dec 31, 2026 at 11:59 PM ET?",
+            "2027-01-01T04:59:00Z",
+        )
+        pairs = match_markets([poly], [kalshi], max_close_delta_hours=9999, min_title_similarity=0.30)
+        self.assertEqual(len(pairs), 1)
+
+    def test_threshold_veto_rejects_adjacent_price_rungs(self) -> None:
+        poly = titled_snap(
+            "polymarket", "poly-btc2",
+            "Will Bitcoin hit $150k by December 31, 2026?",
+            "2027-01-01T05:00:00Z",
+        )
+        kalshi = titled_snap(
+            "kalshi", "kalshi-btc2",
+            "Will Bitcoin be above $139,999.99 by Dec 31, 2026 at 11:59 PM ET?",
+            "2027-01-01T04:59:00Z",
+        )
+        self.assertFalse(is_compatible_match(poly, kalshi))
+
+    def test_foreign_market_does_not_match_unmarked_domestic(self) -> None:
+        # "Will there be a recession in 2026?" (no country = US/domestic on a US
+        # exchange) must match the US market, not the UK or Japan variant.
+        kalshi = snap(
+            "kalshi", "kalshi-rec", bid=0.4, ask=0.5,
+            extra={"full_question": "Will there be a recession in 2026?"},
+        )
+        us = snap("polymarket", "poly-us", bid=0.4, ask=0.5,
+                  extra={"full_question": "US recession by end of 2026?"})
+        uk = snap("polymarket", "poly-uk", bid=0.4, ask=0.5,
+                  extra={"full_question": "UK Recession in 2026?"})
+        jp = snap("polymarket", "poly-jp", bid=0.4, ask=0.5,
+                  extra={"full_question": "Japan recession in 2026?"})
+        self.assertTrue(is_compatible_match(us, kalshi))
+        self.assertFalse(is_compatible_match(uk, kalshi))
+        self.assertFalse(is_compatible_match(jp, kalshi))
+
+    def test_us_state_counts_as_domestic_not_foreign(self) -> None:
+        # A US-state market vs an unmarked market must NOT be foreign-vetoed
+        # (states are domestic); only foreign countries trigger that veto.
+        kalshi = snap("kalshi", "kalshi-gen", bid=0.4, ask=0.5,
+                      extra={"full_question": "Will the governor win re-election?"})
+        ca = snap("polymarket", "poly-ca", bid=0.4, ask=0.5,
+                  extra={"full_question": "Will the California governor win re-election?"})
+        self.assertNotIn("california", _FOREIGN_COUNTRIES)
+        # not rejected by the foreign-vs-unmarked rule (other vetoes may still
+        # apply, but jurisdiction must not be the blocker here)
+        self.assertTrue(is_compatible_match(ca, kalshi))
+
+    def test_award_phrase_is_not_a_shared_proper_name(self) -> None:
+        # "Nobel Peace Prize" must not be treated as a proper name; otherwise two
+        # different nominees falsely "overlap" via the shared award phrase.
+        unrelated_a = snap(
+            "polymarket", "poly-putin", bid=0.4, ask=0.5,
+            extra={"full_question": "Will Vladimir Putin win the Nobel Peace Prize in 2026?"},
+        )
+        unrelated_b = snap(
+            "kalshi", "kalshi-amodei", bid=0.4, ask=0.5,
+            extra={"full_question": "Who will win the Nobel Peace Prize? Dario Amodei"},
+        )
+        self.assertFalse(is_compatible_match(unrelated_a, unrelated_b))
+        # The genuinely-matching nominee still matches.
+        same_a = snap(
+            "polymarket", "poly-pope", bid=0.4, ask=0.5,
+            extra={"full_question": "Will Pope Leo XIV win the Nobel Peace Prize in 2026?"},
+        )
+        same_b = snap(
+            "kalshi", "kalshi-pope", bid=0.4, ask=0.5,
+            extra={"full_question": "Who will win the Nobel Peace Prize? Pope Leo XIV"},
+        )
+        self.assertTrue(is_compatible_match(same_a, same_b))
+
+    def test_sports_adjacent_year_is_same_season(self) -> None:
+        # Polymarket labels by season-start ("2026 NFL MVP"); Kalshi by award
+        # year ("2027"). An adjacent-year gap in a sports context is the same
+        # award and must match; a 2-year gap is a different season and must not.
+        # Distinct, far-apart close times so the year veto (not the same-horizon
+        # relaxation) is what is being exercised.
+        poly = snap("polymarket", "poly-mvp", bid=0.4, ask=0.5,
+                    extra={"full_question": "Will Josh Allen win the 2026 NFL MVP?"})
+        poly.close_time = "2027-02-15T00:00:00Z"
+        kalshi_same = snap("kalshi", "kalshi-mvp", bid=0.4, ask=0.5,
+                           extra={"full_question": "Will Josh Allen win the MVP?",
+                                  "event_title": "NFL MVP 2027"})
+        kalshi_same.close_time = "2028-02-12T00:00:00Z"
+        kalshi_other = snap("kalshi", "kalshi-mvp2", bid=0.4, ask=0.5,
+                            extra={"full_question": "Will Josh Allen win the MVP?",
+                                   "event_title": "NFL MVP 2028"})
+        kalshi_other.close_time = "2029-02-12T00:00:00Z"
+        self.assertTrue(is_compatible_match(poly, kalshi_same))
+        self.assertFalse(is_compatible_match(poly, kalshi_other))
+
+    def test_non_sports_adjacent_year_still_vetoed(self) -> None:
+        # The adjacent-year relaxation is sports-only; elections/other markets
+        # keep the strict year veto.
+        poly = snap("polymarket", "poly-rec", bid=0.4, ask=0.5,
+                    extra={"full_question": "US recession in 2026?"})
+        poly.close_time = "2027-01-31T00:00:00Z"
+        kalshi = snap("kalshi", "kalshi-rec", bid=0.4, ask=0.5,
+                      extra={"full_question": "US recession in 2027?"})
+        kalshi.close_time = "2028-01-31T00:00:00Z"
+        self.assertFalse(is_compatible_match(poly, kalshi))
+
+    def test_win_nomination_matches_be_the_nominee(self) -> None:
+        # Polymarket "win the ... nomination" and Kalshi "be the ... nominee"
+        # are the same contract and must match.
+        poly = snap("polymarket", "poly-nom", bid=0.4, ask=0.5,
+                    extra={"full_question": "Will Gavin Newsom win the 2028 Democratic presidential nomination?"})
+        kalshi = snap("kalshi", "kalshi-nom", bid=0.4, ask=0.5,
+                      extra={"full_question": "Will Gavin Newsom be the Democratic Presidential nominee in 2028?"})
+        self.assertTrue(is_compatible_match(poly, kalshi))
+
+    def test_presidential_nomination_not_vice_presidential(self) -> None:
+        # Same candidate, but Presidential vs Vice-Presidential nominee are
+        # different offices/contracts and must not match.
+        self.assertEqual(_offices("Democratic Vice Presidential nominee"), {"vice_president"})
+        self.assertEqual(_offices("Democratic Presidential nominee"), {"president"})
+        poly = snap("polymarket", "poly-pn", bid=0.4, ask=0.5,
+                    extra={"full_question": "Will Gavin Newsom win the 2028 Democratic presidential nomination?"})
+        kalshi_vp = snap("kalshi", "kalshi-vp", bid=0.4, ask=0.5,
+                         extra={"full_question": "Will Gavin Newsom be the Democratic Vice Presidential nominee in 2028?"})
+        self.assertFalse(is_compatible_match(poly, kalshi_vp))
+
+    def test_head_of_state_matches_leader_not_an_election(self) -> None:
+        # "head of state" must not be tagged as an election domain (bare "state")
+        # so "be the leader of X" and "be the head of state of X" can match.
+        self.assertNotIn("election", _domains("Will X be the head of state of Venezuela?"))
+        poly = snap("polymarket", "poly-vz", bid=0.4, ask=0.5,
+                    extra={"full_question": "Will María Corina Machado be the leader of Venezuela end of 2026?"})
+        kalshi = snap("kalshi", "kalshi-vz", bid=0.4, ask=0.5,
+                      extra={"full_question": "Will María Corina Machado be the head of state of Venezuela on Dec 31, 2026?"})
+        self.assertTrue(is_compatible_match(poly, kalshi))
+
+    def test_out_as_leader_does_not_match_be_leader(self) -> None:
+        # Leaving a role is the opposite of holding it; they must not match.
+        poly = snap("polymarket", "poly-out", bid=0.4, ask=0.5,
+                    extra={"full_question": "Will Delcy Rodríguez out as leader of Venezuela by end of 2026?"})
+        kalshi = snap("kalshi", "kalshi-be", bid=0.4, ask=0.5,
+                      extra={"full_question": "Will Delcy Rodríguez be the head of state of Venezuela on Dec 31, 2026?"})
+        self.assertFalse(is_compatible_match(poly, kalshi))
+
+    def test_single_seat_does_not_match_chamber_control(self) -> None:
+        # A single House district must not match chamber-wide control; the real
+        # chamber-control market must.
+        # Real Kalshi title carries the party via yes_sub_title (kalshi_market_title).
+        kalshi = snap("kalshi", "kalshi-house", bid=0.4, ask=0.5,
+                      extra={"full_question": "Will Republicans win the House in 2026? Republican Party"})
+        seat = snap("polymarket", "poly-seat", bid=0.4, ask=0.5,
+                    extra={"full_question": "Will the Republican Party win the IN-01 House seat?"})
+        chamber = snap("polymarket", "poly-chamber", bid=0.4, ask=0.5,
+                       extra={"full_question": "Will the Republican Party control the House after the 2026 Midterm elections?"})
+        self.assertFalse(is_compatible_match(seat, kalshi))
+        self.assertTrue(is_compatible_match(chamber, kalshi))
+
+    def test_conjunctive_parlay_is_filtered(self) -> None:
+        self.assertTrue(_is_parlay_market(
+            {"title": "Will ACA credits not be extended and will the Republicans win the House in 2026?"}))
+        self.assertFalse(_is_parlay_market(
+            {"title": "Will the Republican Party control the House after the 2026 Midterm elections?"}))
+
+    def test_party_race_matches_despite_candidate_label(self) -> None:
+        # Kalshi labels a party row with the nominee's name (yes_sub_title), but
+        # the contract is still "the party wins this race". It must match the
+        # Polymarket party market for the SAME race.
+        poly = snap("polymarket", "poly-ga-d", bid=0.4, ask=0.5,
+                    extra={"full_question": "Will the Democrats win the Georgia Senate race in 2026?"})
+        kalshi = snap("kalshi", "kalshi-ga-d", bid=0.4, ask=0.5,
+                      extra={"full_question": "Will Democratics win the Senate race in Georgia? Jon Ossoff"})
+        self.assertTrue(is_compatible_match(poly, kalshi))
+        # ...but not the SAME party in a DIFFERENT state (jurisdiction veto).
+        kalshi_tx = snap("kalshi", "kalshi-tx-d", bid=0.4, ask=0.5,
+                         extra={"full_question": "Will Democratics win the Senate race in Texas? Colin Allred"})
+        self.assertFalse(is_compatible_match(poly, kalshi_tx))
+
+    def test_count_threshold_cutoff_normalization(self) -> None:
+        # "more than 84.5 games" and "at least 85 games" are the same cutoff (85).
+        self.assertEqual(_numeric_threshold("win more than 84.5 games"), ("up", 85.0, "count"))
+        self.assertEqual(_numeric_threshold("win at least 85 games this season"), ("up", 85.0, "count"))
+        self.assertEqual(_numeric_threshold("win at least 90 games"), ("up", 90.0, "count"))
+        self.assertTrue(_threshold_equal(("up", 85.0, "count"), ("up", 85.0, "count")))
+        self.assertFalse(_threshold_equal(("up", 85.0, "count"), ("up", 90.0, "count")))
+        # A bare count with no count-noun context is not a threshold.
+        self.assertIsNone(_numeric_threshold("more than 84.5 by 2026"))
+
+    def test_win_total_matches_correct_rung_only(self) -> None:
+        poly = titled_snap("polymarket", "poly-wt",
+                           "Will the Toronto Blue Jays win more than 84.5 games in the 2026 MLB Regular Season?",
+                           "2026-10-05T00:00:00Z")
+        k85 = titled_snap("kalshi", "k85", "Will Toronto win at least 85 games this season? 85+ wins",
+                          "2026-11-08T00:00:00Z")
+        k90 = titled_snap("kalshi", "k90", "Will Toronto win at least 90 games this season? 90+ wins",
+                          "2026-11-08T00:00:00Z")
+        self.assertTrue(is_compatible_match(poly, k85))
+        self.assertFalse(is_compatible_match(poly, k90))
 
     def test_matcher_rejects_win_vs_run_for_office(self) -> None:
         poly = snap(

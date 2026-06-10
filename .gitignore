@@ -13,6 +13,7 @@ venv/
 output/
 signals.jsonl
 monitor.log
+pairs.json
 
 # OS
 .DS_Store

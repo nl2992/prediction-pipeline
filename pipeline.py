@@ -325,6 +325,23 @@ def _parse_kalshi_full_book(raw: dict) -> OrderBook:
     return OrderBook(bids=yes_bids, asks=yes_asks)
 
 
+def kalshi_market_title(mkt: dict) -> str:
+    """Compose a Kalshi market title that carries the contract's identity.
+
+    For mutually-exclusive events (e.g. "Who will win the next presidential
+    election?") every market shares one generic ``title`` and the distinguishing
+    candidate/outcome lives only in ``yes_sub_title`` (e.g. "J.D. Vance"). The
+    matcher scores and vetoes on the title, so a bare ``title`` makes all such
+    markets look identical and generic — they can never match a named
+    Polymarket contract. Append ``yes_sub_title`` when it adds new information.
+    """
+    title = (mkt.get("title") or "").strip()
+    sub = (mkt.get("yes_sub_title") or "").strip()
+    if sub and sub.lower() not in title.lower():
+        return f"{title} {sub}".strip()
+    return title
+
+
 def fetch_kalshi(
     limit: int = 20,
     fetch_full_orderbooks: bool = True,
@@ -402,7 +419,7 @@ def fetch_kalshi(
             source="kalshi",
             market_id=ticker,
             event_id=mkt.get("event_ticker", ""),
-            title=mkt.get("title", ""),
+            title=kalshi_market_title(mkt),
             status=mkt.get("status", ""),
             close_time=mkt.get("close_time"),
             fetched_at=fetched_at,

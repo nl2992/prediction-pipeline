@@ -97,6 +97,12 @@ def _is_parlay_market(market: dict) -> bool:
     # signals a multi-leg parlay even when the yes/no prefix is absent.
     if len(re.findall(r"\bwin\b", title, re.IGNORECASE)) >= 3:
         return True
+    # Conjunctive parlay: two separate "will <clause>" conditions joined by
+    # "and will" ("Will ACA credits not be extended and will the GOP win the
+    # House?"). These have no single Kalshi counterpart and otherwise outscore
+    # the real single-leg market.
+    if re.search(r"\band will\b", title, re.IGNORECASE):
+        return True
     return False
 
 
@@ -289,14 +295,14 @@ def _parse_dt(s: str | None) -> datetime | None:
 
 
 def _k_snap(m: dict, fetched_at: str, event_title: str = ""):
-    from pipeline import MarketSnapshot, _parse_kalshi_top_of_book
+    from pipeline import MarketSnapshot, _parse_kalshi_top_of_book, kalshi_market_title
     ob = _parse_kalshi_top_of_book(m)
     close = m.get("close_time") or m.get("expiration_time")
     return MarketSnapshot(
         source="kalshi",
         market_id=m.get("ticker", ""),
         event_id=m.get("event_ticker", ""),
-        title=m.get("title", ""),
+        title=kalshi_market_title(m),
         status=m.get("status", ""),
         close_time=close,
         fetched_at=fetched_at,

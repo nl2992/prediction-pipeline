@@ -32,6 +32,15 @@ _STOPWORDS = frozenset({
 })
 
 
+_ROMAN_NUMERALS = {
+    "ii": "2", "iii": "3", "iv": "4", "vi": "6", "vii": "7", "viii": "8",
+    "ix": "9", "xi": "11", "xii": "12", "xiii": "13", "xiv": "14", "xv": "15",
+    "xvi": "16", "xvii": "17", "xviii": "18", "xix": "19", "xx": "20",
+    "xxi": "21", "xxii": "22", "xxiii": "23", "xxiv": "24", "xxv": "25",
+    "xxx": "30", "xl": "40", "xlv": "45", "lx": "60",
+}
+
+
 def _tokens(title: str) -> frozenset[str]:
     title = title.lower()
     # Preserve decimal numbers (e.g. "5.25%", "4.75") as single tokens before
@@ -39,7 +48,13 @@ def _tokens(title: str) -> frozenset[str]:
     # and "25", making different rate levels match each other.
     title = re.sub(r"\b(\d+\.\d+)%?", lambda m: m.group(1).replace(".", "_"), title)
     title = re.sub(r"[^\w\s]", " ", title)
-    return frozenset(t for t in title.split() if t not in _STOPWORDS and len(t) > 1)
+    # Keep single-character digits ("GTA 6", "Round 1") — they are meaningful and
+    # must align with roman-numeral normalisation ("GTA VI" -> "6").
+    toks = [t for t in title.split() if t not in _STOPWORDS and (len(t) > 1 or t.isdigit())]
+    # Normalise roman numerals to arabic so "GTA VI" == "GTA 6", "Super Bowl LX"
+    # == "Super Bowl 60". Only multi-letter numerals survive (single letters are
+    # already dropped by len>1), avoiding ambiguity with initials.
+    return frozenset(_ROMAN_NUMERALS.get(t, t) for t in toks)
 
 
 def _jaccard(a: frozenset[str], b: frozenset[str]) -> float:
@@ -56,14 +71,23 @@ def _jaccard(a: frozenset[str], b: frozenset[str]) -> float:
 _SPORT_TERMS = frozenset({
     "nba", "nfl", "mlb", "nhl", "mls", "baseball", "basketball", "football",
     "hockey", "soccer", "championship", "finals", "super", "bowl",
-    "world", "series", "stanley", "cup", "playoff", "game",
+    "world", "series", "stanley", "cup", "playoff", "game", "mvp",
 })
 
 _ELECTION_TERMS = frozenset({
-    "election", "presidential", "presidency", "president", "senate", "senator",
+    # NOTE: bare "president" is intentionally absent. It marks the office, not
+    # an election — "Will the President be impeached?" is not an election
+    # market, and classifying it as one vetoed legitimate impeachment matches
+    # whose counterpart (e.g. "Will Trump be impeached?") names no office.
+    # "presidential"/"presidency" remain as genuine election signals.
+    # Bare "state" is also intentionally absent: it appears in "head of state",
+    # "state of the union", etc. and falsely tagged those as elections. Genuine
+    # election markets carry stronger signals (election/senate/governor/nominee),
+    # and "Secretary of State" is still caught via "secretary".
+    "election", "presidential", "presidency", "senate", "senator",
     "governor", "governorship", "gubernatorial", "primary", "nominee",
     "nomination", "democratic", "democratics", "democrat", "republican",
-    "republicans", "attorney", "general", "secretary", "state", "mayor",
+    "republicans", "attorney", "general", "secretary", "mayor",
     "minister", "parliament", "parliamentary",
 })
 
@@ -97,7 +121,27 @@ _COUNTRY_ALIASES: dict[str, tuple[str, ...]] = {
     "united states": ("united states", " us ", " usa ", " u s "),
     "israel": ("israel", "israeli"),
     "taiwan": ("taiwan", "taiwanese"),
+    "japan": ("japan", "japanese"),
+    "china": ("china", "chinese"),
+    "germany": ("germany", "german"),
+    "canada": ("canada", "canadian"),
+    "india": ("india", "indian"),
+    "russia": ("russia", "russian"),
+    "mexico": ("mexico", "mexican"),
+    "australia": ("australia", "australian"),
+    "italy": ("italy", "italian"),
+    "spain": ("spain", "spanish"),
+    "south korea": ("south korea", "korean"),
+    "argentina": ("argentina", "argentine", "argentinian"),
+    "ukraine": ("ukraine", "ukrainian"),
+    "venezuela": ("venezuela", "venezuelan"),
+    "iran": ("iran", "iranian"),
+    "north korea": ("north korea", "north korean"),
 }
+
+# Foreign (non-US) countries. US states and "united states" are domestic and
+# excluded — used to veto a foreign-named market against an unmarked one.
+_FOREIGN_COUNTRIES: frozenset[str] = frozenset(_COUNTRY_ALIASES) - {"united states"}
 
 _US_STATE_ALIASES: dict[str, tuple[str, ...]] = {
     "alabama": ("alabama", " al "),
@@ -198,7 +242,14 @@ def _domains(text: str) -> set[str]:
 
 def _offices(text: str) -> set[str]:
     low = _ascii_lower(text)
-    return {office for office, pat in _OFFICE_PATTERNS if re.search(pat, low)}
+    found = {office for office, pat in _OFFICE_PATTERNS if re.search(pat, low)}
+    # "vice president(ial)" matches the president pattern as a substring. Treat
+    # it as its own office so a VP nominee/race is not confused with a
+    # presidential one (they are different contracts).
+    if re.search(r"\bvice[\s-]+presiden(?:t|tial|cy)\b", low):
+        found.discard("president")
+        found.add("vice_president")
+    return found
 
 
 def _parties(text: str) -> set[str]:
@@ -231,6 +282,85 @@ def _years(text: str) -> set[str]:
         if 20 <= int(yy) <= 49:
             years.add(f"20{yy}")
     return years
+
+
+def _numeric_threshold(text: str) -> tuple[str, float, str] | None:
+    """Extract a single one-sided numeric threshold: ``(direction, value, unit)``.
+
+    Markets express the same level differently across exchanges:
+      * crypto:    "hit $150k" / "reach $150,000"  vs  "above $149,999.99"
+      * inflation: "reach more than 5%"            vs  "Above 5.0%"
+    ``unit`` is ``"usd"`` or ``"pct"``; thresholds of different units are never
+    comparable. Two-sided ranges ("between 2% and 3%") return None — they are a
+    different shape and are handled by the range logic / left to title scoring.
+    Returns None without a clear above/below direction.
+    """
+    low = _ascii_lower(text)
+    if re.search(r"\bbetween\b.*\band\b", low):
+        return None  # two-sided range, not a one-sided threshold
+    if re.search(r"\b(below|under|less than|at most|or below)\b", low):
+        direction = "down"
+    elif re.search(r"\b(above|over|reach|reaches|hit|hits|exceed|exceeds|at least|greater than|more than|or above)\b", low):
+        direction = "up"
+    else:
+        return None
+    dollars: list[float] = []
+    # [kmb] suffix must not be the start of a following word (e.g. "by").
+    for m in re.finditer(r"\$\s*([0-9][0-9,]*(?:\.[0-9]+)?)\s*([kmb])?(?![a-z])", low):
+        num = float(m.group(1).replace(",", ""))
+        suffix = m.group(2)
+        if suffix == "k":
+            num *= 1e3
+        elif suffix == "m":
+            num *= 1e6
+        elif suffix == "b":
+            num *= 1e9
+        dollars.append(num)
+    if dollars:
+        return (direction, max(dollars), "usd")
+    pcts = [float(x) for x in re.findall(r"([0-9]+(?:\.[0-9]+)?)\s*%", low)]
+    if pcts:
+        return (direction, max(pcts), "pct")
+    # Integer count thresholds, scoped to a count noun so bare numbers/years are
+    # not mistaken for thresholds. Normalise to the integer cutoff (smallest
+    # value that resolves YES) so "more than 84.5 games" and "at least 85 games"
+    # are recognised as the same level (cutoff 85), while "at least 90" (90) is
+    # distinct. Only "up" direction (win totals, seat counts) is handled.
+    if direction == "up" and re.search(
+        r"\b(games?|wins?|seats?|points?|goals?|runs?|medals?|votes?|electoral|cuts?|home runs?|strikeouts?)\b", low
+    ):
+        m = re.search(r"\b(at least|more than|over|greater than)\s+(\d+(?:\.\d+)?)", low)
+        if m:
+            n = float(m.group(2))
+            if m.group(1) == "at least":
+                cutoff = int(n) if n == int(n) else int(n) + 1  # >= n
+            else:
+                cutoff = int(n) + 1  # > n  (84.5 -> 85, 85 -> 86)
+            return ("up", float(cutoff), "count")
+        m2 = re.search(r"\b(\d+)\s*\+", low)  # "85+ wins"
+        if m2:
+            return ("up", float(m2.group(1)), "count")
+    return None
+
+
+def _threshold_equal(
+    a: tuple[str, float, str] | None,
+    b: tuple[str, float, str] | None,
+) -> bool:
+    """True when two thresholds match in direction, unit, and value.
+
+    Tolerances treat "$149,999.99"=="$150,000" and "5%"=="5.0%" as the same
+    level, while keeping adjacent rungs distinct ($140k≠$150k, 4.9%≠5.0%) — the
+    off-by-one trap that sank the iter-7 catalog-price path.
+    """
+    if not a or not b or a[0] != b[0] or a[2] != b[2]:
+        return False
+    va, vb, unit = a[1], b[1], a[2]
+    if unit == "usd":
+        return abs(va - vb) / max(va, vb, 1.0) <= 0.001
+    if unit == "count":
+        return va == vb  # normalised integer cutoffs; exact match
+    return abs(va - vb) <= 0.05  # pct: absolute, tighter than one bucket step
 
 
 def _rates(text: str) -> set[str]:
@@ -381,6 +511,27 @@ _GENERIC_NAME_TERMS = frozenset({
     "championship", "champion", "winner", "drivers", "constructors",
     "hockey", "world", "silver", "ball", "award", "nominee", "primary",
     "president", "senate", "race", "iihf",
+    # Generic contest phrases are not people. Without these, a Titlecased
+    # "Presidential Election" in a Polymarket title is mistaken for a proper
+    # name, which then fails to overlap the candidate name on the Kalshi side.
+    "presidential", "election", "elections", "primaries",
+    # Sports event descriptors. Kalshi names a finalist by city only ("Will the
+    # New York win the 2026 Pro Basketball Finals?"); "New York" is stripped as
+    # a jurisdiction, so without these the phantom name "Pro Basketball Finals"
+    # is all that remains and never overlaps the Polymarket team name. League
+    # acronyms (nba/wnba/nfl/nhl/mlb) are deliberately NOT generic so the NBA
+    # vs WNBA distinction survives.
+    "pro", "basketball", "baseball", "football", "soccer", "finals", "final",
+    # Award/contest phrases. "Nobel Peace Prize" etc. are not people; if treated
+    # as proper names they create a phantom shared name that makes unrelated
+    # candidates (e.g. "Putin" vs "Dario Amodei") falsely overlap.
+    "nobel", "peace", "prize", "oscar", "oscars", "emmy", "grammy", "heisman",
+    "cup", "trophy", "medal",
+    # League acronyms as NAME tokens only — so "NBA Finals"/"NBA Championship"
+    # are not phantom proper names that block a team-name overlap. League
+    # detection uses _sports_league (regex), which is unaffected, so the
+    # NBA-vs-WNBA distinction is preserved.
+    "nba", "wnba", "nfl", "nhl", "mlb", "mls", "ncaa",
 })
 
 _LEADING_QUESTION_WORDS = re.compile(
@@ -422,7 +573,19 @@ def _named_entities(text: str) -> set[str]:
     ascii_text = _LEADING_QUESTION_WORDS.sub("", ascii_text)
     entities = set(_proper_names(ascii_text))
     low = ascii_text.lower()
-    for entity in ("bitcoin", "btc", "ethereum", "eth", "gold", "silver", "opec"):
+    # Canonicalise ticker/name synonyms so "BTC" and "Bitcoin" (etc.) are the
+    # same entity across exchanges — needed for the threshold-led match path.
+    _ENTITY_SYNONYMS = {
+        "btc": "bitcoin", "bitcoin": "bitcoin",
+        "eth": "ethereum", "ethereum": "ethereum",
+        "sol": "solana", "solana": "solana",
+        "xrp": "ripple", "ripple": "ripple",
+        "doge": "dogecoin", "dogecoin": "dogecoin",
+    }
+    for alias, canonical in _ENTITY_SYNONYMS.items():
+        if re.search(rf"\b{alias}\b", low):
+            entities.add(canonical)
+    for entity in ("gold", "silver", "opec"):
         if re.search(rf"\b{entity}\b", low):
             entities.add(entity)
     for match in re.finditer(r"\b([A-Z][A-Za-z0-9]{2,}(?:\s+[A-Z][A-Za-z0-9]{1,})?)\b", ascii_text):
@@ -501,12 +664,25 @@ def _contract_actions(text: str) -> set[str]:
         actions.add("handicap")
     if re.search(r"\bwedding\b|\bbridesmaids?\b|\battend\b", low):
         actions.add("wedding_attendance")
-    if re.search(r"\bhow many\b|\bnumber of\b", low):
+    # "how many / number of X" is an enumeration count — but "number of goals
+    # over 2.5" is a threshold on that count, not an open enumeration, so do not
+    # tag it (it would be vetoed against an "over 2.5 goals" phrasing).
+    if re.search(r"\bhow many\b|\bnumber of\b", low) and not re.search(
+        r"\b(over|under|above|below|more than|at least|fewer than|exactly)\b\s*\d", low
+    ):
         actions.add("count")
-    if re.search(r"\bwin more\b|\bmore .* than\b", low):
+    # "more than <number>" is a numeric threshold (win totals, etc.), not a
+    # head-to-head comparison — exclude it so it is not vetoed against an
+    # "at least <number>" phrasing of the same level.
+    if re.search(r"\bwin more\b|\bmore .* than\b", low) and not re.search(r"\bmore than\s+\d", low):
         actions.add("comparison")
     if re.search(r"\bwinless\b", low):
         actions.add("winless")
+    # Reaching a round (final / semifinal / playoffs / knockout) is NOT winning
+    # the whole event — "France reach the final" != "France win the World Cup".
+    if (re.search(r"\breach(?:es|ed)?\b.{0,30}\b(final|finals|semi-?final|quarter-?final|playoffs?|knockout|round of \d+)\b", low)
+            or re.search(r"\b(advance|advances|advanced|qualify|qualifies|qualified)\b", low)):
+        actions.add("reach_round")
     if re.search(r"\bengag(?:e|ed|ement)\b", low):
         actions.add("engagement")
     if re.search(r"\barrest(?:ed)?\b", low):
@@ -525,9 +701,10 @@ def _contract_actions(text: str) -> set[str]:
         actions.add("starting_qb")
     if re.search(r"\b(run|runs|running|declare|declares|first this list)\b", low):
         actions.add("run_or_declare")
-    if re.search(r"\b(win|wins|winner)\b.*\b(nominee|nomination)\b|\b(nominee|nomination)\b.*\b(win|wins|winner)\b", low):
-        actions.add("win_nomination")
-    elif re.search(r"\b(nominee|nomination)\b", low):
+    # "win the nomination" and "be the nominee" are the same contract outcome;
+    # collapse to one action so Polymarket ("win the ... nomination") and Kalshi
+    # ("be the ... nominee") candidate ladders are not vetoed as disjoint.
+    if re.search(r"\b(nominee|nomination)\b", low):
         actions.add("nomination")
     if re.search(r"\b(defeat|defeats)\b", low):
         actions.add("head_to_head")
@@ -539,13 +716,85 @@ def _contract_actions(text: str) -> set[str]:
         actions.add("ticket")
     if re.search(r"\b(occur|occurs|happen|happens|held|take place)\b", low):
         actions.add("occur")
-    if re.search(r"\b(leave|resign|depart|ousted|fired)\b", low):
+    leaving = re.search(r"\b(leave|leaves|resign|resigns|depart|departs|ousted|fired|step down|steps down)\b|\bout as\b|\bout of office\b", low)
+    if leaving:
         actions.add("leave_role")
+    elif re.search(r"\b(head of state|be the leader of|officially lead|de facto lead|in power|hold power|remain in power)\b", low):
+        # Holding/becoming the leader is the OPPOSITE of leaving; keep them as
+        # disjoint actions so "X out as leader" never matches "X be head of state".
+        actions.add("hold_office")
     if re.search(r"\bmeet next\b|where will .*meet|next meet", low):
         actions.add("meeting_location")
     if re.search(r"\bbecome\s+prime\s+minister|next\s+prime\s+minister", low):
         actions.add("become_pm")
+    # Specific political-event predicates. These share generic scaffolding
+    # ("Will <person> ___ before his term ends?") so token overlap is high and
+    # generic vetoes miss them; treat each as a distinct, mutually-exclusive
+    # outcome (see _POLITICAL_EVENT_ACTIONS veto in is_compatible_match).
+    if re.search(r"\bimpeach(?:ed|ment|es)?\b", low):
+        actions.add("impeach")
+    if re.search(r"\bmartial law\b", low):
+        actions.add("martial_law")
+    if re.search(r"\b(?:government|govt)\s+shutdown\b", low):
+        actions.add("govt_shutdown")
+    if re.search(r"\bnational emergency\b", low):
+        actions.add("national_emergency")
+    if re.search(r"\bpardon(?:ed|s)?\b", low):
+        actions.add("pardon")
+    if re.search(r"\bindict(?:ed|ment)?\b|\bcriminally charged\b", low):
+        actions.add("indicted")
     return actions
+
+
+# Distinct, mutually-exclusive political-event outcomes. If both sides name a
+# specific one and they disagree, the markets are about different events even
+# when subject, timing, and most tokens match.
+_POLITICAL_EVENT_ACTIONS = frozenset(
+    {"impeach", "martial_law", "govt_shutdown", "national_emergency", "pardon", "indicted"}
+)
+
+
+def _sports_league(text: str) -> set[str]:
+    """Detect the specific sports league a market refers to.
+
+    Kalshi avoids trademarks ("Pro Basketball" = NBA), so map both phrasings to
+    one canonical league. Crucially this separates NBA from WNBA (and the men's
+    from women's / pro from college variants) so a finalist named by city alone
+    ("New York") cannot match across leagues.
+    """
+    low = _ascii_lower(text)
+    leagues: set[str] = set()
+    if re.search(r"\bwnba\b|women'?s? (?:pro )?basketball", low):
+        leagues.add("wnba")
+    elif re.search(r"\bnba\b|\bpro basketball\b", low):
+        leagues.add("nba")
+    if re.search(r"\bwnfl\b", low):
+        leagues.add("wnfl")
+    elif re.search(r"\bnfl\b|\bpro football\b", low):
+        leagues.add("nfl")
+    if re.search(r"\bnhl\b|\bpro hockey\b", low):
+        leagues.add("nhl")
+    if re.search(r"\bmlb\b|\bpro baseball\b", low):
+        leagues.add("mlb")
+    return leagues
+
+
+def _legislative_scope(text: str) -> str | None:
+    """Distinguish a single legislative seat from chamber-wide control.
+
+    "Will the Republican Party win the IN-01 House seat?" (one district) is a
+    different contract from "Which party will win the U.S. House?" (the whole
+    chamber). Without this they share enough tokens ("win", "house", party) to
+    match, and a district market can even outscore the correct chamber market.
+    """
+    low = _ascii_lower(text)
+    # A specific seat: a district code (e.g. "in-01"), or explicit seat/district.
+    if re.search(r"\b[a-z]{2}-\d{1,2}\b|\bhouse seat\b|\bsenate seat\b|\bcongressional district\b", low):
+        return "seat"
+    # Chamber-wide control of the House or Senate.
+    if re.search(r"\b(control|controls|majority|win|wins|take|takes|flip|hold)\b[^.]*\b(the\s+)?(u\.?s\.?\s+)?(house|senate)\b", low):
+        return "chamber"
+    return None
 
 
 def _is_generic_winner_market(text: str) -> bool:
@@ -581,9 +830,27 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
     k_all_juris = _jurisdictions(k_text)
     if p_all_juris and k_all_juris and p_all_juris.isdisjoint(k_all_juris):
         return False
+    # A market naming a FOREIGN country must not match one that names no
+    # jurisdiction at all. Both exchanges are US-centric, so an unmarked market
+    # ("Will there be a recession in 2026?") is the domestic/US contract — it is
+    # not the same as "UK Recession in 2026?". Without this, the unmarked side
+    # is greedily captured by a foreign variant, starving the correct US match.
+    # US states count as domestic, so this only fires on foreign countries.
+    p_foreign = bool(p_all_juris & _FOREIGN_COUNTRIES)
+    k_foreign = bool(k_all_juris & _FOREIGN_COUNTRIES)
+    if (p_foreign and not k_all_juris) or (k_foreign and not p_all_juris):
+        return False
     p_matchup = _matchup_signature(p_text)
     k_matchup = _matchup_signature(k_text)
     if p_matchup and k_matchup and p_matchup != k_matchup:
+        return False
+    p_league = _sports_league(p_text)
+    k_league = _sports_league(k_text)
+    if p_league and k_league and p_league.isdisjoint(k_league):
+        return False
+    p_scope = _legislative_scope(p_text)
+    k_scope = _legislative_scope(k_text)
+    if {p_scope, k_scope} == {"seat", "chamber"}:
         return False
 
     if "election" in p_domains and "election" in k_domains:
@@ -611,17 +878,35 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
         ):
             return False
         if (p_names and _is_party_contract(k_text)) or (k_names and _is_party_contract(p_text)):
-            return False
+            # Exception: in a single race, a party IS its one candidate. Kalshi
+            # may label a party row with the nominee (yes_sub_title "Jon Ossoff")
+            # while Polymarket says "Will the Democrats win ...". When BOTH sides
+            # assert the SAME party, the named side is that party's candidate, so
+            # do not reject. (Office/jurisdiction/year vetoes still apply.)
+            if not (p_parties and k_parties and p_parties == k_parties):
+                return False
 
     p_actions = _contract_actions(p_text)
     k_actions = _contract_actions(k_text)
     if p_actions and k_actions and p_actions.isdisjoint(k_actions):
         return False
+    p_pol = p_actions & _POLITICAL_EVENT_ACTIONS
+    k_pol = k_actions & _POLITICAL_EVENT_ACTIONS
+    if p_pol and k_pol and p_pol.isdisjoint(k_pol):
+        return False
+    # Close times are the authoritative horizon signal. When both sides resolve
+    # within ~72h, they are the same deadline expressed differently
+    # ("by end of 2026" vs "before Jan 1, 2027"), so the noisy text-derived
+    # horizon vetoes (deadline-action asymmetry, year tokens) must not reject
+    # them. Election-cycle close dates are months/years apart, so this guard
+    # never relaxes those.
+    _hdelta = _close_delta_hours(getattr(poly, "close_time", None), getattr(kalshi, "close_time", None))
+    _same_horizon = _hdelta is not None and _hdelta <= 72.0
     if ("rank" in p_actions) != ("rank" in k_actions):
         return False
     if ("stat_leader" in p_actions) != ("stat_leader" in k_actions):
         return False
-    if ("deadline" in p_actions) != ("deadline" in k_actions):
+    if not _same_horizon and ("deadline" in p_actions) != ("deadline" in k_actions):
         return False
     if ("comparison" in p_actions) != ("comparison" in k_actions):
         return False
@@ -666,13 +951,33 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
 
     p_years = _years(p_text)
     k_years = _years(k_text)
-    if p_years and k_years and p_years.isdisjoint(k_years):
-        return False
+    if not _same_horizon and p_years and k_years and p_years.isdisjoint(k_years):
+        # Sports seasons span two calendar years and the exchanges label them
+        # differently: Polymarket by season-start ("2026 NFL MVP"), Kalshi by
+        # award year (ticker KXNFLMVP-27). So an ADJACENT-year gap (exactly 1)
+        # in a sports context is the same award, not a different one. Election
+        # cycles differ by >= 2, so this never relaxes them.
+        sports_ctx = "sports" in p_domains or "sports" in k_domains
+        year_gap = min(abs(int(a) - int(b)) for a in p_years for b in k_years)
+        if not (sports_ctx and year_gap == 1):
+            return False
 
-    p_rates = _rates(p_text)
-    k_rates = _rates(k_text)
-    if p_rates and k_rates and p_rates.isdisjoint(k_rates):
-        return False
+    # One-sided numeric thresholds ($ or %) must agree. Different rungs of a
+    # ladder ("above $140k" vs "above $150k"; "above 4.9%" vs "above 5.0%") are
+    # different contracts. When BOTH sides parse a threshold, this tolerant
+    # numeric comparison is authoritative and supersedes the cruder string-based
+    # `_rates` veto below — which would otherwise reject equal-but-differently-
+    # written levels ("5%" vs "5.0%").
+    p_thr = _numeric_threshold(p_text)
+    k_thr = _numeric_threshold(k_text)
+    if p_thr and k_thr:
+        if not _threshold_equal(p_thr, k_thr):
+            return False
+    else:
+        p_rates = _rates(p_text)
+        k_rates = _rates(k_text)
+        if p_rates and k_rates and p_rates.isdisjoint(k_rates):
+            return False
 
     p_bounds = _comparison_bounds(p_text)
     k_bounds = _comparison_bounds(k_text)
@@ -746,7 +1051,6 @@ _ARB_ACTIONS = frozenset({
     "group_winner",
     "starting_qb",
     "run_or_declare",
-    "win_nomination",
     "nomination",
     "head_to_head",
     "win",
@@ -982,7 +1286,23 @@ def match_markets(
             k_toks = kalshi_tok[k.market_id]
             sim = _jaccard(p_toks, k_toks)
             if sim < min_title_similarity:
-                continue
+                # Threshold-led acceptance: asset price markets word the same
+                # level differently ("$150k" vs "above $149,999.99") and carry
+                # noise tokens ("at 11:59 PM ET"), so title overlap is low.
+                # Accept ONLY on an EXACT dollar-threshold match, a shared named
+                # entity (the asset), and a near-identical resolution time.
+                # Exact-threshold gating avoids the off-by-one ladder regression
+                # that sank the iter-7 catalog-price path.
+                p_thr = _numeric_threshold(_snapshot_text(p))
+                k_thr = _numeric_threshold(_snapshot_text(k))
+                dh = _close_delta_hours(p.close_time, k.close_time)
+                shared_entity = bool(_named_entities(p.title) & _named_entities(k.title))
+                if not (
+                    p_thr and k_thr and _threshold_equal(p_thr, k_thr)
+                    and shared_entity
+                    and dh is not None and dh <= 72.0
+                ):
+                    continue
             # Token-ratio guard: block short labels ("Democratic Party", 2 tokens)
             # from matching long questions (8+ tokens) via coincidental Jaccard.
             if min_token_ratio > 0 and p_toks and k_toks:
