@@ -63,11 +63,30 @@ _TOKEN_SYNONYMS: dict[str, tuple[str, ...]] = {
     "nyc": ("new", "york", "city"),
     "successfully": ("success",),
     "etfs": ("etf",),
+    # Singularise high-frequency plurals so "rates" == "rate", "hikes" == "hike".
+    "rates": ("rate",),
+    "hikes": ("hike",),
 }
+
+# Multi-word phrase canonicalisation, applied to the raw (lowercased) title
+# before tokenisation. Targets monetary-policy wording, where the two exchanges
+# phrase the same event very differently ("Federal Reserve raise interest rates"
+# vs "Fed rate hike"). Kept narrow and direction-aware so a hike is never
+# conflated with a cut. (pattern, replacement) pairs, applied in order.
+_PHRASE_NORMALISERS: tuple[tuple[str, str], ...] = (
+    (r"\bfederal\s+reserve\b", "fed"),
+    (r"\binterest\s+(rates?)\b", r"\1"),
+    (r"\b(?:raise|raising|hike|hiking|increase|increasing)\s+rates?\b", "rate hike"),
+    (r"\brates?\s+(?:hike|increase)\b", "rate hike"),
+    (r"\b(?:cut|cutting|lower|lowering|reduce|reducing)\s+rates?\b", "rate cut"),
+    (r"\brates?\s+(?:cut|reduction|decrease)\b", "rate cut"),
+)
 
 
 def _tokens(title: str) -> frozenset[str]:
     title = title.lower()
+    for pat, repl in _PHRASE_NORMALISERS:
+        title = re.sub(pat, repl, title)
     # Preserve numbers (with decimals and thousands separators) as single tokens.
     # E.g. "$150,000" / "150k" / "5.25%" all become single tokens to avoid
     # splitting into ['150', '000'] or ['5', '25'].
@@ -483,6 +502,21 @@ _KNOWN_ORGS = (
     "amazon", "nvidia", "tesla", "spacex", "xai", "mistral", "waymo",
 )
 _KNOWN_AI_PRODUCTS = ("claude", "gpt", "gemini", "llama", "grok")
+
+
+def _monetary_direction(text: str) -> set[str]:
+    """Direction of a rate-policy market: ``{"up"}`` (hike), ``{"down"}`` (cut),
+    or empty. Used to veto a rate-cut market against a rate-hike one — opposite
+    monetary actions are never the same contract. Scoped to rate/Fed wording by
+    the caller so generic "raise"/"cut" verbs elsewhere don't trip it.
+    """
+    low = _ascii_lower(text)
+    dirs: set[str] = set()
+    if re.search(r"\b(hike|hikes|raise|raises|raising|increase|increases|increasing)\b", low):
+        dirs.add("up")
+    if re.search(r"\b(cut|cuts|cutting|lower|lowers|lowering|reduce|reduces|reducing)\b", low):
+        dirs.add("down")
+    return dirs
 
 
 def _known_orgs(text: str) -> set[str]:
@@ -1105,6 +1139,15 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
     k_pol = k_actions & _POLITICAL_EVENT_ACTIONS
     if p_pol and k_pol and p_pol.isdisjoint(k_pol):
         return False
+    # Rate-policy direction veto: a rate CUT market and a rate HIKE market price
+    # opposite monetary actions and must never match. Scoped to pairs where both
+    # sides are monetary-policy contracts so generic "raise"/"cut" verbs in other
+    # domains don't trip it. (Same-direction cut/cut or hike/hike is unaffected.)
+    if "monetary_policy" in p_actions and "monetary_policy" in k_actions:
+        p_dir = _monetary_direction(p_text)
+        k_dir = _monetary_direction(k_text)
+        if p_dir and k_dir and p_dir.isdisjoint(k_dir):
+            return False
     # Close times are the authoritative horizon signal. When both sides resolve
     # within ~72h, they are the same deadline expressed differently
     # ("by end of 2026" vs "before Jan 1, 2027"), so the noisy text-derived

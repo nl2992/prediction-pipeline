@@ -1210,6 +1210,19 @@ class CrossPlatformFixtureRegressions(unittest.TestCase):
             self._k("GTA 6 released in calendar 2026?"),
         ))
 
+    def test_fed_hike_paraphrase_matches(self) -> None:
+        # Robustness (run 6): "Federal Reserve raise interest rates" vs "Fed rate
+        # hike" — monetary-policy phrase canonicalisation lifts this over the gate.
+        pm = self._pm("Will the Federal Reserve raise interest rates in March 2026?", "2026-03-18T04:00:00Z")
+        k = self._k("Fed rate hike at March 2026 meeting?", "2026-03-18T04:00:00Z")
+        self.assertTrue(match_markets([pm], [k], min_title_similarity=0.30, max_close_delta_hours=9999))
+
+    def test_rate_cut_not_confused_with_rate_hike(self) -> None:
+        # Direction-aware canonicalisation must NOT fold a cut into a hike.
+        pm = self._pm("Will the Fed cut rates in March 2026?", "2026-03-18T04:00:00Z")
+        k = self._k("Fed rate hike at March 2026 meeting?", "2026-03-18T04:00:00Z")
+        self.assertFalse(match_markets([pm], [k], min_title_similarity=0.30, max_close_delta_hours=9999))
+
     def test_fed_month_mismatch_rejected(self) -> None:
         # PAIR-020: September FOMC vs July FOMC are different meetings.
         self.assertFalse(is_compatible_match(

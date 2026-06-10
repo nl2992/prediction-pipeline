@@ -9,6 +9,48 @@
 - **Arb engine (`fee_model="kalshi_variable"`): reproduces the fixture's economics exactly — all 42 `best_edge_net` match, 14/14 arbs detected**
 - **Test Data**: `pairs_fixture.json` — 50 Polymarket↔Kalshi candidate pairs (42 should match, 8 should not)
 
+## Iteration log — 2026-06-11 (loop run 6) — robustness probing beyond the fixture
+
+The 50-pair fixture is fully satisfied (matching + arb), so this run stress-tested the
+matcher on 14 hand-written adversarial pairs using real cross-exchange phrasing the
+fixture doesn't cover. Surfaced and triaged 5 candidate issues:
+
+**Fixed (safe, this commit): monetary-policy paraphrase false-negative.**
+"Will the Federal Reserve raise interest rates in March 2026?" vs "Fed rate hike at
+March 2026 meeting?" scored only 0.182 Jaccard (compatible, but below the 0.30 gate).
+Added direction-aware phrase canonicalisation in `_tokens`: "federal reserve"→"fed",
+"interest rate(s)"→"rate", and hike/cut wording folded to canonical "rate hike" /
+"rate cut" (never conflating the two directions); plus singularising "rates"→"rate",
+"hikes"→"hike". Pair now matches; suite 85/85, fixture 100%, no regressions.
+
+**Fixed (this commit): rate-cut vs rate-hike false-positive.** Writing the regression
+test for the Fed fix exposed a more serious latent bug — "Fed cut rates in March 2026"
+matched "Fed rate hike at March 2026 meeting" (jaccard 0.571, no direction veto).
+Opposite monetary actions must never match. Added `_monetary_direction()` and a veto in
+`is_compatible_match`, scoped to pairs where both sides are monetary-policy contracts
+(so generic raise/cut verbs in other domains are unaffected; same-direction cut/cut and
+hike/hike still match). Fixture's Fed pairs (PAIR-019 cut/cut, PAIR-026) unaffected.
+
+**Triaged as NOT a bug:** "Trump win 2024" vs "Trump win 2028" only matched under the
+probe's artificial equal close-times; with realistic 2024/2028 close dates the year
+veto rejects it correctly.
+
+**Triaged as ambiguous (left as-is):** "Biden run for president 2028" vs "Biden seek
+2028 nomination" — running and winning the nomination are different events; rejecting
+is defensible.
+
+**Known limitation (proposed fix, NOT yet applied — too risky to rush):** single-word
+proper nouns are invisible to the name vetoes, so "Lakers win 2026 NBA title" vs
+"Celtics win 2026 NBA title" and "Biden win 2028 nomination" vs "Newsom win 2028
+nomination" falsely match (`_proper_names`/`_selected_names` only capture multi-word
+names). A naive single-name disjointness veto was prototyped and **rejected**: it would
+wrongly break 9 fixture pairs (BTC/Bitcoin, SCOTUS/Supreme Court, Moon/Crewed,
+NYC/Central Park, …) because capitalised common nouns and ticker synonyms are
+indistinguishable from proper nouns at that crude level. Proposed safe approach for a
+later run: extract only the *winner-subject* (the token governed by "to win"/"wins"/
+"to seek"), apply existing synonym normalisation, and veto when both sides name a
+winner-subject and they are disjoint. Needs exhaustive fixture validation before merge.
+
 ## Iteration log — 2026-06-11 (loop run 5) — accurate Kalshi fee model
 
 Closed the last gap between the engine and the fixture's arb ground truth. The
