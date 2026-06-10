@@ -9,6 +9,35 @@
 - **Arb engine (`fee_model="kalshi_variable"`): reproduces the fixture's economics exactly — all 42 `best_edge_net` match, 14/14 arbs detected**
 - **Test Data**: `pairs_fixture.json` — 50 Polymarket↔Kalshi candidate pairs (42 should match, 8 should not)
 
+## Iteration log — 2026-06-11 (loop run 8) — LIVE data: launched dashboard, found+fixed a real miss
+
+Launched the FastAPI dashboard (`server.py`, port 8000; installed dev deps fastapi+uvicorn).
+Live connectivity: **Kalshi ok**, **Polymarket unreachable** — egress IP is Australian and
+Polymarket geo-restricts AU (and WARP isn't installed), so the documented "non-US IP"
+note isn't sufficient here. Ran the engine end-to-end on **real live Kalshi markets**.
+
+**Real miss surfaced on live data (now fixed).** A Polymarket-style paraphrase
+"Will BTC top $110k in 2026?" did NOT match the live Kalshi market "Will Bitcoin be above
+$109,999.99 by Dec 31, 2026 at 11:59 PM ET?" Two root causes:
+1. "top" (and surpass/breach/cross) were not recognised as up-threshold verbs, so the
+   Polymarket side parsed no threshold and the threshold-led bridge couldn't fire.
+2. More important: a whole-period reach ("above $X **in 2026**") was classified as
+   point-settlement, so the settlement-XOR veto rejected it against Kalshi's "above $X
+   **by Dec 31**" (touch) — even though both mean "reach the level anytime before close".
+
+**Fix:** added top/tops/topping/surpass(es)/surpassing/breach(es)/cross(es) to both
+`_numeric_threshold` (up direction) and `_settlement_type` (touch verbs); and taught
+`_settlement_type` that a reach-verb scoped to a whole period ("in 20XX"/"during 20XX",
+alongside the existing "by <deadline>") is a touch. A SPECIFIC-DATE settlement
+("above $X **on** Dec 31") or bare "at year-end" stays point, so the PAIR-015 trap
+(point vs touch) still vetoes correctly.
+
+**Verified on live data:** all four paraphrased BTC questions now match their live Kalshi
+counterparts (raw token jaccard ~0.17, bridged by BTC/Bitcoin + $110k/$109,999.99 +
+period/deadline), with live arb net edges computed from real Kalshi quotes via
+`fee_model="kalshi_variable"`. Added 3 regression tests (verb parsing, period↔deadline
+bridge, point-on-date still distinct from touch). Suite 93/93, fixture 100% pairwise.
+
 ## Iteration log — 2026-06-11 (loop run 7) — winner-subject veto (single-name contestants)
 
 Implemented the fix proposed (but deliberately deferred) in run 6: single-word proper

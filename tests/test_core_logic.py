@@ -1240,6 +1240,27 @@ class CrossPlatformFixtureRegressions(unittest.TestCase):
         k = self._k("Thunder to win 2026 NBA Championship?", "2026-06-21T04:00:00Z")
         self.assertTrue(match_markets([pm], [k], min_title_similarity=0.30, max_close_delta_hours=9999))
 
+    def test_top_surpass_breach_parse_as_up_threshold(self) -> None:
+        # Live-data find (run 8): colloquial reach verbs must parse as up-thresholds.
+        for verb in ("top", "surpass", "breach", "cross"):
+            thr = _numeric_threshold(f"Will BTC {verb} $110k in 2026?")
+            self.assertEqual(thr, ("up", 110000.0, "usd"), msg=verb)
+
+    def test_period_reach_matches_by_deadline_threshold_bridge(self) -> None:
+        # Real live Kalshi wording vs a Polymarket-style paraphrase. Raw token
+        # overlap is ~0.17; threshold-led acceptance bridges BTC/Bitcoin,
+        # $110k/$109,999.99, and "in 2026"/"by Dec 31" (both whole-period = touch).
+        pm = self._pm("Will BTC top $110k in 2026?", "2026-12-31T17:00:00Z")
+        k = self._k("Will Bitcoin be above $109,999.99 by Dec 31, 2026 at 11:59 PM ET?", "2026-12-31T17:00:00Z")
+        self.assertTrue(match_markets([pm], [k], min_title_similarity=0.30, max_close_delta_hours=9999))
+
+    def test_point_on_date_still_distinct_from_touch_period(self) -> None:
+        # PAIR-015 trap must survive the period-settlement change: "above $X ON a
+        # specific date" (point) is NOT the "touch $X anytime in 2026" contract.
+        pm = self._pm("Will Bitcoin be above $110,000 on Dec 31, 2026?", "2026-12-31T17:00:00Z")
+        k = self._k("BTC to touch $110k at any point in 2026?", "2026-12-31T17:00:00Z")
+        self.assertFalse(match_markets([pm], [k], min_title_similarity=0.30, max_close_delta_hours=9999))
+
     def test_fed_month_mismatch_rejected(self) -> None:
         # PAIR-020: September FOMC vs July FOMC are different meetings.
         self.assertFalse(is_compatible_match(

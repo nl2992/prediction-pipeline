@@ -361,7 +361,10 @@ def _numeric_threshold(text: str) -> tuple[str, float, str] | None:
         return None  # two-sided range, not a one-sided threshold
     if re.search(r"\b(below|under|less than|at most|or below)\b", low):
         direction = "down"
-    elif re.search(r"\b(above|over|reach|reaches|hit|hits|exceed|exceeds|at least|greater than|more than|or above)\b", low):
+    elif re.search(
+        r"\b(above|over|reach|reaches|hit|hits|exceed|exceeds|at least|greater than|more than|or above|"
+        r"top|tops|topping|surpass|surpasses|surpassing|breach|breaches|cross|crosses)\b", low
+    ):
         direction = "up"
     else:
         return None
@@ -481,15 +484,20 @@ def _settlement_type(text: str) -> str | None:
     ):
         return "hold"
     if re.search(
-        r"\b(hit|hits|touch|touches|touched|dip|dips|dipped|pass|passes|surpass|surpasses)\b", low
+        r"\b(hit|hits|touch|touches|touched|dip|dips|dipped|pass|passes|"
+        r"surpass|surpasses|top|tops|topping|breach|breaches|cross|crosses)\b", low
     ) or re.search(r"\bat any point\b", low):
         return "touch"
-    # "above $X BY <deadline>" reaches the level anytime before the date — a
-    # touch, not a point-in-time read. "above $X ON <date>" / "at year-end"
-    # stays None (point settlement). This is what lets "hit $150k" bridge to
-    # "above $149,999.99 by Dec 31" while "on Dec 31" vs "touch" stays vetoed.
-    if "$" in low and re.search(r"\b(above|below|over|under|reach|reaches)\b", low) and re.search(
-        r"\bby\b", low
+    # A price reach-verb scoped to a WHOLE PERIOD ("above $X in 2026", "over $X
+    # by Dec 31") resolves the moment the level is reached — a touch, not a
+    # point-in-time read. The full-period framings "in 20XX" / "during 20XX" /
+    # "by <deadline>" are equivalent ways to say "anytime before the close".
+    # A SPECIFIC-DATE settlement ("above $X ON Dec 31") or bare "at year-end"
+    # stays None (point), so the PAIR-015 trap (point vs touch) still vetoes.
+    reach = re.search(r"\b(above|below|over|under|reach|reaches|exceed|exceeds)\b", low)
+    if "$" in low and reach and (
+        re.search(r"\bby\b", low)
+        or re.search(r"\b(?:in|during|throughout)\s+20\d{2}\b", low)
     ):
         return "touch"
     return None
