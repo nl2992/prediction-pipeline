@@ -67,11 +67,22 @@ class ArbOpportunity:
         return self.net_profit > 0
 
 
+def kalshi_taker_fee(price: float) -> float:
+    """Kalshi's published per-contract taker fee: 0.07 · p · (1 − p).
+
+    ``price`` is the contract's price in probability units (0–1). Maxes at
+    ~0.0175 near p=0.5 and vanishes at the extremes — far smaller than a flat
+    7%-of-payout charge. Matches the fee model used to label the test fixture.
+    """
+    return round(0.07 * price * (1.0 - price), 4)
+
+
 def find_arb(
     pairs: list["MatchedPair"],
     fee_poly: float = FEE_POLY_DEFAULT,
     fee_kalshi: float = FEE_KALSHI_DEFAULT,
     min_net_profit_pct: float = 0.0,
+    fee_model: str = "flat",
 ) -> list[ArbOpportunity]:
     """
     Scan matched pairs for two-leg arbitrage opportunities.
@@ -87,11 +98,21 @@ def find_arb(
     min_net_profit_pct
         Minimum net profit as a percentage of gross cost.
         Use 0.0 to include all break-even-or-better arbs.
+    fee_model
+        ``"flat"`` (default): charge ``max(fee_poly, fee_kalshi)`` of the $1
+        payout on the winning leg — a deliberately conservative over-estimate
+        that suppresses marginal/false signals for live trading.
+        ``"kalshi_variable"``: charge Kalshi's actual ``0.07·p·(1−p)`` taker fee
+        on the Kalshi leg only (Polymarket CLOB has no trading fee). This mirrors
+        the real fee schedule and reproduces the test fixture's economics; use it
+        when you want true expected edge rather than a worst-case bound.
 
     Returns
     -------
     list of ArbOpportunity sorted by net_profit descending.
     """
+    if fee_model not in ("flat", "kalshi_variable"):
+        raise ValueError(f"unknown fee_model {fee_model!r}; expected 'flat' or 'kalshi_variable'")
     opps: list[ArbOpportunity] = []
     # Worst-case fee: whichever exchange pays out charges the higher rate.
     worst_fee = max(fee_poly, fee_kalshi)
@@ -123,7 +144,9 @@ def find_arb(
             no_ask_kalshi = round(1.0 - k_bid, 6)
             gross_cost = round(p_ask + no_ask_kalshi, 6)
             gross_profit = round(1.0 - gross_cost, 6)
-            net_profit = round(gross_profit - worst_fee, 6)
+            # Kalshi leg here is the NO buy at no_ask_kalshi.
+            leg_fee = worst_fee if fee_model == "flat" else kalshi_taker_fee(no_ask_kalshi)
+            net_profit = round(gross_profit - leg_fee, 6)
             net_profit_pct = round(net_profit / gross_cost * 100, 4) if gross_cost > 0 else 0.0
 
             yes_size = p_ob.asks[0].size if p_ob.asks else None
@@ -142,7 +165,7 @@ def find_arb(
                     buy_no_size=no_size,
                     gross_cost=gross_cost,
                     gross_profit=gross_profit,
-                    winning_leg_fee=worst_fee,
+                    winning_leg_fee=leg_fee,
                     net_profit=net_profit,
                     net_profit_pct=net_profit_pct,
                     max_size=max_sz,
@@ -153,7 +176,9 @@ def find_arb(
             no_ask_poly = round(1.0 - p_bid, 6)
             gross_cost = round(k_ask + no_ask_poly, 6)
             gross_profit = round(1.0 - gross_cost, 6)
-            net_profit = round(gross_profit - worst_fee, 6)
+            # Kalshi leg here is the YES buy at k_ask.
+            leg_fee = worst_fee if fee_model == "flat" else kalshi_taker_fee(k_ask)
+            net_profit = round(gross_profit - leg_fee, 6)
             net_profit_pct = round(net_profit / gross_cost * 100, 4) if gross_cost > 0 else 0.0
 
             yes_size = k_ob.asks[0].size if k_ob.asks else None
@@ -172,7 +197,7 @@ def find_arb(
                     buy_no_size=no_size,
                     gross_cost=gross_cost,
                     gross_profit=gross_profit,
-                    winning_leg_fee=worst_fee,
+                    winning_leg_fee=leg_fee,
                     net_profit=net_profit,
                     net_profit_pct=net_profit_pct,
                     max_size=max_sz,

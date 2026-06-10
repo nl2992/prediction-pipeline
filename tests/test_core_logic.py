@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import MagicMock, patch
 
-from arb import find_arb
+from arb import find_arb, kalshi_taker_fee
 from discover import _match_outcomes_within_group, _parse_dt as discover_parse_dt
 from discover import discover, _is_parlay_market
 from executor import TradeIntent, check_price_still_valid
@@ -1304,6 +1304,69 @@ class InvertedPairArbRegressions(unittest.TestCase):
         opps = find_arb([mp], fee_poly=0.0, fee_kalshi=0.0, min_net_profit_pct=-1000)
         a = next(o for o in opps if o.direction == "poly_yes__kalshi_no")
         self.assertAlmostEqual(a.gross_cost, 1.04, places=4)
+
+
+class KalshiVariableFeeRegressions(unittest.TestCase):
+    """The kalshi_variable fee model must reproduce the fixture's arb economics
+    (0.07·p·(1−p) on the Kalshi leg), while the flat default stays conservative.
+    """
+
+    def test_kalshi_taker_fee_formula(self) -> None:
+        self.assertAlmostEqual(kalshi_taker_fee(0.5), 0.0175, places=4)
+        self.assertAlmostEqual(kalshi_taker_fee(0.72), 0.0141, places=4)
+        self.assertEqual(kalshi_taker_fee(1.0), 0.0)
+
+    def test_unknown_fee_model_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            find_arb([], fee_model="bogus")
+
+    def test_flat_default_unchanged(self) -> None:
+        # PAIR-001 quotes: flat model charges max(0.02,0.07)=0.07 on the payout.
+        p = titled_snap("polymarket", "pm", "Will X win in 2028?", "2028-06-09T04:00:00Z")
+        p.orderbook = OrderBook(bids=[PriceLevel(0.305, 1000.0)], asks=[PriceLevel(0.315, 1000.0)])
+        k = titled_snap("kalshi", "k", "X to win in 2028?", "2028-06-09T04:00:00Z")
+        k.orderbook = OrderBook(bids=[PriceLevel(0.28, 1000.0)], asks=[PriceLevel(0.30, 1000.0)])
+        mp = MatchedPair(poly=p, kalshi=k, title_similarity=1.0, close_delta_hours=0, confidence=1.0)
+        for o in find_arb([mp], min_net_profit_pct=-1000):
+            self.assertAlmostEqual(o.winning_leg_fee, 0.07, places=6)
+
+    def test_kalshi_variable_reproduces_fixture_arbs(self) -> None:
+        import json
+        import os
+        fixture_path = os.environ.get(
+            "PAIRS_FIXTURE", r"C:\Users\nigel\Downloads\pairs_fixture.json"
+        )
+        if not os.path.exists(fixture_path):
+            self.skipTest(f"fixture not available at {fixture_path}")
+        with open(fixture_path) as f:
+            fx = json.load(f)
+
+        def book(yb: float, ya: float) -> OrderBook:
+            return OrderBook(bids=[PriceLevel(yb, 1000.0)], asks=[PriceLevel(ya, 1000.0)])
+
+        engine_arbs = 0
+        fixture_arbs = 0
+        for pr in fx["pairs"]:
+            gt = pr["ground_truth"]
+            if not gt["should_match"]:
+                continue
+            pm, k, a = pr["polymarket"], pr["kalshi"], pr["arb"]
+            P = titled_snap("polymarket", "pm", pm["question"], "2026-12-31T00:00:00Z")
+            P.orderbook = book(pm["yes_bid"], pm["yes_ask"])
+            K = titled_snap("kalshi", "k", k["title"], "2026-12-31T00:00:00Z")
+            K.orderbook = book(k["yes_bid"], k["yes_ask"])
+            mp = MatchedPair(poly=P, kalshi=K, title_similarity=1.0, close_delta_hours=0,
+                             confidence=1.0, inverted=is_inverted_pair(P, K))
+            opps = find_arb([mp], fee_model="kalshi_variable", min_net_profit_pct=-1000)
+            best = max(o.net_profit for o in opps)
+            self.assertAlmostEqual(best, a["best_edge_net"], places=4,
+                                   msg=f"{pr['pair_id']} net edge")
+            if best > 0:
+                engine_arbs += 1
+            if a["arb_exists"]:
+                fixture_arbs += 1
+        self.assertEqual(engine_arbs, fixture_arbs)
+        self.assertEqual(fixture_arbs, 14)
 
 
 if __name__ == "__main__":

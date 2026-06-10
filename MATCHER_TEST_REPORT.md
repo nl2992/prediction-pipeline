@@ -4,9 +4,34 @@
 - **Test Date**: 2026-06-11
 - **Pairwise accuracy: 100% (50/50)** — all 42 should-match pairs matched, all 8 traps rejected
 - **Global 1-1 assignment: 98% (49/50)** — single miss is an unwinnable duplicate-title trap
-- **Repo test suite: 81/81 passing** (65 original + 11 cross-platform + 5 inverted-pair arb regression tests)
+- **Repo test suite: 85/85 passing** (65 original + 11 cross-platform + 5 inverted-pair + 4 variable-fee regression tests)
 - **Arb engine: all 42 matched-pair gross edges match fixture exactly** (incl. inverted pairs)
+- **Arb engine (`fee_model="kalshi_variable"`): reproduces the fixture's economics exactly — all 42 `best_edge_net` match, 14/14 arbs detected**
 - **Test Data**: `pairs_fixture.json` — 50 Polymarket↔Kalshi candidate pairs (42 should match, 8 should not)
+
+## Iteration log — 2026-06-11 (loop run 5) — accurate Kalshi fee model
+
+Closed the last gap between the engine and the fixture's arb ground truth. The
+engine's default fee is a flat `max(fee_poly, fee_kalshi)` of the $1 payout
+(~4× too high vs Kalshi's real schedule), so it flagged only 2 of the fixture's 14
+net-positive arbs. A probe confirmed that Kalshi's actual per-contract taker fee
+`0.07·p·(1−p)`, applied to the Kalshi leg only (Polymarket CLOB is fee-free),
+reproduces the fixture **exactly**: all 42 `best_edge_net` match and 14/14 arbs detected
+(including the inverted pairs, via the complement-book path from run 4).
+
+**Change (additive, non-breaking):**
+- `arb.kalshi_taker_fee(price)` — the published `0.07·p·(1−p)` formula.
+- `find_arb(..., fee_model="flat"|"kalshi_variable")`. Default `"flat"` is byte-for-byte
+  the old behaviour (conservative live-money guard, suppresses marginal signals).
+  `"kalshi_variable"` charges the real Kalshi-leg fee for true expected edge and
+  fixture-faithful economics. Unknown values raise `ValueError`.
+- Per-direction fee now keys off the actual Kalshi leg price (NO buy = `1−k_bid` in
+  dir A; YES buy = `k_ask` in dir B), correct for inverted pairs too.
+
+Added `KalshiVariableFeeRegressions` (4 tests): fee formula, bad-model rejection,
+flat-default-unchanged, and a fixture-driven check that `kalshi_variable` reproduces
+all 14 arbs and every `best_edge_net` (skips gracefully if the fixture file is absent).
+Suite 85/85, matcher 100% pairwise (50/50).
 
 ## Iteration log — 2026-06-11 (loop run 4) — ARB ENGINE, inverted pairs
 
