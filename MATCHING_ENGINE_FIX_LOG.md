@@ -50,6 +50,34 @@ every pair (and the fixes that got each one matching) is documented in
 
 ## Run history
 
+### Live top-20 validation — 2026-06-11 (user-requested, out-of-band)
+
+Hand-extracted ground truth from LIVE data: pulled the top-50 Polymarket events by 24h
+volume and the full Kalshi open-event catalog (7,678 events), manually paired the top 20
+genuine cross-platform pairs across 8 event families (World Cup winner ×8, F1 champion ×4,
+Fed June-2026 decision ×3, CA governor, French president, aliens-by-2027, Musk
+trillionaire, Hormuz-normal-by-Jun-15), then ran the pipeline on them.
+
+| Engine | Pairwise | Pooled assignment |
+|---|---|---|
+| v1 (production) | **19/20 (95%)** | 18 matched, **0 misaligned** |
+| v2 (shadow) | **19/20 (95%)** | — |
+
+Notables that matched correctly: Kalshi World Cup markets carry a contractual 2028 close
+vs PM's 2026-07-20 (sports soft-horizon handled it); "Fed decrease 25 bps after the June
+2026 meeting" ↔ "Federal Reserve Cut rates by 25bps at their June 2026 meeting" with the
+50+/>25bps bucket aligned to its counterpart and no cut/hike cross-talk; Le Pen, Hilton,
+aliens-before-2027 and Musk-trillionaire all exact.
+
+The single miss (both engines): PM "Strait of Hormuz traffic returns to normal by June
+15?" vs Kalshi "Will the 7-day moving average of transit calls through the Strait of
+Hormuz be …" — Kalshi words the market as its quantitative resolution proxy, so token
+similarity is 0.19 and no threshold exists on the PM side for the bridge. Recorded as a
+known recall limitation (technical-proxy rephrasing); a candidate entity+deadline-led
+acceptance was considered and deferred because it risks pairing opposite same-entity
+events (e.g. "Hormuz blocked" vs "Hormuz normal") without polarity-safe guards.
+
+
 ### Run 1 — 2026-06-11
 - **Timestamp:** 2026-06-11 (loop cycle 1, job `92d6d8a1`)
 - **Test files:** `pairs_fixture.json` (+ `tests/`)
