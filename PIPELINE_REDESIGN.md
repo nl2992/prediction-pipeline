@@ -92,11 +92,15 @@ settlement-shape mismatch: point vs touch
 - **No ML/embeddings.** Stdlib-only philosophy preserved; determinism and zero inference
   cost matter for a trading loop.
 
-## Migration path (proposed)
+## Migration path
 
-1. Run v2 in shadow mode inside `discover()`/`monitor` (log `MatchDecision.reasons`
-   alongside v1 verdicts) for a few live sessions.
-2. Diff verdicts; port any v1-only domain veto that fires in the wild into a spec field.
+1. ✅ **Shadow mode is live** — `discover()` annotates every v1-matched pair with
+   `v2_match` / `v2_inverted` / `v2_reasons`, prints a per-scan agreement summary, and
+   loudly surfaces any v2 rejection of a v1 match (candidate v1 false positive). Shadow
+   evaluation is exception-wrapped so it can never break the production path. v1 stays
+   authoritative.
+2. Diff verdicts across live sessions; port any v1-only domain veto that fires in the
+   wild into a spec field.
 3. Flip `match_markets` to `match_spec` behind a flag; retire vetoes from
    `is_compatible_match` as their spec equivalents prove out.
 4. Keep the 50-pair fixture + adversarial suite as the permanent gate for both engines.
