@@ -275,8 +275,9 @@ def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False) -> i
 def main() -> None:
     ap = argparse.ArgumentParser(description="Scheduled full-scan arb email alerter")
     ap.add_argument("--interval", type=int, default=1800, help="seconds between scans (default 1800 = 30 min)")
-    ap.add_argument("--min-edge", type=float, default=0.005,
-                    help="min net edge (accurate fee) to alert, in $ per $1 payout (default 0.005 = 0.5c)")
+    ap.add_argument("--min-edge", type=float, default=0.0001,
+                    help="min net edge (accurate fee) to alert, in $ per $1 payout "
+                         "(default 0.0001 = any strictly positive edge after fees)")
     ap.add_argument("--realert-hours", type=float, default=6.0,
                     help="re-email an unchanged signal after this many hours (default 6)")
     ap.add_argument("--once", action="store_true", help="run one cycle and exit")
