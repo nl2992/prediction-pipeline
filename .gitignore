@@ -29,3 +29,6 @@ Thumbs.db
 alert_config.json
 alert_state.json
 alert_signals.jsonl
+
+# Catalog cache (runtime, never commit)
+.cache/

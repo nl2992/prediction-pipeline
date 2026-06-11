@@ -1082,19 +1082,26 @@ class CoreLogicTests(unittest.TestCase):
         self.assertEqual(client.get_markets.call_count, 2)
 
     def test_polymarket_search_events_runs_until_empty_page(self) -> None:
+        # Windowed parallel pagination: results and ordering must be identical
+        # to a sequential scan and the scan must stop at the catalog end. Up to
+        # window-1 speculative page fetches past the end are the accepted cost
+        # of parallelism (exhausted side_effect raises StopIteration, which the
+        # fetcher treats as end-of-catalog).
         client = PolymarketClient()
-        client.get_events = MagicMock(
-            side_effect=[
-                [{"title": "Elon Musk trillionaire", "slug": "one"}],
-                [{"title": "Unrelated event", "slug": "two"}],
-                [],
-            ]
-        )
+        pages = {
+            0: [{"title": "Elon Musk trillionaire", "slug": "one"}],
+            1: [{"title": "Unrelated event", "slug": "two"}],
+        }
+
+        def fake_get_events(limit, offset, active, closed):
+            return pages.get(offset, [])
+
+        client.get_events = MagicMock(side_effect=fake_get_events)
 
         events = client.search_events(["trillionaire"], max_offset=None, page_size=1)
 
         self.assertEqual([e["slug"] for e in events], ["one"])
-        self.assertEqual(client.get_events.call_count, 3)
+        self.assertGreaterEqual(client.get_events.call_count, 3)
 
     @patch("kalshi.client.KalshiClient")
     def test_verify_kalshi_clob_checks_derived_yes_ask(self, client_cls: MagicMock) -> None:

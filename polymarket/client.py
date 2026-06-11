@@ -209,31 +209,52 @@ class PolymarketClient:
         results: list[dict] = []
         seen: set[str] = set()
 
-        offset = 0
-        while max_offset is None or offset <= max_offset:
+        # Windowed parallel pagination: the Gamma catalog is offset-addressed,
+        # so W consecutive pages can be fetched concurrently. Pages are
+        # PROCESSED in strict offset order after each window completes, so
+        # dedup and result ordering are identical to the sequential scan; the
+        # window stops at the first empty/short page. Cost of the speedup: up
+        # to window-1 speculative page requests past the catalog end. Fetching
+        # goes through self.get_events so instance-level mocks/tests apply;
+        # urllib3's pool handles concurrent GETs on the shared session.
+        from concurrent.futures import ThreadPoolExecutor
+
+        window = 8
+
+        def fetch_page(off: int) -> tuple[int, list[dict] | None]:
             try:
-                batch = self.get_events(
-                    limit=page_size,
-                    offset=offset,
-                    active=active,
-                    closed=closed,
+                return off, self.get_events(
+                    limit=page_size, offset=off, active=active, closed=closed,
                 )
             except Exception as exc:
-                logger.warning("search_events: fetch failed at offset=%d: %s", offset, exc)
-                break
+                logger.warning("search_events: fetch failed at offset=%d: %s", off, exc)
+                return off, None
 
-            if not batch:
-                break
-
-            for ev in batch:
-                title = (ev.get("title") or "").lower()
-                slug = ev.get("slug") or ev.get("id", "")
-                if slug in seen:
-                    continue
-                if any(kw in title for kw in kw_lower):
-                    results.append(ev)
-                    seen.add(slug)
-            offset += page_size
+        offset = 0
+        done = False
+        with ThreadPoolExecutor(max_workers=window) as pool:
+            while not done and (max_offset is None or offset <= max_offset):
+                offsets = [offset + i * page_size for i in range(window)]
+                if max_offset is not None:
+                    offsets = [o for o in offsets if o <= max_offset]
+                pages = dict(pool.map(fetch_page, offsets))
+                for off in offsets:  # strict offset order, as sequential
+                    batch = pages.get(off)
+                    if not batch:  # error or empty page -> end of catalog
+                        done = True
+                        break
+                    for ev in batch:
+                        title = (ev.get("title") or "").lower()
+                        slug = ev.get("slug") or ev.get("id", "")
+                        if slug in seen:
+                            continue
+                        if any(kw in title for kw in kw_lower):
+                            results.append(ev)
+                            seen.add(slug)
+                    if len(batch) < page_size:
+                        done = True
+                        break
+                offset += window * page_size
 
         logger.info(
             "search_events: found %d events for keywords %s",

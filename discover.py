@@ -413,16 +413,64 @@ def _p_snap_from_event(m: dict, ev_title: str, ev_slug: str, fetched_at: str):
 # Live orderbook enrichment (only for confirmed pairs)
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Catalog cache (TTL) — see discover(catalog_cache_ttl=...)
+# ---------------------------------------------------------------------------
+
+_CACHE_DIR = Path(__file__).parent / ".cache"
+
+
+def _cache_load(name: str, ttl: int):
+    if ttl <= 0:
+        return None
+    path = _CACHE_DIR / name
+    try:
+        if path.exists():
+            obj = json.loads(path.read_text(encoding="utf-8"))
+            if time.time() - obj.get("fetched_at", 0) <= ttl:
+                return obj.get("data")
+    except Exception:
+        pass
+    return None
+
+
+def _cache_store(name: str, data) -> None:
+    try:
+        _CACHE_DIR.mkdir(exist_ok=True)
+        (_CACHE_DIR / name).write_text(
+            json.dumps({"fetched_at": time.time(), "data": data}), encoding="utf-8"
+        )
+    except Exception:
+        pass
+
+
 def _enrich_kalshi(snaps: list) -> None:
+    """Fetch live Kalshi orderbooks for matched pairs, in parallel.
+
+    One client per worker thread (requests.Session is not guaranteed
+    thread-safe). Failures leave the snapshot's catalog top-of-book intact.
+    """
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
     from kalshi.client import KalshiClient
     from pipeline import _parse_kalshi_full_book
-    client = KalshiClient()
-    for snap in snaps:
+
+    _tl = threading.local()
+
+    def fetch(snap) -> None:
+        client = getattr(_tl, "kc", None)
+        if client is None:
+            client = _tl.kc = KalshiClient()
         try:
             raw = client.get_orderbook(snap.market_id)
             snap.orderbook = _parse_kalshi_full_book(raw)
         except Exception:
             pass
+
+    workers = max(1, min(8, len(snaps)))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        list(pool.map(fetch, snaps))
 
 
 def _enrich_polymarket(snaps: list) -> None:
@@ -681,10 +729,17 @@ def discover(
     show_prices: bool = False,
     max_poly_offset: int | None = None,
     max_events_to_search: int | None = None,
-    kalshi_workers: int = 24,
+    kalshi_workers: int = 6,  # polite: ~10 req/s API limit; more workers trigger 429 backoff storms
+    catalog_cache_ttl: int = 0,
 ) -> list[dict]:
     """
     Run organic cross-exchange discovery and return matched pairs as dicts.
+
+    catalog_cache_ttl > 0 reuses the (slow-moving) Kalshi event catalog and
+    Polymarket event-search results from .cache/ when younger than this many
+    seconds. Market QUOTES are never cached — per-event Kalshi market rows and
+    pair orderbook enrichment are always fetched fresh — so repeated scans get
+    fresh prices at a fraction of the catalog cost. 0 (default) disables.
     """
     import logging
     logging.disable(logging.WARNING)
@@ -700,8 +755,20 @@ def discover(
     print("[1/5] Fetching Kalshi event catalog…", flush=True)
     kc = KalshiClient()
     t0 = time.time()
-    all_events = kc.get_all_events(max_pages=None, page_size=200, status="open")
-    print(f"      {len(all_events):,} events in {time.time()-t0:.1f}s")
+    # Plausibility floor: the live catalog is ~7-8k events. A tiny result means
+    # a mocked client (unit tests) or a transient API failure — never cache it,
+    # never serve it from cache. Tests poisoned the cache before this guard.
+    _MIN_PLAUSIBLE_EVENTS = 500
+    all_events = _cache_load("kalshi_events.json", catalog_cache_ttl)
+    if all_events is not None and len(all_events) < _MIN_PLAUSIBLE_EVENTS:
+        all_events = None
+    from_cache = all_events is not None
+    if all_events is None:
+        all_events = kc.get_all_events(max_pages=None, page_size=200, status="open")
+        if catalog_cache_ttl > 0 and len(all_events) >= _MIN_PLAUSIBLE_EVENTS:
+            _cache_store("kalshi_events.json", all_events)
+    print(f"      {len(all_events):,} events in {time.time()-t0:.1f}s"
+          + (" (cached)" if from_cache else ""))
 
     # ── 2. Filter events ─────────────────────────────────────────────────────
     filtered = []
@@ -775,14 +842,34 @@ def discover(
     }
     all_kalshi_markets: list[dict] = []
     if use_blocking:
-        for i, ev in enumerate(filtered, 1):
-            et = ev.get("event_ticker", "")
-            if et:
-                all_kalshi_markets.extend(
-                    kc.get_all_markets(event_ticker=et, status="open", page_size=200)
-                )
-            if i % 25 == 0:
-                print(f"      {i}/{len(filtered)} events, {len(all_kalshi_markets):,} markets…", flush=True)
+        # Parallel per-event fetch: events are independent, so N workers cut
+        # wall time ~Nx (one client per thread; map preserves event order so
+        # output is identical to the sequential loop).
+        import threading
+        from concurrent.futures import ThreadPoolExecutor
+
+        _tl = threading.local()
+
+        def _fetch_event_markets(et: str) -> list[dict]:
+            if not et:
+                return []
+            client = getattr(_tl, "kc", None)
+            if client is None:
+                client = _tl.kc = KalshiClient()
+            try:
+                return client.get_all_markets(event_ticker=et, status="open", page_size=200)
+            except Exception:
+                return []
+
+        tickers = [ev.get("event_ticker", "") for ev in filtered]
+        workers = max(1, min(kalshi_workers, len(tickers)))
+        done_n = 0
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            for batch in pool.map(_fetch_event_markets, tickers):
+                all_kalshi_markets.extend(batch)
+                done_n += 1
+                if done_n % 50 == 0:
+                    print(f"      {done_n}/{len(tickers)} events, {len(all_kalshi_markets):,} markets…", flush=True)
     else:
         cursor: str | None = None
         seen_cursors: set[str] = set()
@@ -841,12 +928,24 @@ def discover(
     t0 = time.time()
     pc = PolymarketClient()
 
-    p_events = pc.search_events(
-        keywords=k_keywords,
-        active=True,
-        closed=False,
-        max_offset=max_poly_offset,
-    )
+    # PM event-search results are keyword-dependent; cache key = keywords+offset.
+    import hashlib
+    _pm_key = "pm_events_" + hashlib.md5(
+        ("|".join(sorted(k_keywords)) + f"|{max_poly_offset}").encode()
+    ).hexdigest()[:16] + ".json"
+    p_events = _cache_load(_pm_key, catalog_cache_ttl)
+    _pm_cached = p_events is not None
+    if p_events is None:
+        p_events = pc.search_events(
+            keywords=k_keywords,
+            active=True,
+            closed=False,
+            max_offset=max_poly_offset,
+        )
+        # Store only when caching is enabled — unconditional writes let mocked
+        # test runs poison the shared cache directory.
+        if catalog_cache_ttl > 0:
+            _cache_store(_pm_key, p_events)
 
     p_snaps: list = []
     seen_poly_ids: set[str] = set()
@@ -884,7 +983,8 @@ def discover(
                 p_snaps.append(_p_snap(m, fetched_at))
 
     elapsed_p = time.time() - t0
-    print(f"      {len(p_snaps):,} Polymarket markets from {len(p_events)} events in {elapsed_p:.1f}s")
+    print(f"      {len(p_snaps):,} Polymarket markets from {len(p_events)} events in {elapsed_p:.1f}s"
+          + (" (catalog cached)" if _pm_cached else ""))
     if not p_snaps:
         print("      No Polymarket markets found.")
         return []
@@ -1067,7 +1167,7 @@ def main() -> None:
                    help="Maximum Kalshi events to scan; omit for no event limit")
     p.add_argument("--poly-scan", type=int, default=None,
                    help="Polymarket catalog depth (max offset); omit for no catalog offset limit")
-    p.add_argument("--kalshi-workers", type=int, default=24,
+    p.add_argument("--kalshi-workers", type=int, default=6,
                    help="Concurrent workers for Kalshi event-market fetches")
     p.add_argument("--output", default=None,
                    help="Save matched pairs to this JSON file")

@@ -237,7 +237,8 @@ def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False) -> i
     print(f"[alerter] {datetime.now(timezone.utc).strftime('%H:%M:%S')}Z full scan starting…", flush=True)
     from discover import discover
     pairs = discover(category="all", days=730, min_sim=0.30,
-                     show_prices=True, max_events_to_search=200)
+                     show_prices=True, max_events_to_search=200,
+                     catalog_cache_ttl=1200)
     signals = compute_signals(pairs, min_edge=min_edge)
     print(f"[alerter] scan done in {time.time()-t0:.0f}s — {len(pairs)} pairs, "
           f"{len(signals)} signal(s) >= {min_edge*100:.1f}c net", flush=True)
@@ -275,7 +276,8 @@ def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False) -> i
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Scheduled full-scan arb email alerter")
-    ap.add_argument("--interval", type=int, default=1800, help="seconds between scans (default 1800 = 30 min)")
+    ap.add_argument("--interval", type=int, default=300,
+                    help="seconds between scans (default 300; catalogs are cached 20 min, quotes always fresh)")
     ap.add_argument("--min-edge", type=float, default=0.0001,
                     help="min net edge (accurate fee) to alert, in $ per $1 payout "
                          "(default 0.0001 = any strictly positive edge after fees)")
