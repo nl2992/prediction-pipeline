@@ -746,7 +746,20 @@ def discover(
         return []
 
     # ── 3. Fetch Kalshi markets ──────────────────────────────────────────────
-    print("[3/5] Fetching full Kalshi market catalog…", flush=True)
+    # Candidate blocking: when the filtered event set is bounded, fetch markets
+    # PER EVENT (one paginated call per event_ticker) instead of crawling the
+    # entire exchange catalog. The full catalog is ~750k rows — a full crawl
+    # takes longer than most scan budgets and fetches >99% irrelevant markets.
+    # Per-event fetching is O(relevant events), not O(exchange size). The full
+    # crawl remains only for genuinely unbounded scans, which also pick up
+    # markets whose parent event fell outside the event-catalog filter.
+    _BLOCKING_EVENT_LIMIT = 500
+    use_blocking = len(filtered) <= _BLOCKING_EVENT_LIMIT
+    print(
+        f"[3/5] Fetching Kalshi markets "
+        f"({'per-event blocking, ' + str(len(filtered)) + ' events' if use_blocking else 'full catalog crawl'})…",
+        flush=True,
+    )
     t0 = time.time()
     k_snaps: list = []
     k_keywords: list[str] = []
@@ -761,13 +774,15 @@ def discover(
         if ev.get("event_ticker")
     }
     all_kalshi_markets: list[dict] = []
-    if max_events_to_search is not None and len(filtered) <= 100:
-        for ev in filtered:
+    if use_blocking:
+        for i, ev in enumerate(filtered, 1):
             et = ev.get("event_ticker", "")
             if et:
                 all_kalshi_markets.extend(
                     kc.get_all_markets(event_ticker=et, status="open", page_size=200)
                 )
+            if i % 25 == 0:
+                print(f"      {i}/{len(filtered)} events, {len(all_kalshi_markets):,} markets…", flush=True)
     else:
         cursor: str | None = None
         seen_cursors: set[str] = set()
