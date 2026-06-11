@@ -24,3 +24,8 @@ Thumbs.db
 *.key
 .env
 .env.*
+
+# Alerter: secrets + runtime state (never commit)
+alert_config.json
+alert_state.json
+alert_signals.jsonl
