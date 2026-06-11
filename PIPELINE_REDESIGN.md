@@ -98,7 +98,10 @@ settlement-shape mismatch: point vs touch
    `v2_match` / `v2_inverted` / `v2_reasons`, prints a per-scan agreement summary, and
    loudly surfaces any v2 rejection of a v1 match (candidate v1 false positive). Shadow
    evaluation is exception-wrapped so it can never break the production path. v1 stays
-   authoritative.
+   authoritative. **First live session evidence (2026-06-11):** full scan completed in
+   ~90 s via per-event blocking; `v2 shadow: agrees on 1/1 v1 pairs` (PM "Elon Musk
+   trillionaire before 2027?" ↔ Kalshi "Will Elon Musk be a trillionaire before
+   2027?") — no disagreements.
 2. Diff verdicts across live sessions; port any v1-only domain veto that fires in the
    wild into a spec field.
 3. Flip `match_markets` to `match_spec` behind a flag; retire vetoes from
