@@ -746,7 +746,20 @@ def discover(
         return []
 
     # ── 3. Fetch Kalshi markets ──────────────────────────────────────────────
-    print("[3/5] Fetching full Kalshi market catalog…", flush=True)
+    # Candidate blocking: when the filtered event set is bounded, fetch markets
+    # PER EVENT (one paginated call per event_ticker) instead of crawling the
+    # entire exchange catalog. The full catalog is ~750k rows — a full crawl
+    # takes longer than most scan budgets and fetches >99% irrelevant markets.
+    # Per-event fetching is O(relevant events), not O(exchange size). The full
+    # crawl remains only for genuinely unbounded scans, which also pick up
+    # markets whose parent event fell outside the event-catalog filter.
+    _BLOCKING_EVENT_LIMIT = 500
+    use_blocking = len(filtered) <= _BLOCKING_EVENT_LIMIT
+    print(
+        f"[3/5] Fetching Kalshi markets "
+        f"({'per-event blocking, ' + str(len(filtered)) + ' events' if use_blocking else 'full catalog crawl'})…",
+        flush=True,
+    )
     t0 = time.time()
     k_snaps: list = []
     k_keywords: list[str] = []
@@ -761,13 +774,15 @@ def discover(
         if ev.get("event_ticker")
     }
     all_kalshi_markets: list[dict] = []
-    if max_events_to_search is not None and len(filtered) <= 100:
-        for ev in filtered:
+    if use_blocking:
+        for i, ev in enumerate(filtered, 1):
             et = ev.get("event_ticker", "")
             if et:
                 all_kalshi_markets.extend(
                     kc.get_all_markets(event_ticker=et, status="open", page_size=200)
                 )
+            if i % 25 == 0:
+                print(f"      {i}/{len(filtered)} events, {len(all_kalshi_markets):,} markets…", flush=True)
     else:
         cursor: str | None = None
         seen_cursors: set[str] = set()
@@ -917,6 +932,22 @@ def discover(
         p_event_title = pair.poly.extra.get("event_title") or pair.poly.title
         cat = _category({"title": k_event_title or p_event_title})
 
+        # v2 SHADOW MODE: the structured decision engine (contract_spec) renders
+        # an independent verdict on every v1-matched pair. v1 stays authoritative;
+        # v2's verdict + reasons ride along so live sessions accumulate migration
+        # evidence (PIPELINE_REDESIGN.md). A v2 rejection of a v1 match is a
+        # candidate v1 false positive — surfaced loudly, never silently dropped.
+        try:
+            from contract_spec import explain as _v2_explain
+            _v2 = _v2_explain(pair.poly, pair.kalshi)
+            v2_fields = {
+                "v2_match": _v2.match,
+                "v2_inverted": _v2.inverted,
+                "v2_reasons": _v2.reasons,
+            }
+        except Exception as exc:  # shadow mode must never break production
+            v2_fields = {"v2_match": None, "v2_error": str(exc)}
+
         results.append({
             "confidence":       round(pair.confidence, 3),
             "title_sim":        round(pair.title_similarity, 3),
@@ -939,7 +970,18 @@ def discover(
             "arb_eligible":     arb_eligible,
             "arb_direction":    arb_dir,
             "arb_net_profit":   arb_profit,
+            **v2_fields,
         })
+
+    agree = sum(1 for r in results if r.get("v2_match") is True)
+    disagree = [r for r in results if r.get("v2_match") is False]
+    if results:
+        print(f"      v2 shadow: agrees on {agree}/{len(results)} v1 pairs"
+              + (f", {len(disagree)} disagreement(s):" if disagree else ""))
+        for r in disagree:
+            print(f"        v2 REJECTS: {r['poly_title'][:46]!r} <-> {r['kalshi_title'][:46]!r}")
+            for reason in (r.get("v2_reasons") or [])[:2]:
+                print(f"          - {reason}")
     return results
 
 
