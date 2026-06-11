@@ -1281,6 +1281,18 @@ class CrossPlatformFixtureRegressions(unittest.TestCase):
         k = self._k("Will Trump be impeached before 2027?", "2027-01-01T00:00:00Z")
         self.assertFalse(match_markets([pm], [k], min_title_similarity=0.30, max_close_delta_hours=9999))
 
+    def test_impeached_not_matched_to_impeached_and_removed(self) -> None:
+        # Live-data find: this false pair produced a phantom 41c arb signal.
+        # Impeachment (House vote) != removal (Senate conviction).
+        pm = self._pm("Will Trump be impeached before his term ends?", "2029-01-20T00:00:00Z")
+        k = self._k("Will Trump be impeached and removed from office?", "2029-01-20T00:00:00Z")
+        self.assertFalse(match_markets([pm], [k], min_title_similarity=0.30, max_close_delta_hours=9999))
+
+    def test_both_sides_removal_still_match(self) -> None:
+        pm = self._pm("Will Trump be removed from office before 2029?", "2029-01-20T00:00:00Z")
+        k = self._k("Trump removed from office? Before 2029", "2029-01-20T00:00:00Z")
+        self.assertTrue(match_markets([pm], [k], min_title_similarity=0.30, max_close_delta_hours=9999))
+
     def test_decimal_trailing_zero_canonicalisation(self) -> None:
         # 3% and 3.0% tokenise identically; 3.5% stays distinct from 3%.
         self.assertEqual(_tokens("above 3%"), _tokens("above 3.0%"))

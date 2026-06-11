@@ -210,6 +210,11 @@ def match_spec(
         return _reject(
             f"political event mismatch: {sorted(a.political_actions)} vs {sorted(b.political_actions)}"
         )
+    # One-sided removal wording: "impeached" vs "impeached AND removed from
+    # office" are different bars (House vote vs Senate conviction) — surfaced
+    # live as a phantom 41c arb signal.
+    if ("removal" in a.actions) != ("removal" in b.actions):
+        return _reject("outcome-bar mismatch: removal-from-office on one side only")
     if (
         "monetary_policy" in a.actions
         and "monetary_policy" in b.actions

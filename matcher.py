@@ -1058,6 +1058,11 @@ def _contract_actions(text: str) -> set[str]:
     # outcome (see _POLITICAL_EVENT_ACTIONS veto in is_compatible_match).
     if re.search(r"\bimpeach(?:ed|ment|es)?\b", low):
         actions.add("impeach")
+    # Removal/conviction is a STRICTLY HARDER outcome than impeachment alone
+    # (House vote vs Senate conviction). "Impeached" and "impeached AND removed"
+    # are different contracts — surfaced live as a phantom 41c arb signal.
+    if re.search(r"\bremoved?\s+from\s+office\b|\bconvicted\s+by\s+the\s+senate\b", low):
+        actions.add("removal")
     if re.search(r"\bmartial law\b", low):
         actions.add("martial_law")
     if re.search(r"\b(?:government|govt)\s+shutdown\b", low):
@@ -1245,6 +1250,10 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
     if ("rank" in p_actions) != ("rank" in k_actions):
         return False
     if ("stat_leader" in p_actions) != ("stat_leader" in k_actions):
+        return False
+    # "Impeached" vs "impeached AND removed from office" are different bars
+    # (House vote vs Senate conviction) — one-sided removal wording vetoes.
+    if ("removal" in p_actions) != ("removal" in k_actions):
         return False
     if not _same_horizon and ("deadline" in p_actions) != ("deadline" in k_actions):
         return False
