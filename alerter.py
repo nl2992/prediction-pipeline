@@ -201,7 +201,8 @@ def build_email(signals: list[dict]) -> tuple[str, str]:
         <tr><td>Legs</td><td>{s['legs']}</td></tr>
         <tr><td>Net edge (real Kalshi fee)</td><td><b>{s['net_accurate']*100:.2f}c per $1</b> (gross {s['gross']*100:.2f}c, worst-case-7%-fee net {s['net_flat7']*100:.2f}c)</td></tr>
         <tr><td>Quotes</td><td>PM {s['poly_bid']}/{s['poly_ask']} &nbsp; Kalshi {s['kalshi_bid']}/{s['kalshi_ask']}</td></tr>
-        <tr><td>Links</td><td><a href="{s['poly_url']}">Polymarket</a> &nbsp;|&nbsp; <a href="{s['kalshi_url']}">Kalshi</a></td></tr>
+        <tr><td>Polymarket</td><td><a href="{s['poly_url']}">{s['poly_url']}</a></td></tr>
+        <tr><td>Kalshi</td><td><a href="{s['kalshi_url']}">{s['kalshi_url']}</a></td></tr>
         <tr><td>Matcher</td><td>confidence {s['confidence']} | v2 agrees: {s['v2_match']}</td></tr>""")
     html = f"""<html><body style="font-family:Segoe UI,Arial,sans-serif;font-size:14px">
     <p>Automated full cross-platform scan found <b>{n}</b> executable arb signal{'s' if n != 1 else ''}
