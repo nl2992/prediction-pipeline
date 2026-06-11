@@ -71,6 +71,8 @@ _TOKEN_SYNONYMS: dict[str, tuple[str, ...]] = {
     "cpi": ("inflation",),
     "jobless": ("unemployment",),
     "unemployed": ("unemployment",),
+    # Shipping/traffic synonyms: Kalshi's "transit calls" is Polymarket's "traffic".
+    "transit": ("traffic",),
 }
 
 # Multi-word phrase canonicalisation, applied to the raw (lowercased) title
@@ -81,10 +83,28 @@ _TOKEN_SYNONYMS: dict[str, tuple[str, ...]] = {
 _PHRASE_NORMALISERS: tuple[tuple[str, str], ...] = (
     (r"\bfederal\s+reserve\b", "fed"),
     (r"\binterest\s+(rates?)\b", r"\1"),
-    (r"\b(?:raise|raising|hike|hiking|increase|increasing)\s+rates?\b", "rate hike"),
+    (r"\b(?:raise|raises|raising|hike|hikes|hiking|increase|increases|increasing)\s+rates?\b", "rate hike"),
     (r"\brates?\s+(?:hike|increase)\b", "rate hike"),
-    (r"\b(?:cut|cutting|lower|lowering|reduce|reducing)\s+rates?\b", "rate cut"),
+    (r"\b(?:cut|cuts|cutting|lower|lowers|lowering|reduce|reduces|reducing|decrease|decreases|decreasing)\s+rates?\b", "rate cut"),
     (r"\brates?\s+(?:cut|reduction|decrease)\b", "rate cut"),
+    # Keep one-sided comparators attached to their number: ">25bps" must stay
+    # distinct from "25bps" after punctuation stripping, or sibling rate buckets
+    # ("Cut by 25bps" vs "Cut by >25bps") collapse to identical token sets and
+    # pooled assignment swaps them arbitrarily.
+    (r">\s*(\d+)", r"gt\1"),
+    # Split fused number+unit so Kalshi "25bps" aligns with Polymarket "25 bps".
+    (r"(\d)(bps)\b", r"\1 \2"),
+    # Kalshi often words a market as its quantitative resolution PROXY while
+    # Polymarket uses the headline phrasing ("Strait of Hormuz traffic returns
+    # to normal" vs "7-day moving average of transit calls ... as reported by
+    # the IMF PortWatch be above 60"). Strip metric scaffolding that describes
+    # HOW the quantity is measured, not WHICH event it is. NOTE: the smoothing
+    # window ("7-day") is intentionally dropped with it — differing windows on
+    # the same series are treated as the same market.
+    (r"\b\d+[\s-]?day moving average of\b", " "),
+    # Resolution-source clause: "as reported by <Source>" names the data
+    # provider, not the event. Strip up to the next verb/preposition boundary.
+    (r"\bas reported by\b.{0,40}?(?=\b(?:be|is|are|was|were|above|below|over|under|before|after|on|by)\b|[?,.])", " "),
 )
 
 

@@ -4,7 +4,12 @@ Tracks the `/loop` protocol: drive the matching-pair extraction engine to **100%
 coverage of the supplied cross-platform test set for 8 consecutive full runs**. Any
 failing run resets the consecutive-success counter to 0.
 
-## Consecutive-success counter: **1 / 8**
+## Consecutive-success counter (V2 protocol): **1 / 8**
+
+> 2026-06-11: loop re-targeted at the **V2 engine** (`contract_spec.match_spec`) per user
+> instruction; counter restarted. The ground truth now also includes the frozen
+> live-top-20 fixture (`tests/fixtures/live_top20.json`). v1 remains the production path
+> and must stay green alongside.
 
 (Updated every run. A "successful run" = 100% coverage of expected matching pairs on the
 supplied test set, with **0 missed** expected pairs and **0 misaligned** cross-platform
@@ -49,6 +54,40 @@ every pair (and the fixes that got each one matching) is documented in
 ---
 
 ## Run history
+
+### Run 1 (V2 protocol) — 2026-06-11, loop job `10fa4923`
+- **Test files:** `pairs_fixture.json` (50 pairs) + `tests/fixtures/live_top20.json` (20 live pairs, NEW) + full unit suite
+- **Expected matching pairs:** 42 (fixture) + 20 (live top-20)
+- **V2 coverage:** fixture **50/50 (100%)**; live top-20 **20/20** — missed 0, incorrect 0, misaligned 0, duplicate 0
+- **v1 (production):** fixture 100%; live top-20 20/20 pairwise AND pooled (0 misaligned)
+- **Suite:** 105 → **108** passing
+- **Counter:** 0 → **1** (V2 restart)
+- **Diagnosis & patches (2 real failure modes fixed this run):**
+  1. **Hormuz technical-proxy miss (both engines).** Kalshi words the market as its
+     resolution proxy: "7-day moving average of transit calls … as reported by the IMF
+     PortWatch be above 60" vs PM "traffic returns to normal" (sim 0.19). Fix: strip
+     metric scaffolding ("N-day moving average of") and resolution-source clauses
+     ("as reported by <Source>") in `_PHRASE_NORMALISERS` — they describe HOW the quantity
+     is measured, not WHICH event it is — plus `transit`→`traffic` synonym. Sim → 0.385.
+     Documented trade-off: differing smoothing windows on the same series now match.
+  2. **Fed cut-bucket swap (pooled misalignment — v1).** "decrease … rates" was missing
+     from the rate-cut normaliser, and Kalshi's fused "25bps" + stripped ">" made
+     "Cut by 25bps" and "Cut by >25bps" tokenise IDENTICALLY → all cross-scores tied →
+     greedy swapped the buckets. Fix: decrease/decreases/decreasing (+plurals) in the
+     cut/hike groups; ">N" → "gtN" comparator token preserved; "Nbps" split to "N bps".
+     Exact bucket pair now scores 1.0 and wins before the sibling.
+- **Files changed:** `matcher.py` (phrase normalisers, token synonym),
+  `tests/fixtures/live_top20.json` (NEW frozen ground truth),
+  `tests/test_live_top20.py` (NEW 3-test gate: v1 pairwise, v2 pairwise, pooled
+  no-misalignment).
+- **Tests added:** the live-top20 gate (3) — pooled test is what caught failure mode 2.
+- **Remaining known issues:** smoothing-window distinction intentionally dropped;
+  PM "50+ bps" vs K "exactly 25bps" cross-bucket not hard-vetoed (greedy ordering handles
+  it; candidate future veto via bps-aware count thresholds).
+- **Next proposed fix (run 2):** V2 adversarial probe on bucket-sibling families
+  (rate buckets, BTC strike ladders, date ladders) to confirm pooled assignment ordering
+  is stable under quote noise.
+
 
 ### Live top-20 validation — 2026-06-11 (user-requested, out-of-band)
 

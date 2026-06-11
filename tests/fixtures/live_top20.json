@@ -1,0 +1,246 @@
+{
+  "description": "Top-20 live cross-platform pairs hand-extracted 2026-06-11 from the top-50 Polymarket events by 24h volume x the full Kalshi open-event catalog. Frozen as a static regression fixture: all 20 are TRUE pairs and must match.",
+  "extracted_at": "2026-06-11",
+  "pairs": [
+    {
+      "label": "WC Spain",
+      "polymarket": {
+        "question": "Will Spain win the 2026 FIFA World Cup?",
+        "end_date": "2026-07-20"
+      },
+      "kalshi": {
+        "ticker": "KXMENWORLDCUP-26-ES",
+        "title": "Will the Spain win the 2026 Men's World Cup?",
+        "close": "2028-07-18T14:00:00Z"
+      }
+    },
+    {
+      "label": "WC France",
+      "polymarket": {
+        "question": "Will France win the 2026 FIFA World Cup?",
+        "end_date": "2026-07-20"
+      },
+      "kalshi": {
+        "ticker": "KXMENWORLDCUP-26-FR",
+        "title": "Will the France win the 2026 Men's World Cup?",
+        "close": "2028-07-18T14:00:00Z"
+      }
+    },
+    {
+      "label": "WC Brazil",
+      "polymarket": {
+        "question": "Will Brazil win the 2026 FIFA World Cup?",
+        "end_date": "2026-07-20"
+      },
+      "kalshi": {
+        "ticker": "KXMENWORLDCUP-26-BR",
+        "title": "Will the Brazil win the 2026 Men's World Cup?",
+        "close": "2028-07-18T14:00:00Z"
+      }
+    },
+    {
+      "label": "WC Argentina",
+      "polymarket": {
+        "question": "Will Argentina win the 2026 FIFA World Cup?",
+        "end_date": "2026-07-20"
+      },
+      "kalshi": {
+        "ticker": "KXMENWORLDCUP-26-AR",
+        "title": "Will the Argentina win the 2026 Men's World Cup?",
+        "close": "2028-07-18T14:00:00Z"
+      }
+    },
+    {
+      "label": "WC England",
+      "polymarket": {
+        "question": "Will England win the 2026 FIFA World Cup?",
+        "end_date": "2026-07-20"
+      },
+      "kalshi": {
+        "ticker": "KXMENWORLDCUP-26-GB",
+        "title": "Will the England win the 2026 Men's World Cup?",
+        "close": "2028-07-18T14:00:00Z"
+      }
+    },
+    {
+      "label": "WC Germany",
+      "polymarket": {
+        "question": "Will Germany win the 2026 FIFA World Cup?",
+        "end_date": "2026-07-20"
+      },
+      "kalshi": {
+        "ticker": "KXMENWORLDCUP-26-DE",
+        "title": "Will the Germany win the 2026 Men's World Cup?",
+        "close": "2028-07-18T14:00:00Z"
+      }
+    },
+    {
+      "label": "WC Portugal",
+      "polymarket": {
+        "question": "Will Portugal win the 2026 FIFA World Cup?",
+        "end_date": "2026-07-20"
+      },
+      "kalshi": {
+        "ticker": "KXMENWORLDCUP-26-PT",
+        "title": "Will the Portugal win the 2026 Men's World Cup?",
+        "close": "2028-07-18T14:00:00Z"
+      }
+    },
+    {
+      "label": "WC Mexico",
+      "polymarket": {
+        "question": "Will Mexico win the 2026 FIFA World Cup?",
+        "end_date": "2026-07-20"
+      },
+      "kalshi": {
+        "ticker": "KXMENWORLDCUP-26-MX",
+        "title": "Will the Mexico win the 2026 Men's World Cup?",
+        "close": "2028-07-18T14:00:00Z"
+      }
+    },
+    {
+      "label": "F1 Verstappen",
+      "polymarket": {
+        "question": "Will Max Verstappen be the 2026 F1 Drivers' Champion?",
+        "end_date": "2026-12-06"
+      },
+      "kalshi": {
+        "ticker": "KXF1-26-MV",
+        "title": "Will Max Verstappen win the F1 Drivers Championship?",
+        "close": "2026-12-22T15:00:00Z"
+      }
+    },
+    {
+      "label": "F1 Russell",
+      "polymarket": {
+        "question": "Will George Russell be the 2026 F1 Drivers' Champion?",
+        "end_date": "2026-12-06"
+      },
+      "kalshi": {
+        "ticker": "KXF1-26-GR",
+        "title": "Will George Russell win the F1 Drivers Championship?",
+        "close": "2026-12-22T15:00:00Z"
+      }
+    },
+    {
+      "label": "F1 Leclerc",
+      "polymarket": {
+        "question": "Will Charles Leclerc be the 2026 F1 Drivers' Champion?",
+        "end_date": "2026-12-06"
+      },
+      "kalshi": {
+        "ticker": "KXF1-26-CL",
+        "title": "Will Charles Leclerc win the F1 Drivers Championship?",
+        "close": "2026-12-22T15:00:00Z"
+      }
+    },
+    {
+      "label": "F1 Norris",
+      "polymarket": {
+        "question": "Will Lando Norris be the 2026 F1 Drivers' Champion?",
+        "end_date": "2026-12-06"
+      },
+      "kalshi": {
+        "ticker": "KXF1-26-LN",
+        "title": "Will Lando Norris win the F1 Drivers Championship?",
+        "close": "2026-12-22T15:00:00Z"
+      }
+    },
+    {
+      "label": "Fed cut 25",
+      "polymarket": {
+        "question": "Will the Fed decrease interest rates by 25 bps after the June 2026 meeting?",
+        "end_date": "2026-06-17"
+      },
+      "kalshi": {
+        "ticker": "KXFEDDECISION-26JUN-C25",
+        "title": "Will the Federal Reserve Cut rates by 25bps at their June 2026 meeting? Cut 25bps",
+        "close": "2026-06-17T17:59:00Z"
+      }
+    },
+    {
+      "label": "Fed hike 25",
+      "polymarket": {
+        "question": "Will the Fed increase interest rates by 25 bps after the June 2026 meeting?",
+        "end_date": "2026-06-17"
+      },
+      "kalshi": {
+        "ticker": "KXFEDDECISION-26JUN-H25",
+        "title": "Will the Federal Reserve Hike rates by 25bps at their June 2026 meeting? Hike 25bps",
+        "close": "2026-06-17T17:59:00Z"
+      }
+    },
+    {
+      "label": "Fed cut 50+",
+      "polymarket": {
+        "question": "Will the Fed decrease interest rates by 50+ bps after the June 2026 meeting?",
+        "end_date": "2026-06-17"
+      },
+      "kalshi": {
+        "ticker": "KXFEDDECISION-26JUN-C26",
+        "title": "Will the Federal Reserve Cut rates by >25bps at their June 2026 meeting? Cut >25bps",
+        "close": "2026-06-17T17:59:00Z"
+      }
+    },
+    {
+      "label": "CA Gov Hilton",
+      "polymarket": {
+        "question": "Will Steve Hilton win the California Governor Election in 2026?",
+        "end_date": "2026-11-03"
+      },
+      "kalshi": {
+        "ticker": "KXGOVCA-26-SHIL",
+        "title": "Who will win the governorship in California? Steve Hilton",
+        "close": "2027-11-03T15:00:00Z"
+      }
+    },
+    {
+      "label": "France Le Pen",
+      "polymarket": {
+        "question": "Will Marine Le Pen win the 2027 French presidential election?",
+        "end_date": "2027-04-30"
+      },
+      "kalshi": {
+        "ticker": "KXFRENCHPRES-27-MLEP",
+        "title": "Will Marine Le Pen win the 2027 French presidential election?",
+        "close": "2028-05-30T14:00:00Z"
+      }
+    },
+    {
+      "label": "Aliens before 2027",
+      "polymarket": {
+        "question": "Will the US confirm that aliens exist before 2027?",
+        "end_date": "2026-12-31"
+      },
+      "kalshi": {
+        "ticker": "KXALIENS-27",
+        "title": "Will the U.S. confirm that aliens exist before 2027?",
+        "close": "2027-01-01T15:00:00Z"
+      }
+    },
+    {
+      "label": "Musk trillionaire",
+      "polymarket": {
+        "question": "Elon Musk trillionaire before 2027?",
+        "end_date": "2026-12-31"
+      },
+      "kalshi": {
+        "ticker": "KXMUSKTRILLION-27",
+        "title": "Will Elon Musk be a trillionaire before 2027?",
+        "close": "2027-01-01T15:00:00Z"
+      }
+    },
+    {
+      "label": "Hormuz Jun15",
+      "polymarket": {
+        "question": "Strait of Hormuz traffic returns to normal by June 15?",
+        "end_date": "2026-06-15"
+      },
+      "kalshi": {
+        "ticker": "KXHORMUZNORM-26MAR17-B260615",
+        "title": "Will the 7-day moving average of transit calls through the Strait of Hormuz as reported by the IMF PortWatch be above 60 before June 15, 2026? Before Jun 15, 2026",
+        "close": "2026-06-16T12:59:00Z"
+      }
+    }
+  ]
+}
