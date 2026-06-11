@@ -693,10 +693,15 @@ function kalshiSlug(value) {
 }
 
 function kalshiMarketUrl(p) {
-  const eventTicker = kalshiSlug(p.kalshi_event_ticker);
-  const ticker = kalshiSlug(p.kalshi_ticker);
-  const marketPath = eventTicker || ticker;
-  return marketPath ? `https://kalshi.com/markets/${marketPath}` : '';
+  // kalshi.com routes market pages by SERIES ticker; raw event tickers
+  // ("kxfeddecision-26jun") 404. Build /markets/{series}/{seo-slug} and pass
+  // the concrete market ticker as ?ticker= so the page can preselect it.
+  const series = String(p.kalshi_series_ticker ||
+    (p.kalshi_event_ticker || p.kalshi_ticker || '').split('-')[0] || '').toLowerCase();
+  if (!series) return '';
+  const slug = kalshiSlug(p.kalshi_event_title || p.kalshi_title || series) || series;
+  const ticker = encodeURIComponent(p.kalshi_ticker || '');
+  return `https://kalshi.com/markets/${series}/${slug}${ticker ? `?ticker=${ticker}` : ''}`;
 }
 
 function renderDetail(p) {

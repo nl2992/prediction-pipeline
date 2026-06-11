@@ -964,6 +964,14 @@ def discover(
             "kalshi_event_title":  k_event_title,
             "kalshi_ticker":       pair.kalshi.market_id,
             "kalshi_event_ticker": pair.kalshi.event_id,
+            # Series ticker is what kalshi.com routes market pages on — event
+            # tickers 404. Sourced from the event catalog; fall back to
+            # stripping the event ticker's date/outcome suffix.
+            "kalshi_series_ticker": (
+                (filtered_by_ticker.get(pair.kalshi.event_id) or {}).get("series_ticker")
+                or (pair.kalshi.event_id.rsplit("-", 1)[0] if "-" in pair.kalshi.event_id
+                    else pair.kalshi.event_id)
+            ),
             "kalshi_close":     (pair.kalshi.close_time or "")[:10],
             "kalshi_bid":       kb,
             "kalshi_ask":       ka,
