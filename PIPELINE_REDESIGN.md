@@ -22,6 +22,17 @@ input stage never finishes.
 (≤500 filtered events), with progress reporting; the full crawl remains only for genuinely
 unbounded scans. Complexity drops from O(exchange size) to O(relevant events).
 
+**Measured (same live scan, same parameters):**
+
+| | before | after |
+|---|---|---|
+| Kalshi rows fetched | >750,000 → **timeout at 540 s, 0 results** | **651 rows in 36.1 s** |
+| End-to-end scan | never completed | **completes in ~90 s** |
+| Live output | — | 1 genuine cross-platform pair found: PM "Elon Musk trillionaire before 2027?" ↔ Kalshi "Will Elon Musk be a trillionaire before 2027?" |
+
+(Next discovery bottleneck, acceptable for now: the Polymarket side still scans its full
+event catalog — 22,833 markets in ~37 s. A keyword-scoped search would cut that too.)
+
 ### 2. The match decision layer is 48 ordered vetoes
 `is_compatible_match` is a single function with **48 sequential `return False` exits**
 accumulated over many fix iterations. Findings from the fix log that motivated the
