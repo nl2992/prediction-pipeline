@@ -1700,9 +1700,23 @@ def match_markets(
     # Kalshi sports series carry a contractual far-out expiry (e.g. 2028 for
     # the current NBA Finals) even though the market resolves this season.
     # Hard-filtering by delta_h would silently drop all such sports pairs.
+    # PERFORMANCE: the candidate loop can visit tens of millions of (poly,
+    # kalshi) pairs on full-catalog scans (e.g. 27k × 1.1k). Every signal used
+    # below the similarity gate is a pure function of ONE market, so extract it
+    # once per market here instead of per candidate pair — the threshold-led
+    # check then costs dict lookups and set ops instead of a fresh regex suite
+    # (_numeric_threshold, _named_entities, datetime parsing) per pair. This
+    # took dashboard stage-5 matching from minutes-to-never to seconds.
+    kalshi_thr = {s.market_id: _numeric_threshold(_snapshot_text(s)) for s in remaining_kalshi}
+    kalshi_ents = {s.market_id: _named_entities(s.title) for s in remaining_kalshi}
+    kalshi_dt = {s.market_id: _parse_dt(s.close_time) for s in remaining_kalshi}
+
     scored: list[tuple[float, "MarketSnapshot", "MarketSnapshot"]] = []
     for p in remaining_poly:
         p_toks = poly_tok[p.market_id]
+        p_thr = _numeric_threshold(_snapshot_text(p))
+        p_ents: set[str] | None = None  # lazy: only needed when p_thr exists
+        p_dt = _parse_dt(p.close_time)
         candidate_ids: set[str] = set()
         for tok in p_toks:
             candidate_ids.update(kalshi_by_token.get(tok, ()))
@@ -1718,15 +1732,19 @@ def match_markets(
                 # entity (the asset), and a near-identical resolution time.
                 # Exact-threshold gating avoids the off-by-one ladder regression
                 # that sank the iter-7 catalog-price path.
-                p_thr = _numeric_threshold(_snapshot_text(p))
-                k_thr = _numeric_threshold(_snapshot_text(k))
-                dh = _close_delta_hours(p.close_time, k.close_time)
-                shared_entity = bool(_named_entities(p.title) & _named_entities(k.title))
-                if not (
-                    p_thr and k_thr and _threshold_equal(p_thr, k_thr)
-                    and shared_entity
-                    and dh is not None and dh <= 72.0
-                ):
+                if p_thr is None:
+                    continue
+                k_thr = kalshi_thr[kalshi_id]
+                if not (k_thr and _threshold_equal(p_thr, k_thr)):
+                    continue
+                k_dt = kalshi_dt[kalshi_id]
+                if p_dt is None or k_dt is None:
+                    continue
+                if abs((p_dt - k_dt).total_seconds()) / 3600.0 > 72.0:
+                    continue
+                if p_ents is None:
+                    p_ents = _named_entities(p.title)
+                if not (p_ents & kalshi_ents[kalshi_id]):
                     continue
             # Token-ratio guard: block short labels ("Democratic Party", 2 tokens)
             # from matching long questions (8+ tokens) via coincidental Jaccard.
