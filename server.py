@@ -53,18 +53,28 @@ def _load_signals(n: int = 200) -> list[dict]:
     return out
 
 
+# Interactive scans must stay bounded: an unbounded horizon (days=None) lets
+# thousands of events through the filter, which overflows discover()'s
+# per-event blocking limit and falls back to crawling the ENTIRE Kalshi
+# catalog (>750k rows — minutes-to-never on a dashboard request). Defaults
+# below keep a full scan in the ~90s range; pass explicit params to widen.
+_DEFAULT_SCAN_DAYS = 730
+_DEFAULT_MAX_EVENTS = 200
+
+
 def _run_scan(
     category: str = "all",
     min_sim: float = 0.30,
-    max_events: int | None = None,
+    max_events: int | None = _DEFAULT_MAX_EVENTS,
     show_prices: bool = True,
+    days: int | None = _DEFAULT_SCAN_DAYS,
 ) -> dict:
     t0 = time.time()
     try:
         from discover import discover
         pairs = discover(
             category=category,
-            days=None,
+            days=days,
             min_sim=min_sim,
             show_prices=show_prices,
             max_events_to_search=max_events,
@@ -90,17 +100,23 @@ def _run_scan(
 def api_scan(
     category: str = "all",
     min_sim: float = 0.30,
-    max_events: int | None = None,
+    max_events: int | None = _DEFAULT_MAX_EVENTS,
+    days: int | None = _DEFAULT_SCAN_DAYS,
 ):
     """Run a full organic discover scan and return matched pairs."""
     return JSONResponse(_run_scan(category=category, min_sim=min_sim,
-                                  max_events=max_events, show_prices=True))
+                                  max_events=max_events, show_prices=True, days=days))
 
 
 @app.get("/api/scan/fast")
-def api_scan_fast(category: str = "all"):
+def api_scan_fast(
+    category: str = "all",
+    max_events: int | None = _DEFAULT_MAX_EVENTS,
+    days: int | None = _DEFAULT_SCAN_DAYS,
+):
     """Quick scan — no live orderbook enrichment, uses catalog mid-prices only."""
-    return JSONResponse(_run_scan(category=category, show_prices=False))
+    return JSONResponse(_run_scan(category=category, show_prices=False,
+                                  max_events=max_events, days=days))
 
 
 @app.get("/api/signals")
