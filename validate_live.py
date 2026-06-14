@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 
 from discover import discover
 
@@ -82,10 +83,19 @@ def main() -> None:
     ap.add_argument("--max-events", type=int, default=200)
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
-    res = run(min_pairs=args.min_pairs, max_events=args.max_events)
+    # discover() prints scan progress to stdout. In --json mode that pollutes the
+    # payload and breaks downstream json.load, so route progress to stderr (still
+    # visible / logged) and keep stdout a clean JSON document.
     if args.json:
+        real_stdout = sys.stdout
+        sys.stdout = sys.stderr
+        try:
+            res = run(min_pairs=args.min_pairs, max_events=args.max_events)
+        finally:
+            sys.stdout = real_stdout
         print(json.dumps(res, indent=2))
         return
+    res = run(min_pairs=args.min_pairs, max_events=args.max_events)
     print(f"\nLIVE: engine pairs={res['engine_match_count']} (need >= {res['min_pairs']}) | "
           f"v2 agree={res['v2_agree']} disagree={res['v2_disagree']} "
           f"unjudged={res['v2_unjudged']} inverted={res['v2_inverted_flagged']} "

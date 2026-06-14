@@ -34,7 +34,7 @@ explicitly.
 
 | Calendar day | Consecutive "fully-correct" runs | Target |
 |---|---|---|
-| 2026-06-14 | **1** (curated only) | 8 |
+| 2026-06-14 | **2** (curated 20-pair runs, offsets 0 & 21) | 8 |
 
 A run counts toward the streak only if all 20 pairs are Exact, engine match
 count == expected match count, and there are no false positives. Any failure
@@ -122,6 +122,40 @@ Added `validate_live.py` (live precision harness). No engine behavior changed.
 
 ---
 
+## Run 3 — 2026-06-14 (LIVE + curated offset 21)
+
+**Result: PASS (curated, strict) + precision PASS (live).** Consecutive
+fully-correct curated runs after this: **2/8**.
+
+- **Live** (`validate_live.py`): engine pairs = **39** (≥20 ✔); v2 referee
+  agree **39/39**, disagree 0, unjudged 0, polarity flags 0 → no false-positive
+  candidates. Categories: election, political (unchanged data-availability gap).
+- **Curated** (`validate_matcher.py --offset 21 --n 20`): expected 20, engine 20,
+  **exact 20/20**, FP 0, missed 0, polarity 0.
+- **Regression:** `pytest -q` → **121 passed**.
+
+### Classification
+All tested pairs: Exact match. No Missed / False positive / Incorrect polarity /
+expiry / resolution / category / counterpart in either harness.
+
+### Defect found & fixed this run
+- [x] **`validate_live.py --json` polluted stdout** with `discover()` progress
+      lines, breaking `json.load` for any downstream consumer (the cron's own
+      step 1 piped `--json` into a parser and crashed with
+      `JSONDecodeError`). Fix: in `--json` mode route progress to stderr and emit
+      only the JSON document on stdout. Verified: `validate_live.py --json |
+      json.load` now parses cleanly (39 pairs).
+  - *Test note (honest):* no unit test added — `validate_live` is network-bound
+    (calls live `discover`), so a deterministic unit test would require mocking
+    the entire scan; the fix is structural (stream separation) and verified by
+    re-run. Tracked rather than forced, per loop policy.
+
+### Diagnosis of the defect
+Category: harness/tooling I/O bug (not a matcher engine defect). Cause: mixing
+human-progress output and machine output on the same stream.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -144,4 +178,5 @@ Added `validate_live.py` (live precision harness). No engine behavior changed.
 |---|---|---|
 | 1 | 751f80f | add validate_matcher.py + this log (pushed to origin/main) |
 | 1 | ed23366 | record run-1 commit hash |
-| 2 | _this commit_ | add validate_live.py + run-2 live precision results |
+| 2 | 452cdbe | add validate_live.py + run-2 live precision results |
+| 3 | _this commit_ | fix validate_live --json stdout pollution + run-3 results |
