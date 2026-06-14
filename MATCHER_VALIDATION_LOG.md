@@ -319,6 +319,54 @@ requires the markdown pushed). No engine source changed since run 5.
 
 ---
 
+## Run 11 — 2026-06-14 (INGESTION/blocking recall harness build) — REAL finding
+
+Daily curated streak already at 8/8, so this fire advanced the backlog instead of
+replaying passing validations (per the daily stopping rule). Built the
+**ingestion-recall** harness and it found a **genuine, large recall gap**.
+
+**New harness `validate_ingestion.py`** — runs production `discover()` at the
+loop's Kalshi event cap (200) and a wider cap (500), diffs the matched pairs, and
+keeps v2-endorsed new-only pairs as candidate ingestion misses (pairs blocked out
+of the pool by the event-count cap, before matching ever runs).
+
+**Result: REVIEW — real ingestion recall gap.**
+- prod(cap=200) = **39** pairs; wide(cap=500) = **220** pairs.
+- new-only = 181; **v2-endorsed candidate misses = 178**.
+- Spot-checked candidates are unambiguously correct, e.g.:
+  - PM "Jair Bolsonaro" ↔ Kalshi "Will Jair Bolsonaro finish 2nd in the first round" (Brazil election)
+  - PM "Naftali Bennett" ↔ Kalshi "Will Naftali Bennett become Prime Minister" (Israel)
+  - PM "Itamar Ben Gvir" / "Gideon Sa'ar" / "Fernando Haddad" ↔ matching Kalshi races
+  These are real cross-platform pairs the **production cap=200 never ingested**
+  because their Kalshi events rank outside the top 200.
+
+### Classification
+178 × **Missed match** (ingestion/blocking) — true pairs absent from the pool.
+Not a matcher-logic defect: the matcher pairs them correctly once they are in the
+pool (they appear at cap=500). Root cause is the ingestion blocking parameter.
+
+### Diagnosis
+**Missing candidate from ingestion** — `max_events_to_search=200` is too low.
+True pairs concentrated in non-US elections (Brazil, Israel, etc.) sit in Kalshi
+events ranked 200–500 and are dropped before matching. ~5.6× more pairs are
+reachable at cap=500.
+
+### Proposed fix (NOT forced — has a production tradeoff; needs a decision)
+- [ ] Raise `max_events_to_search` (e.g. 200 → 500) in the loop/alerter, or make
+      it adaptive/unbounded. **Tradeoff:** scan time grows from ~90s to ~4 min
+      (more Kalshi market fetches); affects the live `PredArbAlerter` (still well
+      under its 20-min limit and 30-min interval). **Production relevance:** the
+      live arb alerter currently scans at cap=200, so it is missing ~178
+      executable pairs — directly relevant to the operator's "email ALL the pairs
+      we can possibly run" requirement. Left for operator decision rather than
+      silently changing production scan cost.
+- [ ] Before raising in production, sanity-check what fraction of the 178 clear
+      the positive-net-of-fees bar (many non-US election longshots may be dust).
+
+`pytest -q` → **124 passed** (new harness is standalone; no engine change).
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -328,10 +376,13 @@ requires the markdown pushed). No engine source changed since run 5.
       (run 5) probes recall loss from the production matcher's gate via a
       relaxed-gate diff refereed by v2. First result: CLEAN (no gate-driven
       misses). Covers the gate dimension of recall.
-- [ ] **Live recall — ingestion/blocking.** Detect true pairs where one or both
-      markets were never fetched/blocked into the pools (e.g. category sparsity,
-      keyword-derivation misses). Not covered by the gate probe; the deeper
-      remaining recall gap.
+- [x] **Live recall — ingestion (event-cap dimension).** `validate_ingestion.py`
+      (run 11) probes the Kalshi event-count cap. Found a REAL gap: cap=200 drops
+      ~178 v2-endorsed true pairs (39 → 220 at cap=500). Fix proposed, pending
+      operator decision on the scan-time tradeoff (see Run 11).
+- [ ] **Live recall — Polymarket keyword-derivation misses.** True PM counterpart
+      that the derived keyword search never surfaces (separate from the event
+      cap). Still not covered.
 - [ ] **Live recall — independent ground-truth anchor set.** A hand-verified set
       of known-correct *current* live pairs (re-resolved against the live catalog
       each run) to measure recall without relying on v2 as referee.
@@ -353,4 +404,5 @@ requires the markdown pushed). No engine source changed since run 5.
 | 3 | c8cc1ab | fix validate_live --json stdout pollution + run-3 results |
 | 4 | (none — idle PASS) | run-4 log only, no code change |
 | 5 | 4ac46a6 | add validate_recall.py + discover return_pools + run-5 recall probe |
-| 6–10 | _this commit_ | day-complete audit trail: runs 6–10, 8/8 daily goal met |
+| 6–10 | d0c1bf6 | day-complete audit trail: runs 6–10, 8/8 daily goal met |
+| 11 | _this commit_ | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
