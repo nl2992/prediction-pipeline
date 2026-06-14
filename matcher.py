@@ -498,6 +498,27 @@ def _has_over_under(text: str) -> bool:
     return bool(re.search(r"\bo/u\b|\bover\s*/\s*under\b|\bover\b|\bunder\b", low))
 
 
+def _is_ou_or_spread(text: str) -> bool:
+    """True for a totals (over/under line) or point-spread market.
+
+    Targets sports lines like "Sweden 1st Half O/U 0.5", "France O/U 1.5",
+    "Bosnia and Herzegovina (-1.5)" — a different BET TYPE from a moneyline
+    win market on the same team.
+    """
+    low = _ascii_lower(text)
+    return bool(
+        re.search(r"\bo/u\b|\bover\s*/\s*under\b", low)
+        or re.search(r"\b(?:over|under)\b\s*\d", low)        # "over 1.5"
+        or re.search(r"[a-z)]\s*\(\s*[+-]?\d+(?:\.\d+)?\s*\)", low)  # "Team (-1.5)"
+    )
+
+
+def _is_win_market(text: str) -> bool:
+    """True for a moneyline win/winner/beat market (not a totals/spread line)."""
+    low = _ascii_lower(text)
+    return bool(re.search(r"\bwin(?:s|ner)?\b|\bbeat(?:s|en)?\b|\bdefeat(?:s|ed)?\b", low))
+
+
 def _settlement_type(text: str) -> str | None:
     """Classify path-dependent price settlements.
 
@@ -1383,6 +1404,16 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
     k_picks = _draft_pick_numbers(k_text)
     if p_picks and k_picks and p_picks.isdisjoint(k_picks):
         return False
+
+    # Totals/spread vs moneyline: a "Team O/U 0.5" or "Team (-1.5)" line is a
+    # different contract from "Will Team win?" even on the same team/period. The
+    # over/under stat-veto below only fires when both titles share a recognized
+    # stat; sports line-vs-winner pairs share none, so guard them explicitly.
+    # (Run 12: this was the dominant phantom-arb pattern at scale.)
+    if _is_ou_or_spread(p_text) != _is_ou_or_spread(k_text):
+        other = k_text if _is_ou_or_spread(p_text) else p_text
+        if _is_win_market(other):
+            return False
 
     p_stats = _stat_thresholds(p_text)
     k_stats = _stat_thresholds(k_text)

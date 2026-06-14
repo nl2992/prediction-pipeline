@@ -1464,5 +1464,28 @@ class KalshiVariableFeeRegressions(unittest.TestCase):
         self.assertEqual(fixture_arbs, 14)
 
 
+class TotalsVsMoneylineVeto(unittest.TestCase):
+    """Run 12 phantom-arb fix: a totals (O/U) or spread line is a different
+    contract from a moneyline win market on the same team, and must be rejected.
+    """
+
+    def _c(self, p_title: str, k_title: str) -> bool:
+        p = titled_snap("polymarket", "pm", p_title, "2026-07-01T00:00:00Z")
+        k = titled_snap("kalshi", "k", k_title, "2026-07-01T00:00:00Z")
+        return is_compatible_match(p, k)
+
+    def test_over_under_vs_win_rejected(self) -> None:
+        self.assertFalse(self._c("Sweden 1st Half O/U 0.5", "Will Sweden win the 1st Half?"))
+        self.assertFalse(self._c("France 1st Half O/U 1.5", "Will France win the 1st Half?"))
+
+    def test_spread_vs_win_rejected(self) -> None:
+        self.assertFalse(self._c("Bosnia and Herzegovina (-1.5)", "Will Bosnia and Herzegovina win?"))
+
+    def test_legit_moneyline_and_threshold_pairs_still_match(self) -> None:
+        # Both moneyline -> match; both threshold -> match. Veto must not overreach.
+        self.assertTrue(self._c("Will the Lakers win the 2026 NBA Finals?", "Lakers to win 2026 NBA Finals?"))
+        self.assertTrue(self._c("Will BTC reach $150k in 2026?", "Bitcoin above $150,000 by Dec 31 2026?"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -415,6 +415,37 @@ updated one stale test whose synthetic 44c edge tripped the new max_edge guard).
 
 ---
 
+## Run 13 — 2026-06-15 (sports-matcher precision: totals/spread vs moneyline veto)
+
+(New calendar day → curated strict streak reset to 0; no curated run this
+iteration — this was a targeted matcher precision fix, per operator choice to
+"fix sports matcher first.")
+
+**Fix:** the dominant Run-12 phantom pattern was over/under-line vs winner on the
+same team (e.g. "Sweden 1st Half O/U 0.5" ↔ "Will Sweden win the 1st Half?").
+Root cause: the existing over/under veto in `is_compatible_match` was nested
+inside the shared-stat loop, so it never fired when the two titles shared no
+recognized stat (sports line-vs-winner share none).
+
+Added a standalone veto (`is_compatible_match`): if exactly one side is a
+totals/spread line (`_is_ou_or_spread`) and the other is a moneyline win market
+(`_is_win_market`), reject. Scoped to win-vs-line so it does not touch
+crypto/threshold pairs (no "win/beat" wording there).
+
+**Verification:**
+- [x] Phantom OU/spread-vs-win pairs now rejected (3 cases).
+- [x] Legit pairs still match: NBA/WC moneyline, crypto threshold (BTC reach vs
+      above).
+- [x] 50-pair fixture: no regression. `pytest -q` → **132 passed** (added 3
+      veto tests).
+
+**Still phantom (next iterations):** different-team mismatches in same tournament
+("West Indies" ↔ "Pakistan"), goals-scored vs spread, player-name vs stat-prop
+("Cody Gakpo" ↔ "Cody Gakpo: 2+ assists"). Cap stays at 200 until these are
+handled too. Full live re-quantification of phantom reduction: pending (next run).
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -431,14 +462,14 @@ updated one stale test whose synthetic 44c edge tripped the new max_edge guard).
 - [ ] **Live recall — Polymarket keyword-derivation misses.** True PM counterpart
       that the derived keyword search never surfaces (separate from the event
       cap). Still not covered.
-- [ ] **Sports-matcher precision (BLOCKER for widening the cap).** The matcher
-      mis-pairs sports on shared proper nouns: over/under-line markets vs
-      win/winner markets ("Team 1st-Half O/U 0.5" vs "Will Team win the 1st
-      Half?"), and different teams in the same tournament. v2 does not catch
-      these. Needs: reject O/U-line ↔ moneyline, enforce settlement-shape match,
-      enforce same-team. Until fixed, the alerter cap cannot be safely raised
-      above ~200 (see Run 12). This is the prerequisite for the operator's
-      "raise to 1500 / >=50 survivable" request.
+- **Sports-matcher precision (BLOCKER for widening the cap).** Prerequisite for
+  the operator's "raise to 1500 / >=50 survivable" request. Progress:
+  - [x] Reject totals/spread (O/U-line) vs moneyline win (Run 13).
+  - [ ] Reject different teams in the same tournament ("West Indies" ↔ "Pakistan").
+  - [ ] Reject goals-scored vs spread; player-name vs stat-prop ("Cody Gakpo" ↔
+        "Cody Gakpo: 2+ assists").
+  - [ ] Re-quantify phantom reduction at cap=1500; only raise the cap once the
+        guarded survivable set is verified mostly-real.
 - [ ] **Live recall — independent ground-truth anchor set.** A hand-verified set
       of known-correct *current* live pairs (re-resolved against the live catalog
       each run) to measure recall without relying on v2 as referee.
@@ -462,4 +493,5 @@ updated one stale test whose synthetic 44c edge tripped the new max_edge guard).
 | 5 | 4ac46a6 | add validate_recall.py + discover return_pools + run-5 recall probe |
 | 6–10 | d0c1bf6 | day-complete audit trail: runs 6–10, 8/8 daily goal met |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
-| 12 | _this commit_ | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
+| 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
+| 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |
