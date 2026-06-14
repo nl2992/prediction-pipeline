@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 import unittest
 
-from alerter import build_email, compute_signals, filter_new
+from alerter import build_email, compute_signals, filter_new, signals_to_send
 
 
 def pair(pb, pa, kb, ka, **extra):
@@ -70,6 +70,41 @@ class FilterNew(unittest.TestCase):
         s = self._sig()
         state = {s["key"]: {"net": s["net_accurate"] - 0.01, "ts": time.time()}}
         self.assertEqual(len(filter_new([s], state, realert_hours=6)), 1)
+
+
+class SignalsToSend(unittest.TestCase):
+    """Trigger on change, but email EVERY positive-net pair."""
+
+    def _sig(self, key, net):
+        return {"key": key, "net_accurate": net,
+                "poly_title": "p", "kalshi_title": "k"}
+
+    def test_emails_all_positive_when_one_changed(self) -> None:
+        # A is already known/unchanged, B is brand new. The trigger fires (B is
+        # fresh) and BOTH positive pairs are emailed — not just B.
+        a = self._sig("A", 0.05)
+        b = self._sig("B", 0.03)
+        state = {"A": {"net": 0.05, "ts": time.time()}}
+        to_email, fresh = signals_to_send([a, b], state, realert_hours=6)
+        self.assertEqual({s["key"] for s in to_email}, {"A", "B"})
+        self.assertEqual({s["key"] for s in fresh}, {"B"})
+        # sorted by net desc
+        self.assertEqual([s["key"] for s in to_email], ["A", "B"])
+
+    def test_no_email_when_nothing_changed(self) -> None:
+        a = self._sig("A", 0.05)
+        state = {"A": {"net": 0.05, "ts": time.time()}}
+        to_email, fresh = signals_to_send([a], state, realert_hours=6)
+        self.assertEqual(to_email, [])
+        self.assertEqual(fresh, [])
+
+    def test_non_positive_net_excluded(self) -> None:
+        # Net <= 0 (not runnable after fees) is never emailed, even if "fresh".
+        a = self._sig("A", 0.04)            # positive, new
+        z = self._sig("Z", -0.01)           # negative net — excluded
+        to_email, fresh = signals_to_send([a, z], {}, realert_hours=6)
+        self.assertEqual({s["key"] for s in to_email}, {"A"})
+        self.assertNotIn("Z", {s["key"] for s in fresh})
 
 
 class EmailBody(unittest.TestCase):

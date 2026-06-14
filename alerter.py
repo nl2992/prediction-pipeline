@@ -28,8 +28,11 @@ ALERT_FROM / ALERT_RECIPIENTS (comma-separated) override the file. Without
 credentials the alerter still runs: signals are printed and appended to
 alert_signals.jsonl, and each cycle warns that email is unconfigured.
 
-De-duplication: a signal is re-emailed only if it is new, its net edge improved
-by >= 0.5c, or the last alert for it is older than --realert-hours (default 6).
+Trigger vs content: an email is TRIGGERED on change — a signal is considered
+fresh only if it is new, its net edge improved by >= 0.5c, or the last alert for
+it is older than --realert-hours (default 6). But when an email goes out, it
+lists EVERY currently-executable pair (net of fees strictly positive), not just
+the changed one — the operator wants the full set of runnable arbs each time.
 """
 
 from __future__ import annotations
@@ -39,6 +42,7 @@ import json
 import os
 import re
 import smtplib
+import sys
 import time
 from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
@@ -54,6 +58,16 @@ SIGNALS_FILE = BASE / "alert_signals.jsonl"
 
 DEFAULT_RECIPIENTS = ["hyutong88@gmail.com", "nl2992@columbia.edu"]
 FLAT_FEE = 0.07
+
+# When launched headless (Windows Task Scheduler via pythonw.exe), there is no
+# console: sys.stdout/sys.stderr are None and every print() would raise. Redirect
+# both to a rolling log file so scheduled runs are silent yet still auditable.
+if sys.stdout is None or sys.stderr is None:
+    _cron_log = open(BASE / "alerter_cron.log", "a", encoding="utf-8", buffering=1)
+    if sys.stdout is None:
+        sys.stdout = _cron_log
+    if sys.stderr is None:
+        sys.stderr = _cron_log
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +198,27 @@ def filter_new(signals: list[dict], state: dict, realert_hours: float, improve_s
     return fresh
 
 
+def signals_to_send(signals: list[dict], state: dict, realert_hours: float,
+                    min_net: float = 0.0) -> tuple[list[dict], list[dict]]:
+    """Decide what to email.
+
+    Trigger on CHANGE (any new/improved signal vs last scan), but when we do
+    email, include EVERY currently-executable pair — net of fees strictly above
+    ``min_net`` (default 0 = positive after the real Kalshi taker fee) — not just
+    the changed ones. This is what the operator wants to act on: the full set of
+    runnable arbs, refreshed whenever anything moves.
+
+    Returns ``(to_email, fresh)``. ``to_email`` is the full positive-net set when
+    something changed, else empty (no trigger → no email).
+    """
+    positive = [s for s in signals if s["net_accurate"] > min_net]
+    fresh = filter_new(positive, state, realert_hours)
+    if not fresh:
+        return [], []
+    positive.sort(key=lambda s: -s["net_accurate"])
+    return positive, fresh
+
+
 # ---------------------------------------------------------------------------
 # Email
 # ---------------------------------------------------------------------------
@@ -244,23 +279,26 @@ def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False) -> i
           f"{len(signals)} signal(s) >= {min_edge*100:.1f}c net", flush=True)
 
     state = load_state()
-    fresh = filter_new(signals, state, realert_hours)
-    if not fresh:
+    # Trigger on change; email EVERY positive-net (after-fees) pair, not just the
+    # changed one. `fresh` is only used to decide whether to send this cycle.
+    to_email, fresh = signals_to_send(signals, state, realert_hours)
+    if not to_email:
         return 0
 
     with SIGNALS_FILE.open("a", encoding="utf-8") as f:
-        for s in fresh:
+        for s in to_email:
             f.write(json.dumps(s) + "\n")
-    for s in fresh:
-        print(f"[alerter] SIGNAL net={s['net_accurate']*100:.2f}c  {s['poly_title'][:40]!r} <-> {s['kalshi_title'][:40]!r}")
+    for s in to_email:
+        flag = " (new/changed)" if s in fresh else ""
+        print(f"[alerter] SIGNAL net={s['net_accurate']*100:.2f}c  {s['poly_title'][:40]!r} <-> {s['kalshi_title'][:40]!r}{flag}")
 
-    subject, html = build_email(fresh)
+    subject, html = build_email(to_email)
     if dry_run:
-        print(f"[alerter] DRY RUN — would email {cfg['recipients']}: {subject}")
+        print(f"[alerter] DRY RUN — would email {cfg['recipients']}: {subject} ({len(to_email)} pairs)")
     elif email_configured(cfg):
         try:
             send_email(cfg, subject, html)
-            print(f"[alerter] EMAILED {cfg['recipients']}: {subject}", flush=True)
+            print(f"[alerter] EMAILED {cfg['recipients']}: {subject} ({len(to_email)} pairs)", flush=True)
         except Exception as exc:
             print(f"[alerter] EMAIL FAILED: {exc} — signal logged to {SIGNALS_FILE.name}", flush=True)
     else:
@@ -268,10 +306,10 @@ def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False) -> i
               f"Signal logged to {SIGNALS_FILE.name}.", flush=True)
 
     now = time.time()
-    for s in fresh:
+    for s in to_email:
         state[s["key"]] = {"net": s["net_accurate"], "ts": now}
     save_state(state)
-    return len(fresh)
+    return len(to_email)
 
 
 def main() -> None:
