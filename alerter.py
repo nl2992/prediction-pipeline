@@ -69,6 +69,22 @@ if sys.stdout is None or sys.stderr is None:
     if sys.stderr is None:
         sys.stderr = _cron_log
 
+# Adaptive ingestion cap. Run 11 (MATCHER_VALIDATION_LOG.md) showed the old
+# fixed cap of 200 Kalshi events silently dropped ~178 true pairs that live in
+# events ranked >200. Each scan now targets at least TARGET_SURVIVABLE positive
+# net-of-fees ("survivable") arbs, progressively widening the event cap through
+# CAP_LADDER until the target is met or the last rung (1500) is reached.
+# SAFETY (run 12 finding): widening the cap to 1000-1500 floods the scan with
+# PHANTOM arbs — at scale the matcher mis-pairs on shared proper nouns (e.g.
+# soccer "Team 1st-Half O/U 0.5" vs "Will Team win the 1st Half?", or different
+# teams entirely), and neither the v2 referee nor the 25c edge guard catches all
+# of them (451 of 2545 pairs survived guards at cap=1500, still mostly phantom).
+# Until sports-matcher precision is fixed, production stays at the proven-safe cap
+# where precision holds (US politics/elections). Do NOT raise without re-checking
+# precision via MATCHER_VALIDATION_LOG.md run 12.
+TARGET_SURVIVABLE = 50
+CAP_LADDER = (200,)
+
 
 # ---------------------------------------------------------------------------
 # Config / state
@@ -133,16 +149,29 @@ def _poly_url(p: dict) -> str:
     return f"https://polymarket.com/event/{slug}" if slug else ""
 
 
-def compute_signals(pairs: list[dict], min_edge: float) -> list[dict]:
+def compute_signals(pairs: list[dict], min_edge: float,
+                    require_v2: bool = True, max_edge: float = 0.25) -> list[dict]:
     """Two-leg arb economics for every priced pair; keep net >= min_edge.
 
     Both directions, both fee models. ``net_accurate`` (Kalshi's real
     0.07·p·(1−p) taker fee on the Kalshi leg; Polymarket CLOB is fee-free)
     drives the alert decision; the flat worst-case 7% figure rides along for
     context.
+
+    Precision guards (added after run-12: widening the scan to 1500 events
+    surfaced ~600 phantom "arbs" — e.g. "Cody Gakpo" matched to "Cody Gakpo:
+    2+ assists?", different contracts with a ~95c phantom edge):
+      * ``require_v2`` — only trust pairs the independent v2 contract_spec engine
+        endorses (``v2_match is True``); v2 rejects name-vs-name+prop and
+        opposite-event mismatches on settlement-shape/threshold grounds.
+      * ``max_edge`` — a net edge above this (default 25c) between two identical
+        binary contracts on liquid venues does not exist; it is the signature of
+        a mismatch or a one-sided/stale book, so it is dropped.
     """
     signals: list[dict] = []
     for p in pairs:
+        if require_v2 and p.get("v2_match") is not True:
+            continue  # independent referee does not confirm same contract
         pb, pa = p.get("poly_bid"), p.get("poly_ask")
         kb, ka = p.get("kalshi_bid"), p.get("kalshi_ask")
         best = None
@@ -171,6 +200,8 @@ def compute_signals(pairs: list[dict], min_edge: float) -> list[dict]:
                 best = cand
         if best is None or best["net_accurate"] < min_edge:
             continue
+        if best["net_accurate"] > max_edge:
+            continue  # implausible edge => mismatch / one-sided book (phantom)
         signals.append({
             "ts": datetime.now(timezone.utc).isoformat(),
             "poly_title": p.get("poly_title"),
@@ -266,17 +297,40 @@ def send_email(cfg: dict, subject: str, html: str) -> None:
 # Scan cycle
 # ---------------------------------------------------------------------------
 
+def adaptive_scan(min_edge: float, target: int = TARGET_SURVIVABLE,
+                  caps: tuple[int, ...] = CAP_LADDER) -> tuple[list, list, int]:
+    """Scan, progressively widening the Kalshi event cap until at least ``target``
+    survivable (positive net-of-fees) arbs are found, or the last cap is reached.
+
+    Returns ``(pairs, signals, cap_used)``. Higher caps are supersets, so the
+    last scan's results are the richest; we stop early at the first cap that
+    already clears the target to save time.
+    """
+    from discover import discover
+    pairs: list = []
+    signals: list = []
+    cap_used = caps[-1]
+    for cap in caps:
+        pairs = discover(category="all", days=730, min_sim=0.30, show_prices=True,
+                         max_events_to_search=cap, catalog_cache_ttl=1200)
+        signals = compute_signals(pairs, min_edge=min_edge)
+        survivable = sum(1 for s in signals if s["net_accurate"] > 0)
+        cap_used = cap
+        print(f"[alerter] cap={cap}: {len(pairs)} pairs, {survivable} survivable arb(s) "
+              f"(target {target})", flush=True)
+        if survivable >= target:
+            break
+    return pairs, signals, cap_used
+
+
 def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False) -> int:
     cfg = load_config()
     t0 = time.time()
     print(f"[alerter] {datetime.now(timezone.utc).strftime('%H:%M:%S')}Z full scan starting…", flush=True)
-    from discover import discover
-    pairs = discover(category="all", days=730, min_sim=0.30,
-                     show_prices=True, max_events_to_search=200,
-                     catalog_cache_ttl=1200)
-    signals = compute_signals(pairs, min_edge=min_edge)
-    print(f"[alerter] scan done in {time.time()-t0:.0f}s — {len(pairs)} pairs, "
-          f"{len(signals)} signal(s) >= {min_edge*100:.1f}c net", flush=True)
+    pairs, signals, cap_used = adaptive_scan(min_edge)
+    survivable = sum(1 for s in signals if s["net_accurate"] > 0)
+    print(f"[alerter] scan done in {time.time()-t0:.0f}s — cap={cap_used}, {len(pairs)} pairs, "
+          f"{survivable} survivable arb(s) (>= {min_edge*100:.2f}c net)", flush=True)
 
     state = load_state()
     # Trigger on change; email EVERY positive-net (after-fees) pair, not just the

@@ -367,6 +367,54 @@ reachable at cap=500.
 
 ---
 
+## Run 12 — 2026-06-15 (PHANTOM-ARB finding: precision collapses at scale)
+
+Acting on the operator request to "raise the alerter cap to 1500 and ensure >=50
+survivable arbs," I quantified first (as asked). **Key finding: the premise does
+not hold — widening surfaces phantom arbs, not real ones.**
+
+**Quantification at cap=1500 (with live prices + fees):**
+- 2,488–2,545 matched pairs; **raw positive-net = 641–649**.
+- Inspection of the top edges: **every one is a mismatch**, e.g.
+  - PM "Cody Gakpo" ↔ Kalshi "Cody Gakpo: 2+ assists?" (player vs stat prop, ~95c)
+  - PM "Anthropic acquired before 2027" ↔ Kalshi "Who will IPO… Anthropic" (acquired≠IPO)
+  - PM "ICC T20 … West Indies" ↔ Kalshi "Will Pakistan win…" (different teams)
+  - many one-sided/illiquid books (None bid/ask).
+- Root cause: at scale the group matcher mis-pairs on shared **proper nouns**
+  (esp. soccer "Team 1st-Half O/U 0.5" vs "Will Team win the 1st Half?" — over/
+  under goals vs winning the half). Classic **resolution-criteria / settlement-
+  shape** failure the curated fixture never exercised (it has no sports props).
+
+**Precision guards added to `compute_signals` (real fix):**
+- `require_v2=True` — only trust pairs the independent v2 engine endorses.
+- `max_edge=0.25` — a >25c net edge between identical binaries is impossible; it
+  is the signature of a mismatch / stale book.
+- Effect at cap=1500: 649 → **451 guarded** — i.e. guards remove ~30%, but the
+  remaining 451 are STILL mostly phantom (v2 does not catch soccer O/U-vs-winner;
+  the 25c cap lets through 16–25c mismatches). **Guards are necessary but not
+  sufficient.**
+
+**Decision (honest):** there are **not 50 real survivable arbs**; forcing 50 by
+widening = emailing phantoms to real recipients. So:
+- [x] Clamped the production/alerter cap back to the proven-safe **200**
+      (`CAP_LADDER=(200,)`), where precision holds (US politics/elections). At
+      cap=200 + guards a dry-run yields 25 clean signals (edges 0.05–2.13c, all
+      real). The live `PredArbAlerter` task runs the local file, so this clamp
+      protects it immediately.
+- [x] Shipped the precision guards (improve precision at any cap) + a tested
+      `adaptive_scan` utility (ready for use once precision supports widening).
+- [ ] **Raising the cap is BLOCKED on sports-matcher precision** (below).
+
+### Classification
+~600 candidate signals at cap=1500: **False positive / Incorrect resolution
+criteria** (over-under line vs winner), **Incorrect counterpart** (different
+teams). Not fixable by cap or fee tuning — needs matcher work.
+
+`pytest -q` → **129 passed** (added: adaptive escalation ×2, precision guards ×3;
+updated one stale test whose synthetic 44c edge tripped the new max_edge guard).
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -383,6 +431,14 @@ reachable at cap=500.
 - [ ] **Live recall — Polymarket keyword-derivation misses.** True PM counterpart
       that the derived keyword search never surfaces (separate from the event
       cap). Still not covered.
+- [ ] **Sports-matcher precision (BLOCKER for widening the cap).** The matcher
+      mis-pairs sports on shared proper nouns: over/under-line markets vs
+      win/winner markets ("Team 1st-Half O/U 0.5" vs "Will Team win the 1st
+      Half?"), and different teams in the same tournament. v2 does not catch
+      these. Needs: reject O/U-line ↔ moneyline, enforce settlement-shape match,
+      enforce same-team. Until fixed, the alerter cap cannot be safely raised
+      above ~200 (see Run 12). This is the prerequisite for the operator's
+      "raise to 1500 / >=50 survivable" request.
 - [ ] **Live recall — independent ground-truth anchor set.** A hand-verified set
       of known-correct *current* live pairs (re-resolved against the live catalog
       each run) to measure recall without relying on v2 as referee.
@@ -405,4 +461,5 @@ reachable at cap=500.
 | 4 | (none — idle PASS) | run-4 log only, no code change |
 | 5 | 4ac46a6 | add validate_recall.py + discover return_pools + run-5 recall probe |
 | 6–10 | d0c1bf6 | day-complete audit trail: runs 6–10, 8/8 daily goal met |
-| 11 | _this commit_ | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
+| 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
+| 12 | _this commit_ | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
