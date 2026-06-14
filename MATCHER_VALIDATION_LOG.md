@@ -35,6 +35,7 @@ explicitly.
 | Calendar day | Consecutive "fully-correct" runs | Target |
 |---|---|---|
 | 2026-06-14 | **8 ✅ DAILY GOAL MET** (offsets 0, 21, 28, 35, 7, 14, 3, 10) | 8 |
+| 2026-06-15 | **2** (offsets 17, 24) | 8 |
 
 A run counts toward the streak only if all 20 pairs are Exact, engine match
 count == expected match count, and there are no false positives. Any failure
@@ -446,6 +447,48 @@ handled too. Full live re-quantification of phantom reduction: pending (next run
 
 ---
 
+## Run 14 — 2026-06-15 (LIVE precision + recall + curated offset 17) — idle PASS, no commit
+
+First curated run of the new calendar day (streak reset). **PASS + precision PASS
++ recall CLEAN.** Consecutive fully-correct curated runs: **1/8**.
+
+- **Live precision**: 39 pairs, v2 agree **39/39**, disagree 0 → no FP candidates.
+  Categories: election, political.
+- **Live recall**: production(0.30) 39, relaxed(0.20) 39, relaxed-only 0,
+  v2-endorsed misses 0 → **CLEAN**.
+- **Curated** (`--offset 17 --n 20`): expected 20, engine 20, **exact 20/20**,
+  FP 0, missed 0, polarity 0.
+- **Regression:** `pytest -q` → **132 passed** (incl. run-13 sports-veto tests).
+
+Classification: all Exact. No defect → **no code change → no commit**. (Run-13
+totals/spread veto holds; cap=200 live scans show no phantoms, as expected since
+phantoms surface only at the wider cap.)
+
+---
+
+## Run 15 — 2026-06-15 (sports precision: player stat-prop veto) + curated offset 24
+
+**Curated PASS** (streak **2/8**) + **precision PASS** (39/39) + **recall CLEAN**,
+and a targeted sports-precision fix.
+
+**Fix:** second Run-12 phantom pattern — a player stat-prop ("Cody Gakpo: 2+
+assists", "Mitch Marner: First Goalscorer") mis-paired to a plain market on the
+same player ("Cody Gakpo"). Diagnosis: `_proper_names` extracts the same player
+on both sides; the prop side carries a stat the plain side lacks, and no existing
+veto fired on that asymmetry.
+
+Added `_is_player_prop` + a veto in `is_compatible_match`: reject when exactly one
+side is a player prop and the two share a proper name. Scoped by shared-name so
+it cannot over-reject unrelated markets; fixture/cap-200 production have no player
+props, so unaffected.
+
+**Verification:**
+- [x] 3 player-prop phantoms rejected; legit moneyline + nomination pairs match.
+- [x] `pytest -q` → **133 passed** (added player-prop test); 50-pair fixture clean.
+- **Curated** (`--offset 24 --n 20`): exact 20/20, FP 0, missed 0.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -466,8 +509,9 @@ handled too. Full live re-quantification of phantom reduction: pending (next run
   the operator's "raise to 1500 / >=50 survivable" request. Progress:
   - [x] Reject totals/spread (O/U-line) vs moneyline win (Run 13).
   - [ ] Reject different teams in the same tournament ("West Indies" ↔ "Pakistan").
-  - [ ] Reject goals-scored vs spread; player-name vs stat-prop ("Cody Gakpo" ↔
-        "Cody Gakpo: 2+ assists").
+  - [x] Reject player-name vs stat-prop ("Cody Gakpo" ↔ "Cody Gakpo: 2+
+        assists") (Run 15).
+  - [ ] Reject goals-scored vs spread (e.g. "Team (-1.5)" ↔ "Will Team score?").
   - [ ] Re-quantify phantom reduction at cap=1500; only raise the cap once the
         guarded survivable set is verified mostly-real.
 - [ ] **Live recall — independent ground-truth anchor set.** A hand-verified set

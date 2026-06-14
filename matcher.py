@@ -519,6 +519,28 @@ def _is_win_market(text: str) -> bool:
     return bool(re.search(r"\bwin(?:s|ner)?\b|\bbeat(?:s|en)?\b|\bdefeat(?:s|ed)?\b", low))
 
 
+_PROP_STATS = (r"assists?|goals?|points?|hits?|saves?|rebounds?|shots?|"
+               r"tackles?|goalscorer|touchdowns?|passing yards?|strikeouts?")
+
+
+def _is_player_prop(text: str) -> bool:
+    """True for a player stat-prop market, e.g. "Cody Gakpo: 2+ assists",
+    "Mitch Marner: First Goalscorer", "Player: anytime goal".
+
+    Kalshi player props use a "Name: <prop>" shape; the prop is a stat keyword
+    or a "N+ stat" threshold. A bare "Cody Gakpo" market (to-win/transfer) is a
+    DIFFERENT contract from "Cody Gakpo: 2+ assists" even for the same player.
+    """
+    low = _ascii_lower(text)
+    if ":" in low and re.search(rf":\s*[^:]*\b(?:{_PROP_STATS})\b", low):
+        return True
+    if re.search(rf"\b\d+\+?\s*(?:{_PROP_STATS})\b", low):       # "2+ assists"
+        return True
+    if re.search(r"\b(?:first|anytime)\s+goalscorer\b|\bto score\b", low):
+        return True
+    return False
+
+
 def _settlement_type(text: str) -> str | None:
     """Classify path-dependent price settlements.
 
@@ -1413,6 +1435,13 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
     if _is_ou_or_spread(p_text) != _is_ou_or_spread(k_text):
         other = k_text if _is_ou_or_spread(p_text) else p_text
         if _is_win_market(other):
+            return False
+
+    # Player stat-prop ("Gakpo: 2+ assists", "Marner: First Goalscorer") vs a
+    # plain market on the same player are different contracts. Reject when only
+    # one side is a player prop and they share a proper name. (Run 15.)
+    if _is_player_prop(p_text) != _is_player_prop(k_text):
+        if _proper_names(p_text) & _proper_names(k_text):
             return False
 
     p_stats = _stat_thresholds(p_text)

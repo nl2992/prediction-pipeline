@@ -1486,6 +1486,13 @@ class TotalsVsMoneylineVeto(unittest.TestCase):
         self.assertTrue(self._c("Will the Lakers win the 2026 NBA Finals?", "Lakers to win 2026 NBA Finals?"))
         self.assertTrue(self._c("Will BTC reach $150k in 2026?", "Bitcoin above $150,000 by Dec 31 2026?"))
 
+    def test_player_prop_vs_plain_rejected(self) -> None:
+        # Run 15: "Player" (to-win/transfer) vs "Player: 2+ assists" are different
+        # contracts even for the same player.
+        self.assertFalse(self._c("Cody Gakpo", "Cody Gakpo: 2+ assists?"))
+        self.assertFalse(self._c("Virgil van Dijk", "Virgil van Dijk: 1+ assists?"))
+        self.assertFalse(self._c("Mitch Marner", "Mitch Marner: First Goalscorer"))
+
 
 if __name__ == "__main__":
     unittest.main()
