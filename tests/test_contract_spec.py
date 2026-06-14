@@ -107,5 +107,28 @@ class ContractSpecDecisions(unittest.TestCase):
             self.assertTrue(d.reasons, msg=f"no reasons for {pm!r} vs {k!r}")
 
 
+class SportsBetTypeGate(unittest.TestCase):
+    """Run 17 structural fix: settlement/bet-type and player-prop gates reject
+    the sports phantom-arb patterns while keeping equivalent contracts matched.
+    """
+
+    def test_totals_line_vs_moneyline_rejected(self) -> None:
+        d = decide("Sweden 1st Half O/U 0.5", "Will Sweden win the 1st Half?")
+        self.assertFalse(d.match)
+        self.assertTrue(any("bet-type" in r for r in d.reasons))
+
+    def test_player_prop_vs_plain_rejected(self) -> None:
+        self.assertFalse(decide("Cody Gakpo", "Cody Gakpo: 2+ assists?").match)
+        self.assertFalse(decide("Pete Crow-Armstrong", "Pete Crow-Armstrong: 3+ total bases?").match)
+
+    def test_equivalent_spread_restatement_still_matches(self) -> None:
+        # "(-1.5)" and "wins by over 1.5 goals" are the same line -> stay matched.
+        self.assertTrue(decide("DR Congo (-1.5)", "Congo DR wins by over 1.5 goals?").match)
+
+    def test_moneyline_pairs_still_match(self) -> None:
+        self.assertTrue(decide("Will the Lakers win the 2026 NBA Finals?",
+                               "Lakers to win 2026 NBA Finals?").match)
+
+
 if __name__ == "__main__":
     unittest.main()

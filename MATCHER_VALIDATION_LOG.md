@@ -525,6 +525,45 @@ at 200 meanwhile.
 
 ---
 
+## Run 17 — 2026-06-15 (STRUCTURAL v2 sports bet-type gate) + important finding
+
+Built the structural sports gate the operator approved: `ContractSpec.bet_type`
+(`moneyline` | `line` | `prop`) + a `match_spec` gate rejecting bet-type
+mismatches and player-prop-vs-non-prop on the same subject. Also hardened
+`_is_player_prop` (require the `+` in "N+ stat") so team lines ("wins by over 1.5
+goals") are not misread as props — fixing a latent false-reject of the real
+"DR Congo (-1.5)" ↔ "wins by over 1.5 goals" pair.
+
+Rationale: `compute_signals` already requires `v2_match=True`, so making v2 reject
+these patterns filters them everywhere — including discover's group-matcher path
+that bypasses `is_compatible_match`.
+
+**Verification:**
+- [x] v2 rejects O/U-vs-win, player-prop-vs-plain (clear reasons); still accepts
+      NBA/WC moneyline, the DR Congo spread restatement, North Carolina win.
+- [x] `pytest -q` → **137 passed** (added 4 v2-gate tests); 50-pair fixture
+      parity held (v2 stays 50/50).
+
+**Live measurement at cap=1500 (the honest finding):** guarded survivable
+430 (run 16) → **434** — essentially UNCHANGED. The targeted sports phantoms ARE
+gone from the guarded top-12 (soccer O/U-vs-win, "X: N+ assists" cleared), but the
+total did not drop because the **remaining guarded set is dominated by NON-sports
+cross-contract mismatches**, not sports:
+- `Morgan Stanley` ↔ `serve as lead underwriter`; `United Kingdom` ↔ `which
+  countries will have recession`; `Mamdani freeze rents` ↔ `congestion pricing`;
+  `Hit The Wall - Gracie Abrams` ↔ `Gracie Abrams #1 hit`.
+- A few leaked sports (stat lexicon gaps: "corners", bare "score").
+- Some genuinely REAL pairs (Fed hike, OpenAI IPO, correct-score) — the guarded
+  set is a mix, not pure phantom.
+
+**Conclusion (honest, corrects the run-16 hypothesis):** the sports gate was
+necessary and is done, but it does NOT unblock the cap. The dominant remaining
+problem is **generic over-matching**: the matcher pairs different contracts that
+merely share a proper noun / token bag (a firm, a country, a person, a song).
+Raising the cap still floods. Cap stays at **200**.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -549,9 +588,19 @@ at 200 meanwhile.
         assists") (Run 15).
   - [x] Extend player-prop lexicon with baseball/basketball stats (Run 16).
   - [ ] Reject goals-scored vs spread (e.g. "Team (-1.5)" ↔ "Will Team score?").
-  - [ ] **STRUCTURAL (real convergence):** gate sports pairs on matching
-        settlement type (moneyline/total/spread/prop) + subject/team, ideally via
-        v2 `contract_spec`. Pattern-by-pattern vetoes plateau (Run 16: 451→430).
+  - [x] **STRUCTURAL sports gate (Run 17):** v2 `contract_spec.bet_type`
+        (moneyline/line/prop) rejects sports settlement-type mismatches. Done +
+        tested. (Removed sports phantoms but did NOT reduce the total guarded
+        count — see below.)
+- [ ] **Generic cross-contract over-matching (NOW THE REAL BLOCKER).** Run 17
+      showed the guarded cap=1500 set (~434) is dominated by NON-sports pairs that
+      share only a proper noun / token bag but are different contracts: "Morgan
+      Stanley" vs "lead underwriter", "UK" vs "recession-list", policy-vs-policy,
+      "song title" vs "#1 hit". The matcher accepts these on token similarity.
+      Fixing this needs a stricter same-contract requirement (predicate/action +
+      subject must align, not just token overlap) — a core matcher change, larger
+      than the sports gate. This, not sports, is what blocks raising the cap.
+- [ ] Minor sports lexicon gaps: "corners", bare "score" (to-score prop).
   - [ ] Re-quantify phantom reduction at cap=1500; only raise the cap once the
         guarded survivable set is verified mostly-real.
 - [ ] **Live recall — independent ground-truth anchor set.** A hand-verified set
@@ -576,6 +625,10 @@ at 200 meanwhile.
 | 4 | (none — idle PASS) | run-4 log only, no code change |
 | 5 | 4ac46a6 | add validate_recall.py + discover return_pools + run-5 recall probe |
 | 6–10 | d0c1bf6 | day-complete audit trail: runs 6–10, 8/8 daily goal met |
+| 13 | ca1a323 | matcher: reject totals/spread vs moneyline-win |
+| 15 | ca05c56 | matcher: reject player stat-prop vs plain player |
+| 16 | e2ce3bc | matcher: extend player-prop lexicon; phantom measurement |
+| 17 | _this commit_ | structural v2 sports bet-type gate; generic over-matching identified |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
 | 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
 | 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |

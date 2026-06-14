@@ -35,6 +35,9 @@ from matcher import (
     _contract_actions,
     _contract_text,
     _domains,
+    _is_ou_or_spread,
+    _is_player_prop,
+    _is_win_market,
     _jaccard,
     _jurisdictions,
     _known_orgs,
@@ -84,6 +87,7 @@ class ContractSpec:
     political_actions: frozenset[str]
     monetary_direction: frozenset[str]
     threshold: tuple[str, float, str] | None
+    bet_type: str | None                # "moneyline" | "line" | "prop" | None
     settlement: str | None              # "point"(None) | "touch" | "hold"
     polarity: bool                      # True = negative state framing (banned/illegal…)
     years: frozenset[str]
@@ -92,6 +96,22 @@ class ContractSpec:
     beat_order: tuple[str, str] | None  # ordered (winner, loser) for "A beat B"
     close_time: str | None
     raw: str = field(repr=False, default="")
+
+
+def _bet_type(text: str) -> str | None:
+    """Sports bet type: a moneyline (win), a totals/spread line, or a player
+    stat-prop are different CONTRACTS even on the same team/player. Used by the
+    v2 sports gate so e.g. "Sweden 1st Half O/U 0.5" never matches "Will Sweden
+    win the 1st Half?". 'line' merges totals and spreads on purpose — they are
+    often equivalent restatements ("(-1.5)" == "wins by over 1.5 goals").
+    """
+    if _is_player_prop(text):
+        return "prop"
+    if _is_ou_or_spread(text):
+        return "line"
+    if _is_win_market(text):
+        return "moneyline"
+    return None
 
 
 def _polarity(text: str) -> bool:
@@ -128,6 +148,7 @@ def extract_spec(snap: "MarketSnapshot") -> ContractSpec:
         political_actions=frozenset(_contract_actions(text)) & _POLITICAL_EVENT_ACTIONS,
         monetary_direction=frozenset(_monetary_direction(text)),
         threshold=_numeric_threshold(text),
+        bet_type=_bet_type(text),
         settlement=_settlement_type(text),
         polarity=_polarity(text),
         years=frozenset(_years(text)),
@@ -198,6 +219,22 @@ def match_spec(
         return _reject(
             f"selected-name mismatch: {sorted(a.selected_names)} vs {sorted(b.selected_names)}"
         )
+
+    # --- sports bet-type gate -------------------------------------------------
+    # A moneyline (win), a totals/spread line, and a player stat-prop are
+    # DIFFERENT contracts even on the same team/player. This is the structural
+    # fix for the run-12 phantom-arb flood ("Sweden 1st Half O/U 0.5" vs "Will
+    # Sweden win the 1st Half?", "Cody Gakpo" vs "Cody Gakpo: 2+ assists").
+    if a.bet_type and b.bet_type and a.bet_type != b.bet_type:
+        return _reject(f"bet-type mismatch: {a.bet_type} vs {b.bet_type}")
+    # A player prop on one side and a non-prop market on the same subject
+    # (the other side has no bet_type) is still a different contract.
+    if (a.bet_type == "prop") != (b.bet_type == "prop") and (
+        (a.entities & b.entities)
+        or (a.selected_names & b.selected_names)
+        or (a.winner_subject & b.winner_subject)
+    ):
+        return _reject("player-prop vs non-prop on same subject")
 
     # --- event-class gates ----------------------------------------------------
     if a.actions and b.actions and a.actions.isdisjoint(b.actions):

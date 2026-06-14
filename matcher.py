@@ -536,7 +536,10 @@ def _is_player_prop(text: str) -> bool:
     low = _ascii_lower(text)
     if ":" in low and re.search(rf":\s*[^:]*\b(?:{_PROP_STATS})\b", low):
         return True
-    if re.search(rf"\b\d+\+?\s*(?:{_PROP_STATS})\b", low):       # "2+ assists"
+    # "N+ stat" — the explicit '+' is the player-prop signature ("2+ assists",
+    # "3+ total bases"). Require it so team lines like "wins by over 1.5 goals"
+    # (a margin/total, no '+') are NOT misread as player props.
+    if re.search(rf"\b\d+\+\s*(?:{_PROP_STATS})\b", low):
         return True
     if re.search(r"\b(?:first|anytime)\s+goalscorer\b|\bto score\b", low):
         return True
