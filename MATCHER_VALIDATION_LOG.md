@@ -35,7 +35,7 @@ explicitly.
 | Calendar day | Consecutive "fully-correct" runs | Target |
 |---|---|---|
 | 2026-06-14 | **8 ✅ DAILY GOAL MET** (offsets 0, 21, 28, 35, 7, 14, 3, 10) | 8 |
-| 2026-06-15 | **2** (offsets 17, 24) | 8 |
+| 2026-06-15 | **3** (offsets 17, 24, 31) | 8 |
 
 A run counts toward the streak only if all 20 pairs are Exact, engine match
 count == expected match count, and there are no false positives. Any failure
@@ -489,6 +489,42 @@ props, so unaffected.
 
 ---
 
+## Run 16 — 2026-06-15 (curated offset 31 + phantom-reduction measurement)
+
+**Curated PASS** (streak **3/8**) + **precision PASS** (39/39) + **recall CLEAN**.
+`pytest -q` → **133 passed**.
+
+- **Curated** (`--offset 31 --n 20`): exact 20/20, FP 0, missed 0.
+- **Phantom-reduction measurement** at cap=1500 after the run-13/15 vetoes:
+  raw 649→**605**, guarded 451→**430**. The soccer "1st Half O/U vs win"
+  phantoms that dominated the run-12 top list are **gone** (vetoes worked via the
+  individual path), but the count dropped only modestly because a **long tail** of
+  other mismatch patterns surfaced into view. Honest reading of the new guarded
+  top-12:
+  - Still phantom: player props my run-15 lexicon missed (baseball "3+ total
+    bases" — Pete Crow-Armstrong, Fernando Tatis Jr.); "Morgan Stanley" vs
+    "...serve as lead underwriter"; "Mamdani freeze rents" vs "congestion
+    pricing"; generic-vs-specific ("2027 Pro Football Champ" vs "Washington win").
+  - **Actually REAL** (not phantom — the guarded set is now a *mix*): "DR Congo
+    (-1.5)" ↔ "Congo DR wins by over 1.5 goals" (same spread); "North Carolina" ↔
+    "Will North Carolina win the College Football Playoff".
+- **Fix this run (16):** extended `_PROP_STATS` with baseball/basketball stats
+  (total bases, runs, rbis, receptions, yards, blocks, steals, threes,
+  double-double) so the run-15 player-prop veto catches "3+ total bases" etc.
+  - [x] Pete Crow-Armstrong / Tatis props rejected; legit team-win pairs match.
+  - [x] `pytest -q` → **133 passed** (extended player-prop test).
+
+**Strategic note (honest):** pattern-by-pattern vetoes show **diminishing
+returns** (451→430) — each fix clears its pattern but a long tail remains, and the
+guarded set now contains some genuinely real pairs too. Converging precision at
+the 1500 cap by enumerating patterns will be slow. The structural fix —
+require matching **settlement type** (moneyline/total/spread/prop) AND **subject/
+team** before pairing, ideally promoting v2 `contract_spec` to gate sports — is
+the real path to safely raising the cap. Logged as the next major item; cap stays
+at 200 meanwhile.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -511,7 +547,11 @@ props, so unaffected.
   - [ ] Reject different teams in the same tournament ("West Indies" ↔ "Pakistan").
   - [x] Reject player-name vs stat-prop ("Cody Gakpo" ↔ "Cody Gakpo: 2+
         assists") (Run 15).
+  - [x] Extend player-prop lexicon with baseball/basketball stats (Run 16).
   - [ ] Reject goals-scored vs spread (e.g. "Team (-1.5)" ↔ "Will Team score?").
+  - [ ] **STRUCTURAL (real convergence):** gate sports pairs on matching
+        settlement type (moneyline/total/spread/prop) + subject/team, ideally via
+        v2 `contract_spec`. Pattern-by-pattern vetoes plateau (Run 16: 451→430).
   - [ ] Re-quantify phantom reduction at cap=1500; only raise the cap once the
         guarded survivable set is verified mostly-real.
 - [ ] **Live recall — independent ground-truth anchor set.** A hand-verified set

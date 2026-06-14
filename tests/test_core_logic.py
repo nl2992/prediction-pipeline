@@ -1492,6 +1492,9 @@ class TotalsVsMoneylineVeto(unittest.TestCase):
         self.assertFalse(self._c("Cody Gakpo", "Cody Gakpo: 2+ assists?"))
         self.assertFalse(self._c("Virgil van Dijk", "Virgil van Dijk: 1+ assists?"))
         self.assertFalse(self._c("Mitch Marner", "Mitch Marner: First Goalscorer"))
+        # Run 16: baseball stats (total bases / runs) added to the prop lexicon.
+        self.assertFalse(self._c("Pete Crow-Armstrong", "Pete Crow-Armstrong: 3+ total bases?"))
+        self.assertFalse(self._c("Fernando Tatis Jr.", "Fernando Tatis Jr.: 5+ total bases?"))
 
 
 if __name__ == "__main__":
