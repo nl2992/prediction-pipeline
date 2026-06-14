@@ -34,7 +34,7 @@ explicitly.
 
 | Calendar day | Consecutive "fully-correct" runs | Target |
 |---|---|---|
-| 2026-06-14 | **3** (curated 20-pair runs, offsets 0, 21, 28) | 8 |
+| 2026-06-14 | **8 ✅ DAILY GOAL MET** (offsets 0, 21, 28, 35, 7, 14, 3, 10) | 8 |
 
 A run counts toward the streak only if all 20 pairs are Exact, engine match
 count == expected match count, and there are no false positives. Any failure
@@ -215,6 +215,110 @@ None — no recall gap or precision defect found this run.
 
 ---
 
+## Run 6 — 2026-06-14 (LIVE precision + recall + curated offset 35) — idle PASS, no commit
+
+**Result: PASS (curated, strict) + precision PASS + recall CLEAN.** Consecutive
+fully-correct curated runs after this: **4/8**.
+
+- **Live precision**: 39 pairs, v2 agree **39/39**, disagree 0 → no FP candidates.
+  Categories: election, political.
+- **Live recall**: production(0.30) 39, relaxed(0.20) 39, relaxed-only 0,
+  v2-endorsed misses 0 → **CLEAN** (no gate-driven recall gap).
+- **Curated** (`--offset 35 --n 20`): expected 20, engine 20, **exact 20/20**,
+  FP 0, missed 0, polarity 0.
+- **Regression:** `pytest -q` → **121 passed**.
+
+Classification: all Exact. No defect found → **no code change → no commit**
+(log updated locally only, per loop policy).
+
+---
+
+## Run 7 — 2026-06-14 (LIVE precision + recall + curated offset 7) — idle PASS, no commit
+
+**Result: PASS (curated, strict) + precision PASS + recall CLEAN.** Consecutive
+fully-correct curated runs after this: **5/8**.
+
+- **Live precision**: 39 pairs, v2 agree **39/39**, disagree 0 → no FP candidates.
+  Categories: election, political.
+- **Live recall**: production(0.30) 39, relaxed(0.20) 39, relaxed-only 0,
+  v2-endorsed misses 0 → **CLEAN**.
+- **Curated** (`--offset 7 --n 20`): expected 20, engine 20, **exact 20/20**,
+  FP 0, missed 0, polarity 0.
+- **Regression:** `pytest -q` → **121 passed**.
+
+Classification: all Exact. No defect → **no code change → no commit**.
+
+---
+
+## Run 8 — 2026-06-14 (LIVE precision + recall + curated offset 14) — idle PASS, no commit
+
+**Result: PASS (curated, strict) + precision PASS + recall CLEAN.** Consecutive
+fully-correct curated runs after this: **6/8**.
+
+- **Live precision**: 39 pairs, v2 agree **39/39**, disagree 0 → no FP candidates.
+  Categories: election, political.
+- **Live recall**: production(0.30) 39, relaxed(0.20) 39, relaxed-only 0,
+  v2-endorsed misses 0 → **CLEAN**.
+- **Curated** (`--offset 14 --n 20`): expected 20, engine 20, **exact 20/20**,
+  FP 0, missed 0, polarity 0.
+- **Regression:** `pytest -q` → **124 passed**.
+
+Classification: all Exact. No defect → **no code change → no commit**.
+
+---
+
+## Run 9 — 2026-06-14 (LIVE precision + recall + curated offset 3) — idle PASS, no commit
+
+**Result: PASS (curated, strict) + precision PASS + recall CLEAN.** Consecutive
+fully-correct curated runs after this: **7/8**.
+
+- **Live precision**: 39 pairs, v2 agree **39/39**, disagree 0 → no FP candidates.
+  Categories: election, political.
+- **Live recall**: production(0.30) 39, relaxed(0.20) 39, relaxed-only 0,
+  v2-endorsed misses 0 → **CLEAN**.
+- **Curated** (`--offset 3 --n 20`): expected 20, engine 20, **exact 20/20**,
+  FP 0, missed 0, polarity 0. (Step-7 offsets exhausted; offset 3 used for a
+  distinct slice.)
+- **Regression:** `pytest -q` → **124 passed**.
+
+Classification: all Exact. No defect → **no code change → no commit**.
+
+---
+
+## Run 10 — 2026-06-14 (LIVE precision + recall + curated offset 10) — ✅ DAILY GOAL MET
+
+**Result: PASS (curated, strict) + precision PASS + recall CLEAN.** Consecutive
+fully-correct curated runs after this: **8/8 — daily stopping rule satisfied for
+2026-06-14.**
+
+- **Live precision**: 39 pairs, v2 agree **39/39**, disagree 0 → no FP candidates.
+  Categories: election, political.
+- **Live recall**: production(0.30) 39, relaxed(0.20) 39, relaxed-only 0,
+  v2-endorsed misses 0 → **CLEAN**.
+- **Curated** (`--offset 10 --n 20`): expected 20, engine 20, **exact 20/20**,
+  FP 0, missed 0, polarity 0.
+- **Regression:** `pytest -q` → **124 passed**.
+
+### Daily summary (2026-06-14)
+8 consecutive fully-correct curated 20-pair runs across offsets
+0, 21, 28, 35, 7, 14, 3, 10 (runs 1, 3, 4, 6, 7, 8, 9, 10). Across all of them:
+expected count == engine count, zero false positives, zero missed, zero polarity
+/ counterpart errors. Live precision clean every run (39/39 v2 agreement); live
+gate-recall CLEAN every run. One real defect found & fixed during the day
+(`validate_live --json` stdout pollution, run 3). Recall harness built (run 5).
+
+**Honest scope reminder (unchanged):** the strict streak is built on the
+*curated, designed-to-pass* pool — it proves no regression, not live correctness.
+Live coverage remains election/political only; live recall is measured only for
+the similarity-gate dimension. The deeper open items (ingestion/blocking recall,
+independent live anchor set, category diversity) are still unchecked below and
+are where genuinely new signal would come from.
+
+Committing the day's accumulated audit trail at this milestone (definition-of-done
+requires the markdown pushed). No engine source changed since run 5.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -248,4 +352,5 @@ None — no recall gap or precision defect found this run.
 | 2 | 452cdbe | add validate_live.py + run-2 live precision results |
 | 3 | c8cc1ab | fix validate_live --json stdout pollution + run-3 results |
 | 4 | (none — idle PASS) | run-4 log only, no code change |
-| 5 | _this commit_ | add validate_recall.py + discover return_pools + run-5 recall probe |
+| 5 | 4ac46a6 | add validate_recall.py + discover return_pools + run-5 recall probe |
+| 6–10 | _this commit_ | day-complete audit trail: runs 6–10, 8/8 daily goal met |
