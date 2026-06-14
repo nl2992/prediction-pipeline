@@ -11,10 +11,16 @@ explicitly.
 - **Source of truth:** `tests/fixtures/pairs_fixture.json` — 50 hand-labelled
   pairs (42 `should_match=true`, 8 mismatch traps, 2 inverted) spanning
   politics, econ, sports, crypto, tech, culture, misc.
-- **Harness:** `validate_matcher.py` feeds an entire 20-pair slice's Polymarket
-  + Kalshi snapshots into `match_markets` *together* and checks recovery of the
-  intended 1-to-1 pairing, false positives, wrong counterpart, and polarity
-  (`inverted`) vs ground truth.
+- **Curated harness:** `validate_matcher.py` feeds an entire 20-pair slice's
+  Polymarket + Kalshi snapshots into `match_markets` *together* and checks
+  recovery of the intended 1-to-1 pairing, false positives, wrong counterpart,
+  and polarity (`inverted`) vs ground truth.
+- **Live harness (added run 2, per user direction):** `validate_live.py` runs the
+  organic `discover` scan over current markets and judges each engine-returned
+  live pair with the **independent v2 `contract_spec` engine** (shadow mode). A
+  v2 rejection of a v1 live pair = candidate false positive. This measures live
+  **precision + polarity only** — NOT recall (missed live matches), which has no
+  engine-independent ground truth yet.
 - **Known limitation (not yet satisfied):** the loop objective asks for **20
   *freshly* extracted *live* pairs each run**. This log currently validates
   against the *curated* fixture, which was authored to be matchable and is
@@ -26,13 +32,20 @@ explicitly.
 
 ## Consecutive-success counter
 
-| Calendar day | Consecutive successful runs | Target |
+| Calendar day | Consecutive "fully-correct" runs | Target |
 |---|---|---|
-| 2026-06-14 | **1** | 8 |
+| 2026-06-14 | **1** (curated only) | 8 |
 
 A run counts toward the streak only if all 20 pairs are Exact, engine match
 count == expected match count, and there are no false positives. Any failure
 resets to 0. Counter resets at the start of each calendar day.
+
+**Streak integrity note:** only run 1 (curated) currently meets the *full*
+definition (precision + recall on a known set). Live runs (run 2 onward) pass
+**precision** but cannot yet satisfy the full definition because (a) live recall
+is unmeasured and (b) current live cross-platform overlap is category-limited
+(see runs below). The counter is therefore held at 1 and **not** inflated by
+live precision passes — to be revisited once live recall ground truth exists.
 
 ---
 
@@ -82,13 +95,44 @@ engine). No matcher source changed, so existing behavior is fully preserved.
 
 ---
 
+## Run 2 — 2026-06-14 (LIVE, `validate_live.py`)
+
+**Result: PRECISION PASS / definition NOT fully met.** Engine returned **39**
+live pairs (≥20 ✔). v2 referee: **agree 39/39, disagree 0, unjudged 0, polarity
+flags 0** → zero candidate false positives. No engine fix indicated.
+
+**Honest gaps (why this is not counted toward the strict streak):**
+- **Category coverage = election, political only.** The objective wants a diverse
+  spread (sports/crypto/econ/entertainment/legal). Current live Kalshi↔Polymarket
+  overlap is concentrated in politics; the missing categories are absent from the
+  *live data*, not rejected by the engine. Cannot manufacture diversity that the
+  market overlap doesn't contain right now.
+- **Recall unmeasured.** v2 referees precision only; missed live matches are not
+  detectable without engine-independent ground truth.
+
+Full regression unchanged from run 1 (`pytest` 121 passed; no engine source
+touched — only new harness added).
+
+### Diagnoses
+None — zero false positives, zero polarity conflicts. Category sparsity is a
+data-availability finding, not a matcher defect.
+
+### Fixes this run
+Added `validate_live.py` (live precision harness). No engine behavior changed.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
-- [ ] **Live-fresh extraction.** Replace/supplement the curated fixture with 20
-      genuinely live Kalshi+Polymarket pairs per run (real tickers/slugs pulled
-      from the live catalogs via `discover.py`), hand-verified for polarity,
-      expiry, and resolution criteria, so the loop can detect *missed* live
-      matches — which the curated pool cannot reveal.
+- [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
+      via `discover.py` and referees precision/polarity with the v2 engine
+      (run 2). Done for precision.
+- [ ] **Live recall ground truth.** Detect *missed* live matches — needs a set of
+      known-correct live pairs extracted independently of the engine. Not done;
+      this is the main blocker to counting live runs toward the strict streak.
+- [ ] **Live category diversity.** Current live overlap is election/political
+      only. Track whether sports/crypto/econ/entertainment overlap appears in
+      future scans; cannot be forced when the markets don't co-list.
 - [ ] **Negative/trap coverage in the harness.** `validate_matcher.py` currently
       tests only `should_match=true` pairs jointly; add the 8 traps so
       false-positive resistance is scored in the same run.
@@ -99,3 +143,5 @@ engine). No matcher source changed, so existing behavior is fully preserved.
 | Run | Commit | Note |
 |---|---|---|
 | 1 | 751f80f | add validate_matcher.py + this log (pushed to origin/main) |
+| 1 | ed23366 | record run-1 commit hash |
+| 2 | _this commit_ | add validate_live.py + run-2 live precision results |
