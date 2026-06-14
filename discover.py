@@ -731,7 +731,8 @@ def discover(
     max_events_to_search: int | None = None,
     kalshi_workers: int = 6,  # polite: ~10 req/s API limit; more workers trigger 429 backoff storms
     catalog_cache_ttl: int = 0,
-) -> list[dict]:
+    return_pools: bool = False,
+):
     """
     Run organic cross-exchange discovery and return matched pairs as dicts.
 
@@ -987,7 +988,7 @@ def discover(
           + (" (catalog cached)" if _pm_cached else ""))
     if not p_snaps:
         print("      No Polymarket markets found.")
-        return []
+        return ([], k_snaps, p_snaps) if return_pools else []
 
     # ── 5. Match ─────────────────────────────────────────────────────────────
     # Two-level group matching: first match Kalshi events to Polymarket events
@@ -1090,7 +1091,7 @@ def discover(
             print(f"        v2 REJECTS: {r['poly_title'][:46]!r} <-> {r['kalshi_title'][:46]!r}")
             for reason in (r.get("v2_reasons") or [])[:2]:
                 print(f"          - {reason}")
-    return results
+    return (results, k_snaps, p_snaps) if return_pools else results
 
 
 # ---------------------------------------------------------------------------

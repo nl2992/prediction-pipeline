@@ -34,7 +34,7 @@ explicitly.
 
 | Calendar day | Consecutive "fully-correct" runs | Target |
 |---|---|---|
-| 2026-06-14 | **2** (curated 20-pair runs, offsets 0 & 21) | 8 |
+| 2026-06-14 | **3** (curated 20-pair runs, offsets 0, 21, 28) | 8 |
 
 A run counts toward the streak only if all 20 pairs are Exact, engine match
 count == expected match count, and there are no false positives. Any failure
@@ -156,14 +156,81 @@ human-progress output and machine output on the same stream.
 
 ---
 
+## Run 4 — 2026-06-14 (LIVE + curated offset 28) — idle PASS, no commit
+
+**Result: PASS (curated, strict) + precision PASS (live).** Consecutive
+fully-correct curated runs after this: **3/8**.
+
+- **Live**: engine pairs = **39** (≥20 ✔); v2 agree **39/39**, disagree 0,
+  unjudged 0, polarity 0 → no false-positive candidates. Categories: election,
+  political.
+- **Curated** (`--offset 28 --n 20`): expected 20, engine 20, **exact 20/20**,
+  FP 0, missed 0, polarity 0.
+- **Regression:** `pytest -q` → **121 passed**.
+
+Classification: all Exact. No defect found → **no code change → no commit**
+(per loop policy; log updated locally only).
+
+---
+
+## Run 5 — 2026-06-14 (RECALL harness build + first live recall probe)
+
+Focus this iteration: build the live-**recall** capability (the gap flagged in
+runs 2–4 that the curated/precision harnesses cannot cover). Curated 20-pair run
+not executed this iteration → **strict streak unchanged at 3/8** (this was a
+tooling-build run, not a fresh validation run; not counted either way).
+
+**New harness `validate_recall.py`** — runs the real production group matcher
+(`_match_groups_then_individual`, what `discover` uses) at the production gate
+(0.30) and a relaxed gate (0.20) over one fetched live pool set, then referees
+the relaxed-only pairs with the independent v2 engine. Enabled by a minimal
+additive `discover(..., return_pools=True)` that returns the snapshot pools.
+
+**First live recall result (200-event scope):**
+- pools: poly = 25,724, kalshi = 1,092
+- production(0.30) = **39** pairs (matches the live loop's count ✔)
+- relaxed(0.20) = 39 pairs → **relaxed-only = 0** → v2-endorsed candidate misses
+  = **0** → **CLEAN**.
+- Interpretation: lowering the similarity gate surfaces no additional
+  v2-acceptable pairs, so **no threshold-driven recall gap** is detectable in
+  this scan.
+
+**Honesty / scope (explicit):**
+- This measures recall loss from the **similarity gate** over discover's
+  candidate universe only. It does **not** measure ingestion/blocking recall
+  (markets never fetched into the pools) — still open.
+- v2 is an imperfect referee. The earlier `match_markets`-based prototype of this
+  probe surfaced a spurious "New York Liberty ↔ New York Jets" candidate (v2
+  accepted on shared-token "New York"); that prototype was discarded in favour of
+  the production-matcher version above. v2 endorsements remain review-candidates,
+  not confirmed misses.
+- `pytest` after the `discover` change: **121 passed** (additive `return_pools`
+  param defaults False; existing tests exercise the unchanged default path).
+- *Test note (honest):* `validate_recall` is network-bound (live `discover`); no
+  deterministic unit test added (would require mocking the entire scan), same
+  policy as `validate_live`. Verified by live run.
+
+### Diagnoses
+None — no recall gap or precision defect found this run.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
       via `discover.py` and referees precision/polarity with the v2 engine
       (run 2). Done for precision.
-- [ ] **Live recall ground truth.** Detect *missed* live matches — needs a set of
-      known-correct live pairs extracted independently of the engine. Not done;
-      this is the main blocker to counting live runs toward the strict streak.
+- [x] **Live recall — similarity-gate sensitivity.** `validate_recall.py`
+      (run 5) probes recall loss from the production matcher's gate via a
+      relaxed-gate diff refereed by v2. First result: CLEAN (no gate-driven
+      misses). Covers the gate dimension of recall.
+- [ ] **Live recall — ingestion/blocking.** Detect true pairs where one or both
+      markets were never fetched/blocked into the pools (e.g. category sparsity,
+      keyword-derivation misses). Not covered by the gate probe; the deeper
+      remaining recall gap.
+- [ ] **Live recall — independent ground-truth anchor set.** A hand-verified set
+      of known-correct *current* live pairs (re-resolved against the live catalog
+      each run) to measure recall without relying on v2 as referee.
 - [ ] **Live category diversity.** Current live overlap is election/political
       only. Track whether sports/crypto/econ/entertainment overlap appears in
       future scans; cannot be forced when the markets don't co-list.
@@ -179,4 +246,6 @@ human-progress output and machine output on the same stream.
 | 1 | 751f80f | add validate_matcher.py + this log (pushed to origin/main) |
 | 1 | ed23366 | record run-1 commit hash |
 | 2 | 452cdbe | add validate_live.py + run-2 live precision results |
-| 3 | _this commit_ | fix validate_live --json stdout pollution + run-3 results |
+| 3 | c8cc1ab | fix validate_live --json stdout pollution + run-3 results |
+| 4 | (none — idle PASS) | run-4 log only, no code change |
+| 5 | _this commit_ | add validate_recall.py + discover return_pools + run-5 recall probe |
