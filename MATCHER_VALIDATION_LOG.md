@@ -564,6 +564,42 @@ Raising the cap still floods. Cap stays at **200**.
 
 ---
 
+## Run 18 — 2026-06-15 (core same-contract fix: DIAGNOSIS — approach abandoned as unsafe)
+
+Attempted the operator-approved core fix (require predicate/action + subject
+alignment, not just token overlap). **Diagnosis found the approach would break
+production**, so no code was shipped.
+
+**Discriminating signal found** (predicate-token Jaccard after removing entity
+tokens): phantoms like "Morgan Stanley" ↔ "serve as lead underwriter" and
+"Gracie Abrams" (song) ↔ "#1 hit" have pred-overlap 0.00 (one side is a bare
+entity); legit "Lakers win Finals" pairs have 1.00.
+
+**Why a predicate gate is UNSAFE:** the real cap=200 production arbs are
+*structurally identical* bare-entity option rows — "Marco Rubio" ↔ "Who will win
+the next presidential election", "Donald Trump" ↔ same. A "predicate must align"
+gate rejects these too (their predicate side is empty). These legit pairs match
+via discover's GROUP matcher using event-group context (is_compatible_match alone
+rejects them — verified `compat=False`), and v2 endorses them through that
+context. So legit option-rows and phantom option-rows differ ONLY by whether the
+bare entity is a valid OPTION of the other side's event — an event-context
+question, not a token/predicate one. A global gate cannot tell them apart and
+would break the working Trump/Rubio arbs.
+
+**Honest conclusion:** the remaining wide-cap over-matching is NOT fixable by a
+matcher-token gate without breaking production. It needs either (a) event-group
+option validation (does the bare entity actually belong to the other market's
+option set?) — a discover group-matcher change, or (b) accepting that bare-entity
+option rows are only safe inside a constrained event scope (i.e. cap stays at
+200, where context holds). Also note several high-edge "phantoms" may be REAL
+matches with illiquid/stale one-sided books (a depth/liquidity filter in
+`compute_signals`, which currently has none, would address those safely).
+
+No code changed this run (diagnosis only). Committing the finding so the audit
+trail records WHY the core gate was not shipped.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -592,14 +628,17 @@ Raising the cap still floods. Cap stays at **200**.
         (moneyline/line/prop) rejects sports settlement-type mismatches. Done +
         tested. (Removed sports phantoms but did NOT reduce the total guarded
         count — see below.)
-- [ ] **Generic cross-contract over-matching (NOW THE REAL BLOCKER).** Run 17
-      showed the guarded cap=1500 set (~434) is dominated by NON-sports pairs that
-      share only a proper noun / token bag but are different contracts: "Morgan
-      Stanley" vs "lead underwriter", "UK" vs "recession-list", policy-vs-policy,
-      "song title" vs "#1 hit". The matcher accepts these on token similarity.
-      Fixing this needs a stricter same-contract requirement (predicate/action +
-      subject must align, not just token overlap) — a core matcher change, larger
-      than the sports gate. This, not sports, is what blocks raising the cap.
+- **Generic cross-contract over-matching (THE REAL CAP BLOCKER).** Run 18 proved
+  a token/predicate gate is UNSAFE (would break the legit Trump/Rubio bare-entity
+  option-row arbs). Viable paths instead:
+  - [ ] **Event-group option validation (discover):** when a bare-entity option
+        row matches a market, require the entity to be a valid option of that
+        market's event scope. Targets phantom option-rows without touching legit
+        ones. Discover group-matcher change.
+  - [ ] **Liquidity/depth filter (`compute_signals`):** require two-sided books
+        with real size at the quote; removes high-edge phantoms caused by
+        illiquid/stale markets (several wide-cap "phantoms" are this, not
+        mismatches). Safe, no matcher risk. Likely the best next step.
 - [ ] Minor sports lexicon gaps: "corners", bare "score" (to-score prop).
   - [ ] Re-quantify phantom reduction at cap=1500; only raise the cap once the
         guarded survivable set is verified mostly-real.
