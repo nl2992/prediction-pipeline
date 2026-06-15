@@ -36,7 +36,7 @@ explicitly.
 |---|---|---|
 | 2026-06-14 | **8 ✅ DAILY GOAL MET** (offsets 0, 21, 28, 35, 7, 14, 3, 10) | 8 |
 | 2026-06-15 | **8 ✅ DAILY GOAL MET** (offsets 17,24,31,5,12,19,26,33) | 8 |
-| 2026-06-16 | **4** (offsets 0, 7, 14, 21) | 8 |
+| 2026-06-16 | **5** (offsets 0, 7, 14, 21, 28) | 8 |
 
 A run counts toward the streak only if all 20 pairs are Exact, engine match
 count == expected match count, and there are no false positives. Any failure
@@ -839,6 +839,33 @@ Remaining tail: corners line-value, song-vs-chart option-row group validation
 
 ---
 
+## Run 30 — 2026-06-16 (curated offset 28 + cumulative re-quantification)
+
+**Curated PASS** (streak **5/8**) + **precision PASS** (39/39) + **recall CLEAN**.
+`pytest` → **146 passed**.
+
+- **Curated** (`--offset 28 --n 20`): exact 20/20, FP 0, missed 0.
+- **Cumulative cap=1500 re-quantification** (after runs 26/27/29): guarded
+  min20=**297**, min50=**232** — count flat vs run 20 (296/230) BUT the
+  composition flipped to **mostly-real**. min20 top-14 census:
+  - REAL ~12: Korea/Bosnia/Saudi "O/U N ↔ score over N" (total=total),
+    "Korea (-1.5) ↔ wins by over 1.5" / "Bosnia (-2.5) ↔ wins by over 2.5"
+    (margin=margin), "Both Teams to Score", "Naftali Bennett ↔ become PM".
+  - BORDERLINE ~1: "Morgan Stanley ↔ lead underwriter", "OpenAI $1t+ IPO ↔ IPO".
+  - PHANTOM ~1: "Hit The Wall - Gracie Abrams" ↔ "#1 hit" (song-vs-chart).
+  - The count held because phantom slots were REPLACED by real sports
+    totals/spreads that were always present. **Top-of-book is now ~85% real**
+    (was ~⅓ at run 12). The fixes worked: they removed phantoms and surfaced the
+    real arbs underneath.
+
+**Implication:** a CAUTIOUS cap raise is now defensible for the first time — the
+high-edge guarded pairs are predominantly real. Residual phantoms are a small
+song-vs-chart / borderline-option-row tail. Operator decision on raising the cap
+(and to what) requested. No matcher code change this run → committing log as the
+milestone re-quantification.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -919,7 +946,8 @@ Remaining tail: corners line-value, song-vs-chart option-row group validation
 | 24 | 51f02c2 | 2026-06-15 daily 8/8; cumulative re-quant (group mis-pairing is the wall) |
 | 26 | 9c173fc | v2: split line into total vs margin; full-title phantom census |
 | 27 | a8c66e8 | v2: correct-score bet-type (exact scoreline vs win/margin) |
-| 29 | _this commit_ | matcher: +28 national teams to country lexicon (different-team gate) |
+| 29 | a9800c5 | matcher: +28 national teams to country lexicon (different-team gate) |
+| 30 | _this commit_ | cap=1500 re-quant: top-of-book now ~85% real (was ~⅓) |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
 | 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
 | 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |
