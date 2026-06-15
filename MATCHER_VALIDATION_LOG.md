@@ -1014,6 +1014,47 @@ predominantly real. Production cap 500.
 
 ---
 
+## Run 36 — 2026-06-16 (verification rescan + honest diminishing-returns assessment)
+
+Verification rescan (cap=5000, exact titles) after runs 32-35; curated offset 22
+PASS; `pytest` 150; **gate-recall CLEAN** (no rich real pairs missed at the gate).
+
+**Richest top-30 census:** diverse (`pop 37, economic 6, election 4, sports 3`),
+**~65-70% REAL**. All SYSTEMATIC phantom classes are now fixed (bet-type, total/
+margin, correct-score type, different-team, corners, numeric-range, negative
+bucket, song-chart XOR, esports sweep — runs 13-35).
+
+**Residual phantoms are hard, subtle SEMANTIC one-offs** (≈1 pair each), not
+systematic classes — and a key methodological caveat surfaced:
+- `extract_spec` reads `_contract_text` = title + **event_title + full_question**,
+  not just the short title. So some gates that pass on a clean title string do NOT
+  fire on the real snapshot. E.g. "Hit The Wall - Gracie Abrams": on the real
+  snapshot BOTH sides get `song_chart` (the PM event is about songs charting), so
+  the run-35 XOR gate can't fire — it's a same-action, different-GRANULARITY case
+  (specific song vs artist's #1 hit).
+- "Spain 3 - 0 Saudi Arabia" vs "Saudi Arabia wins 3-0" — OPPOSITE correct-score
+  (winner direction); both are correct_score so the type gate passes. Needs
+  team↔scoreline parsing to know who the score favours.
+- "...Who wins the toss?" vs "win the World Cup" — both extract action `win`;
+  the "toss" qualifier isn't distinguished.
+- "Lula - Brazil President" vs "Lula leave President before 2027" — likely a REAL
+  inverse (hold vs leave), not a phantom.
+- "Taylor Swift release Taylor's Version" vs "release a new album" — specific work
+  vs any; granularity.
+
+**Honest conclusion (no code change this run):** the stdlib token/rule engine has
+cleared all the systematic phantom patterns; the remaining ~30% of the very-
+richest are subtle SEMANTIC distinctions (winner direction, qualifier, work
+granularity, hold-vs-leave inverse) where each rule is high-effort, high-
+regression-risk, and fixes only one pair — strongly diminishing returns. Pushing
+the top-50 to ~100% real would need either manual curation of the rich list or a
+semantic (LLM) judge, which departs from the stdlib-only design. Recommend: accept
+the current state — diverse + ~70% real top, worst phantoms already filtered by
+min_size + v2 — and rely on the email footer's "verify before executing" for the
+subtle residual. Cap can rise for diversity whenever desired.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
