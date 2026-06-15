@@ -35,7 +35,7 @@ explicitly.
 | Calendar day | Consecutive "fully-correct" runs | Target |
 |---|---|---|
 | 2026-06-14 | **8 ✅ DAILY GOAL MET** (offsets 0, 21, 28, 35, 7, 14, 3, 10) | 8 |
-| 2026-06-15 | **5** (offsets 17, 24, 31, 5, 12) | 8 |
+| 2026-06-15 | **6** (offsets 17, 24, 31, 5, 12, 19) | 8 |
 
 A run counts toward the streak only if all 20 pairs are Exact, engine match
 count == expected match count, and there are no false positives. Any failure
@@ -647,6 +647,43 @@ min_size=0 (unchanged) until the cap=200 effect of min_size is measured.
 
 ---
 
+## Run 21 — 2026-06-15 (curated offset 19 + cap=200 min_size measurement) — idle PASS, no commit
+
+**Curated PASS** (streak **6/8**) + **precision PASS** (39/39) + **recall CLEAN**.
+`pytest -q` → **140 passed**.
+
+- **Curated** (`--offset 19 --n 20`): exact 20/20, FP 0, missed 0.
+- **cap=200 min_size effect on production signals:** 0→**25**, 10→22, 20→**20**,
+  50→18. The production arbs are mostly already liquid; a min_size=20 floor drops
+  only ~5 dust/illiquid signals, keeping 20 executable.
+
+Decision deferred to operator: enabling min_size in production trades the
+operator's earlier "email ALL positive-net pairs" directive against dropping a
+few illiquid dust signals. No code change this run (measurement only) → no commit.
+
+Note: skipped the goals-vs-spread micro-veto — distinguishing spread (margin) vs
+total vs to-score by line VALUE is intricate and risks rejecting real spread/total
+restatements (e.g. the DR Congo pair); low payoff vs risk. Left as long-tail.
+
+---
+
+## Run 22 — 2026-06-15 (ENABLE min_size=20 in production, per operator)
+
+Operator chose to enable the liquidity floor. Wired `MIN_DEPTH=20` through the
+alerter: `adaptive_scan` → `compute_signals(min_size=20)`, plus a `--min-size`
+CLI flag (default 20; 0 disables). The live `PredArbAlerter` task now emails only
+depth-backed, executable arbs.
+
+- [x] Production dry-run confirms the floor: cap=200 → **19 survivable** arbs
+      (was 25 with no filter), all depth-backed.
+- [x] `pytest -q` → **140 passed** (fixed the two AdaptiveScan mock tests to pass
+      `min_size=0`, since their fake pairs carry no size fields).
+
+Streak unchanged at 6/8 (this is a production config change, not a new curated
+run). Scheduled task picks up the change on its next fire (runs the local file).
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -720,7 +757,8 @@ min_size=0 (unchanged) until the cap=200 effect of min_size is measured.
 | 16 | e2ce3bc | matcher: extend player-prop lexicon; phantom measurement |
 | 17 | 6680b8b | structural v2 sports bet-type gate; generic over-matching identified |
 | 18 | 591a8c8 | core predicate-gate diagnosed unsafe (would break production option rows) |
-| 20 | _this commit_ | liquidity/depth filter; cap=1500 guarded 429→230–296 |
+| 20 | 74fdb47 | liquidity/depth filter; cap=1500 guarded 429→230–296 |
+| 22 | _this commit_ | enable min_size=20 in production alerter (operator decision) |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
 | 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
 | 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |

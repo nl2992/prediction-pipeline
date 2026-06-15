@@ -84,6 +84,10 @@ if sys.stdout is None or sys.stderr is None:
 # precision via MATCHER_VALIDATION_LOG.md run 12.
 TARGET_SURVIVABLE = 50
 CAP_LADDER = (200,)
+# Minimum best-level depth (shares/contracts) on both executed legs. Run 21
+# measured cap=200: a floor of 20 keeps 20 of 25 arbs, dropping ~5 illiquid/dust
+# signals — operator opted to email only depth-backed, executable arbs.
+MIN_DEPTH = 20.0
 
 
 # ---------------------------------------------------------------------------
@@ -308,7 +312,8 @@ def send_email(cfg: dict, subject: str, html: str) -> None:
 # ---------------------------------------------------------------------------
 
 def adaptive_scan(min_edge: float, target: int = TARGET_SURVIVABLE,
-                  caps: tuple[int, ...] = CAP_LADDER) -> tuple[list, list, int]:
+                  caps: tuple[int, ...] = CAP_LADDER,
+                  min_size: float = MIN_DEPTH) -> tuple[list, list, int]:
     """Scan, progressively widening the Kalshi event cap until at least ``target``
     survivable (positive net-of-fees) arbs are found, or the last cap is reached.
 
@@ -323,7 +328,7 @@ def adaptive_scan(min_edge: float, target: int = TARGET_SURVIVABLE,
     for cap in caps:
         pairs = discover(category="all", days=730, min_sim=0.30, show_prices=True,
                          max_events_to_search=cap, catalog_cache_ttl=1200)
-        signals = compute_signals(pairs, min_edge=min_edge)
+        signals = compute_signals(pairs, min_edge=min_edge, min_size=min_size)
         survivable = sum(1 for s in signals if s["net_accurate"] > 0)
         cap_used = cap
         print(f"[alerter] cap={cap}: {len(pairs)} pairs, {survivable} survivable arb(s) "
@@ -333,11 +338,12 @@ def adaptive_scan(min_edge: float, target: int = TARGET_SURVIVABLE,
     return pairs, signals, cap_used
 
 
-def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False) -> int:
+def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False,
+              min_size: float = MIN_DEPTH) -> int:
     cfg = load_config()
     t0 = time.time()
     print(f"[alerter] {datetime.now(timezone.utc).strftime('%H:%M:%S')}Z full scan starting…", flush=True)
-    pairs, signals, cap_used = adaptive_scan(min_edge)
+    pairs, signals, cap_used = adaptive_scan(min_edge, min_size=min_size)
     survivable = sum(1 for s in signals if s["net_accurate"] > 0)
     print(f"[alerter] scan done in {time.time()-t0:.0f}s — cap={cap_used}, {len(pairs)} pairs, "
           f"{survivable} survivable arb(s) (>= {min_edge*100:.2f}c net)", flush=True)
@@ -385,6 +391,8 @@ def main() -> None:
                          "(default 0.0001 = any strictly positive edge after fees)")
     ap.add_argument("--realert-hours", type=float, default=6.0,
                     help="re-email an unchanged signal after this many hours (default 6)")
+    ap.add_argument("--min-size", type=float, default=MIN_DEPTH,
+                    help=f"min best-level depth on both legs (default {MIN_DEPTH:g}; 0 = no liquidity filter)")
     ap.add_argument("--once", action="store_true", help="run one cycle and exit")
     ap.add_argument("--dry-run", action="store_true", help="never send email; print instead")
     args = ap.parse_args()
@@ -395,7 +403,8 @@ def main() -> None:
 
     while True:
         try:
-            run_cycle(args.min_edge, args.realert_hours, dry_run=args.dry_run)
+            run_cycle(args.min_edge, args.realert_hours, dry_run=args.dry_run,
+                      min_size=args.min_size)
         except Exception as exc:
             print(f"[alerter] CYCLE ERROR: {exc}", flush=True)
         if args.once:

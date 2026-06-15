@@ -171,7 +171,7 @@ class AdaptiveScan(unittest.TestCase):
     def test_stops_at_first_cap_meeting_target(self) -> None:
         import alerter
         calls = self._patch({1000: 4, 1500: 9})
-        pairs, sigs, cap = alerter.adaptive_scan(min_edge=0.005, target=3, caps=(1000, 1500))
+        pairs, sigs, cap = alerter.adaptive_scan(min_edge=0.005, target=3, caps=(1000, 1500), min_size=0)
         self.assertEqual(cap, 1000)
         self.assertEqual(calls, [1000])          # did NOT escalate
         self.assertEqual(len(sigs), 4)
@@ -179,7 +179,7 @@ class AdaptiveScan(unittest.TestCase):
     def test_escalates_when_short(self) -> None:
         import alerter
         calls = self._patch({1000: 2, 1500: 6})
-        pairs, sigs, cap = alerter.adaptive_scan(min_edge=0.005, target=5, caps=(1000, 1500))
+        pairs, sigs, cap = alerter.adaptive_scan(min_edge=0.005, target=5, caps=(1000, 1500), min_size=0)
         self.assertEqual(cap, 1500)
         self.assertEqual(calls, [1000, 1500])    # escalated to last rung
         self.assertEqual(len(sigs), 6)
