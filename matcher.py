@@ -1081,6 +1081,11 @@ def _contract_actions(text: str) -> set[str]:
     if (re.search(r"\breach(?:es|ed)?\b.{0,30}\b(final|finals|semi-?final|quarter-?final|playoffs?|knockout|round of \d+)\b", low)
             or re.search(r"\b(advance|advances|advanced|qualify|qualifies|qualified)\b", low)):
         actions.add("reach_round")
+    # A series result ("be a sweep", "swept") is a different contract from
+    # advancing/qualifying or a moneyline (run 35: esports "Grand Final be a
+    # sweep?" vs "B8 qualify for the Grand Final").
+    if re.search(r"\bsweep\b|\bswept\b|\bsweeps\b", low):
+        actions.add("sweep")
     if re.search(r"\bengag(?:e|ed|ement)\b", low):
         actions.add("engagement")
     if re.search(r"\barrest(?:ed)?\b", low):

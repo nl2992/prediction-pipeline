@@ -988,6 +988,32 @@ sweep-vs-qualify, song-vs-chart). Production cap stays 500 pending those.
 
 ---
 
+## Run 35 — 2026-06-16 (rich-pairs tail: song-vs-chart + esports sweep)
+
+Daily 8/8 already met; this is additional rich-pairs phantom cleanup. Two of the
+three richest remaining one-offs fixed:
+
+- **Gracie-Abrams song-vs-chart** ("Hit The Wall - Gracie Abrams" vs "Gracie
+  Abrams have a #1 hit"): added a `song_chart` XOR gate in v2 — chart achievement
+  on one side vs non-chart on the same artist → reject. (The plain action gate
+  missed it: both shared a spurious `stat_prop` from the word "hit".)
+- **IEM esports sweep-vs-qualify** ("Grand Final be a sweep?" vs "B8 qualify for
+  the Grand Final"): added a `sweep` action in `_contract_actions` so it's
+  disjoint from `reach_round` → reject. (Before, "be a sweep" had NO action so the
+  mismatch gate was inert.)
+- **OpenAI "$1t+ IPO" vs "IPO":** LEFT as-is — the "$1t+" may be descriptive of
+  OpenAI's current valuation rather than a condition, so it could be REAL; not
+  worth risking real IPO pairs.
+
+  - [x] Both phantoms rejected; Lakers/Brazil moneyline reals kept; fixture parity
+        held; curated offset 15 PASS; `pytest` → **150 passed**.
+
+Richest-top phantom tail now nearly cleared (corners, numeric-range, negative
+bucket, song-chart, esports-sweep all done). Engine richest-50 is diverse and
+predominantly real. Production cap 500.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -1073,7 +1099,8 @@ sweep-vs-qualify, song-vs-chart). Production cap stays 500 pending those.
 | 31 | 034c262 | CAP RAISED 200→500; 88 survivable arbs (>=50 target met) |
 | 32 | 23a98e4 | rich-pairs: full-scale diverse but ~half-phantom top; corners fix |
 | 33 | 0733c54 | exact-title census (top ~80% real); numeric range-overlap gate |
-| 34 | _this commit_ | daily 8/8; negative-vs-positive bucket direction gate |
+| 34 | 3b17330 | daily 8/8; negative-vs-positive bucket direction gate |
+| 35 | _this commit_ | rich-pairs tail: song-vs-chart XOR gate + esports sweep action |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
 | 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
 | 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |

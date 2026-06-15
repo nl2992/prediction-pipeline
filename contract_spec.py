@@ -277,6 +277,12 @@ def match_spec(
     # --- event-class gates ----------------------------------------------------
     if a.actions and b.actions and a.actions.isdisjoint(b.actions):
         return _reject(f"action mismatch: {sorted(a.actions)} vs {sorted(b.actions)}")
+    # A chart-achievement market (#1 hit/song) on one side vs a non-chart market
+    # on the same artist is a different contract — "Hit The Wall - Gracie Abrams"
+    # (a song entry) vs "Gracie Abrams have a #1 hit" (run 35). The plain action
+    # gate misses it because both share a spurious 'stat_prop' from "hit".
+    if ("song_chart" in a.actions) != ("song_chart" in b.actions) and (a.entities & b.entities):
+        return _reject("chart-achievement vs non-chart on same artist")
     if (
         a.political_actions
         and b.political_actions

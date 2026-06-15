@@ -149,6 +149,13 @@ class SportsBetTypeGate(unittest.TestCase):
         self.assertTrue(decide("Bosnia-Herzegovina O/U 0.5",
                                "Will Bosnia and Herzegovina score over 0.5?").match)
 
+    def test_chart_vs_nonchart_and_sweep_rejected(self) -> None:
+        # Run 35: song entry vs #1-hit chart achievement; sweep vs qualify.
+        self.assertFalse(decide("Hit The Wall - Gracie Abrams",
+                                "Will Gracie Abrams have a #1 hit this year?").match)
+        self.assertFalse(decide("Will the IEM Cologne Major 2026 Grand Final be a sweep?",
+                                "Will B8 qualify for the Grand Final at 2026 IEM Cologne?").match)
+
     def test_negative_vs_positive_bucket_rejected(self) -> None:
         # Run 34: a negative/contraction bucket vs an explicit positive range.
         self.assertFalse(decide("Negative GDP growth in 2026?",
