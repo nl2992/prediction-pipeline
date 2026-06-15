@@ -866,6 +866,26 @@ milestone re-quantification.
 
 ---
 
+## Run 31 — 2026-06-16 (CAP RAISED 200 → 500, operator decision)
+
+After the run-30 re-quant showed top-of-book ~85% real, operator approved raising
+the cap. Set `CAP_LADDER=(500,)` in the alerter.
+
+**Dry-run verification at cap=500:**
+- 239 pairs → **88 survivable (positive-net, depth-backed) arbs** — the original
+  ">=50 survivable per run" target is now MET (was ~19 at cap=200).
+- Best edge 23.48c (the real Korea margin/margin pair). Scan 297s (~5 min; within
+  the 20-min interval and task ExecutionTimeLimit).
+- `pytest` → **146 passed**. min_size=20 + v2 gates active, so emails are
+  depth-backed and ~85% real (small residual: song-vs-chart, borderline option
+  rows — the operator accepted this trade for coverage).
+
+Live `PredArbAlerter` picks up cap=500 on its next fire. Re-check before going to
+1500. This substantially fulfils the original "raise toward 1500 / >=50 survivable"
+goal at a defensible precision level.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -947,7 +967,8 @@ milestone re-quantification.
 | 26 | 9c173fc | v2: split line into total vs margin; full-title phantom census |
 | 27 | a8c66e8 | v2: correct-score bet-type (exact scoreline vs win/margin) |
 | 29 | a9800c5 | matcher: +28 national teams to country lexicon (different-team gate) |
-| 30 | _this commit_ | cap=1500 re-quant: top-of-book now ~85% real (was ~⅓) |
+| 30 | 3578d87 | cap=1500 re-quant: top-of-book now ~85% real (was ~⅓) |
+| 31 | _this commit_ | CAP RAISED 200→500; 88 survivable arbs (>=50 target met) |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
 | 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
 | 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |

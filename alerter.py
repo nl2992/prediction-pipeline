@@ -74,16 +74,15 @@ if sys.stdout is None or sys.stderr is None:
 # events ranked >200. Each scan now targets at least TARGET_SURVIVABLE positive
 # net-of-fees ("survivable") arbs, progressively widening the event cap through
 # CAP_LADDER until the target is met or the last rung (1500) is reached.
-# SAFETY (run 12 finding): widening the cap to 1000-1500 floods the scan with
-# PHANTOM arbs — at scale the matcher mis-pairs on shared proper nouns (e.g.
-# soccer "Team 1st-Half O/U 0.5" vs "Will Team win the 1st Half?", or different
-# teams entirely), and neither the v2 referee nor the 25c edge guard catches all
-# of them (451 of 2545 pairs survived guards at cap=1500, still mostly phantom).
-# Until sports-matcher precision is fixed, production stays at the proven-safe cap
-# where precision holds (US politics/elections). Do NOT raise without re-checking
-# precision via MATCHER_VALIDATION_LOG.md run 12.
+# Event cap raised 200 -> 500 (operator decision, run 30). Run 12 found cap=1500
+# flooded with PHANTOM arbs, but runs 13-29 (v2 bet-type/total/margin/correct-
+# score gates, player-prop & different-team rejection, liquidity floor) cleaned
+# the guarded set: the cap=1500 re-quant top-of-book is now ~85% real (was ~1/3).
+# 500 captures the real non-US-election + sports-totals arbs at a low residual
+# phantom rate. Re-check MATCHER_VALIDATION_LOG.md (runs 12, 30) before going
+# higher; the remaining tail is song-vs-chart + borderline option rows.
 TARGET_SURVIVABLE = 50
-CAP_LADDER = (200,)
+CAP_LADDER = (500,)
 # Minimum best-level depth (shares/contracts) on both executed legs. Run 21
 # measured cap=200: a floor of 20 keeps 20 of 25 arbs, dropping ~5 illiquid/dust
 # signals — operator opted to email only depth-backed, executable arbs.
