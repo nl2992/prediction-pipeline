@@ -129,6 +129,16 @@ class SportsBetTypeGate(unittest.TestCase):
         self.assertTrue(decide("Will the Lakers win the 2026 NBA Finals?",
                                "Lakers to win 2026 NBA Finals?").match)
 
+    def test_spread_vs_to_score_rejected(self) -> None:
+        # Run 23: a spread/margin line vs a bare to-score market are different.
+        self.assertFalse(decide("Bosnia and Herzegovina (-1.5)",
+                                "Will Bosnia and Herzegovina score?").match)
+
+    def test_both_teams_to_score_and_score_totals_still_match(self) -> None:
+        self.assertTrue(decide("Both Teams to Score", "Will both teams score?").match)
+        # "score over 0.5" is a TOTAL line, matches an O/U line (not 'score').
+        self.assertTrue(decide("Saudi Arabia O/U 0.5", "Saudi Arabia score over 0.5?").match)
+
 
 if __name__ == "__main__":
     unittest.main()

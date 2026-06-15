@@ -35,7 +35,7 @@ explicitly.
 | Calendar day | Consecutive "fully-correct" runs | Target |
 |---|---|---|
 | 2026-06-14 | **8 ✅ DAILY GOAL MET** (offsets 0, 21, 28, 35, 7, 14, 3, 10) | 8 |
-| 2026-06-15 | **6** (offsets 17, 24, 31, 5, 12, 19) | 8 |
+| 2026-06-15 | **7** (offsets 17, 24, 31, 5, 12, 19, 26) | 8 |
 
 A run counts toward the streak only if all 20 pairs are Exact, engine match
 count == expected match count, and there are no false positives. Any failure
@@ -684,6 +684,22 @@ run). Scheduled task picks up the change on its next fire (runs the local file).
 
 ---
 
+## Run 23 — 2026-06-15 (curated offset 26 + goals-vs-spread 'score' bet-type)
+
+**Curated PASS** (streak **7/8**) + **precision PASS** (39/39) + **recall CLEAN**.
+
+- **Curated** (`--offset 26 --n 20`): exact 20/20, FP 0, missed 0.
+- **Fix:** added a distinct `score` bet-type (bare to-score / both-teams-to-score
+  without a numeric line) in `contract_spec._bet_type`, ordered after `line`. v2
+  now rejects spread/margin-line vs to-score ("Bosnia (-1.5)" ↔ "Will Bosnia
+  score?") while keeping real pairs: DR Congo spread restatement (line/line),
+  Both-Teams-to-Score (score/score), and "score over 0.5" ↔ "O/U 0.5" (both line,
+  total).
+  - [x] 5 probes correct; 50-pair fixture parity held.
+  - [x] `pytest -q` → **142 passed** (added 2 score-type tests).
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -722,8 +738,8 @@ run). Scheduled task picks up the change on its next fire (runs the local file).
   - [x] **Liquidity/depth filter (`compute_signals`):** DONE (run 20). `min_size`
         per-direction depth guard; cut cap=1500 guarded 429→296 (≥20) / 230 (≥50).
         Backward-compatible (default 0). Next: measure cap=200 effect, then enable.
-  - [ ] **goals-vs-spread veto:** "Team (-1.5)" ↔ "Will Team score?" (spread vs
-        to-score). Sports pattern still leaking.
+  - [x] **goals-vs-spread veto (Run 23):** distinct `score` bet-type rejects
+        spread/margin-line vs to-score; reals (DR Congo, BTTS, score-totals) kept.
   - [ ] **Gracie-Abrams-style group option mis-pairing:** song title ↔ "#1 hit";
         a bare option row mis-bound in a group. Needs event-group option
         validation in discover.
@@ -758,7 +774,8 @@ run). Scheduled task picks up the change on its next fire (runs the local file).
 | 17 | 6680b8b | structural v2 sports bet-type gate; generic over-matching identified |
 | 18 | 591a8c8 | core predicate-gate diagnosed unsafe (would break production option rows) |
 | 20 | 74fdb47 | liquidity/depth filter; cap=1500 guarded 429→230–296 |
-| 22 | _this commit_ | enable min_size=20 in production alerter (operator decision) |
+| 22 | ce6425f | enable min_size=20 in production alerter (operator decision) |
+| 23 | _this commit_ | goals-vs-spread: distinct 'score' bet-type in v2 |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
 | 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
 | 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |

@@ -105,10 +105,18 @@ def _bet_type(text: str) -> str | None:
     win the 1st Half?". 'line' merges totals and spreads on purpose — they are
     often equivalent restatements ("(-1.5)" == "wins by over 1.5 goals").
     """
-    if _is_player_prop(text):
-        return "prop"
+    low = _ascii_lower(text)
+    # Order matters: a totals/spread line ("score over 0.5", "(-1.5)") is a LINE,
+    # checked first. A bare to-score / both-teams-to-score market (no numeric
+    # line) is its own 'score' type — different from a spread/margin line, so
+    # "(-1.5)" vs "Will Team score?" is rejected, while "Both Teams to Score" vs
+    # "Will both teams score?" stays matched (run 23).
     if _is_ou_or_spread(text):
         return "line"
+    if re.search(r"\bboth teams\b.{0,20}\bscore\b|\bto score\b|\bscore\b\s*\??\s*$", low):
+        return "score"
+    if _is_player_prop(text):
+        return "prop"
     if _is_win_market(text):
         return "moneyline"
     return None
