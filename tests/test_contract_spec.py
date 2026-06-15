@@ -149,6 +149,11 @@ class SportsBetTypeGate(unittest.TestCase):
         self.assertTrue(decide("Bosnia-Herzegovina O/U 0.5",
                                "Will Bosnia and Herzegovina score over 0.5?").match)
 
+    def test_corners_total_vs_count_rejected(self) -> None:
+        # Run 32: "Corners O/U 2.5" (total) vs "8+ corners" (count) — different.
+        self.assertFalse(decide("New Zealand Corners: O/U 2.5", "New Zealand: 8+ corners").match)
+        self.assertFalse(decide("Saudi Arabia Corners: O/U 2.5", "Saudi Arabia: 4+ corners").match)
+
     def test_correct_score_vs_moneyline_rejected(self) -> None:
         # Run 27: exact scoreline vs a win/margin market are different contracts.
         self.assertFalse(decide("Saudi Arabia 0 - 2 Uruguay",

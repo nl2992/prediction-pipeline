@@ -551,7 +551,8 @@ def _is_win_market(text: str) -> bool:
 _PROP_STATS = (r"assists?|goals?|points?|hits?|saves?|rebounds?|shots?|"
                r"tackles?|goalscorer|touchdowns?|passing yards?|strikeouts?|"
                r"total bases|bases|runs|rbis?|receptions?|yards?|blocks?|"
-               r"steals?|threes|three[- ]pointers?|aces|double[- ]double")
+               r"steals?|threes|three[- ]pointers?|aces|double[- ]double|"
+               r"corners?|cards?|fouls?|offsides?")
 
 
 def _is_player_prop(text: str) -> bool:

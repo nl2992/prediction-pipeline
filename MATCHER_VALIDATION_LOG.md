@@ -36,7 +36,7 @@ explicitly.
 |---|---|---|
 | 2026-06-14 | **8 ✅ DAILY GOAL MET** (offsets 0, 21, 28, 35, 7, 14, 3, 10) | 8 |
 | 2026-06-15 | **8 ✅ DAILY GOAL MET** (offsets 17,24,31,5,12,19,26,33) | 8 |
-| 2026-06-16 | **5** (offsets 0, 7, 14, 21, 28) | 8 |
+| 2026-06-16 | **6** (offsets 0, 7, 14, 21, 28, 35) | 8 |
 
 A run counts toward the streak only if all 20 pairs are Exact, engine match
 count == expected match count, and there are no false positives. Any failure
@@ -886,6 +886,50 @@ goal at a defensible precision level.
 
 ---
 
+## Run 32 — 2026-06-16 (RICH-PAIRS loop start: category-diversity finding)
+
+New operator directive: stop dwelling on politics — scan ALL pairs, find the
+richest arbs across every category, fix recall until the engine's top-50 richest
+match reality. New 30-min loop (job dad4fb64) replaces the 20-min validation loop.
+
+**Key finding — the cap=500 sent list is STILL ~95% politics:**
+category breakdown of the 92 emailed signals = `{election: 87, economic: 2,
+political: 3}`. Raising 200→500 did NOT diversify, because the rich non-politics
+pairs (sports totals/spreads — Korea/Bosnia/Saudi, seen in the run-30 cap=1500
+census) live in Kalshi events ranked BEYOND 500. They only surface at a higher
+cap. So "not just politics" requires raising the cap further (toward 1500), which
+is now safer after the precision fixes (run-30 top ~85% real).
+
+- **Full-catalog scan (cap=5000):** 2469 pairs, guarded=354, raw=643. **At full
+  scale the richest GUARDED top-50 IS diverse** (not politics): category mix
+  `pop 32, economic 7, election 5, sports 4, political 2`. The big spreads live
+  outside politics (sports corners, IPOs, weather, GDP, esports, awards). So
+  raising the cap → diversity, as expected.
+- **BUT honest census of the richest top-30: ~half are PHANTOM** (new patterns my
+  earlier fixes didn't cover):
+  - Corners total-vs-count ("NZ Corners O/U 2.5" ↔ "NZ 8+ corners") — 2 of top 5.
+  - Weather range-vs-threshold ("78-79°F" ↔ "max temp <79").
+  - GDP bucket mismatch ("Negative GDP" ↔ "4.1-4.5%"; "2.0-2.5%" ↔ "2.1-2.5%").
+  - Team-vs-player-award ("Golden State Warriors" ↔ "Giannis award"), esports
+    ("IEM Cologne winner" ↔ "Legacy qualify").
+  - REAL in the rich top: FISA 702 reauth, Lula (Brazil pres), Naftali Bennett,
+    Venezuela option rows (Delcy Rodríguez, Edmundo González), Will Venable (AL
+    MOTY).
+- **Fix this run (32):** corners total-vs-count — added corners/cards/fouls/
+  offsides to `_PROP_STATS` so "N+ corners" is a prop, rejected vs an O/U total.
+  - [x] NZ/Saudi corners phantoms rejected; goals totals/margins kept; fixture
+        parity held; curated offset 35 PASS (streak 6/8); `pytest` → **147 passed**.
+
+**Plan / honest position:** raising the cap diversifies (✓ answers "not just
+politics") but the RICHEST pairs at full scale still carry new-pattern phantoms,
+so production cap stays at **500** until the top-50 richest is verified mostly-real
+— per the operator's "fix until top-50 richest match" directive. Remaining
+new-pattern fixes (loop will work these): weather/GDP numeric-range mismatch,
+team-vs-player-award subject gate, esports winner-vs-qualify, then re-census and
+raise the cap.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -968,7 +1012,8 @@ goal at a defensible precision level.
 | 27 | a8c66e8 | v2: correct-score bet-type (exact scoreline vs win/margin) |
 | 29 | a9800c5 | matcher: +28 national teams to country lexicon (different-team gate) |
 | 30 | 3578d87 | cap=1500 re-quant: top-of-book now ~85% real (was ~⅓) |
-| 31 | _this commit_ | CAP RAISED 200→500; 88 survivable arbs (>=50 target met) |
+| 31 | 034c262 | CAP RAISED 200→500; 88 survivable arbs (>=50 target met) |
+| 32 | _this commit_ | rich-pairs: full-scale diverse but ~half-phantom top; corners fix |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
 | 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
 | 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |
