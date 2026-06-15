@@ -74,15 +74,17 @@ if sys.stdout is None or sys.stderr is None:
 # events ranked >200. Each scan now targets at least TARGET_SURVIVABLE positive
 # net-of-fees ("survivable") arbs, progressively widening the event cap through
 # CAP_LADDER until the target is met or the last rung (1500) is reached.
-# Event cap raised 200 -> 500 (operator decision, run 30). Run 12 found cap=1500
-# flooded with PHANTOM arbs, but runs 13-29 (v2 bet-type/total/margin/correct-
-# score gates, player-prop & different-team rejection, liquidity floor) cleaned
-# the guarded set: the cap=1500 re-quant top-of-book is now ~85% real (was ~1/3).
-# 500 captures the real non-US-election + sports-totals arbs at a low residual
-# phantom rate. Re-check MATCHER_VALIDATION_LOG.md (runs 12, 30) before going
-# higher; the remaining tail is song-vs-chart + borderline option rows.
+# Event cap 200 -> 500 (run 30) -> 1500 (run 38, operator decision). Run-38 recall
+# probe showed cap=500 missed ~1775 real diverse pairs (OPEC/Bitcoin-gold/Messi/
+# BTTS) living in events ranked 500-1500. Precision fixes (runs 13-37) made the
+# guarded top mostly-real, so 1500 is now safe for coverage. To keep the inbox
+# sane, emails are capped to the TOP_N richest (see signals_to_send). Re-check
+# MATCHER_VALIDATION_LOG.md (runs 12, 30, 38) before changing.
 TARGET_SURVIVABLE = 50
-CAP_LADDER = (500,)
+CAP_LADDER = (1500,)
+# Email only the N richest (by net-of-fees edge) per cycle — full-catalog scans
+# surface ~335 survivable arbs; the operator wants the richest, not all of them.
+TOP_N = 50
 # Minimum best-level depth (shares/contracts) on both executed legs. Run 21
 # measured cap=200: a floor of 20 keeps 20 of 25 arbs, dropping ~5 illiquid/dust
 # signals — operator opted to email only depth-backed, executable arbs.
@@ -243,23 +245,25 @@ def filter_new(signals: list[dict], state: dict, realert_hours: float, improve_s
 
 
 def signals_to_send(signals: list[dict], state: dict, realert_hours: float,
-                    min_net: float = 0.0) -> tuple[list[dict], list[dict]]:
+                    min_net: float = 0.0, top_n: int = TOP_N) -> tuple[list[dict], list[dict]]:
     """Decide what to email.
 
-    Trigger on CHANGE (any new/improved signal vs last scan), but when we do
-    email, include EVERY currently-executable pair — net of fees strictly above
-    ``min_net`` (default 0 = positive after the real Kalshi taker fee) — not just
-    the changed ones. This is what the operator wants to act on: the full set of
-    runnable arbs, refreshed whenever anything moves.
+    Trigger on CHANGE (any new/improved signal vs last scan); when we email,
+    send the ``top_n`` richest currently-executable pairs (net of fees strictly
+    above ``min_net``), sorted by net edge. Full-catalog scans surface hundreds
+    of survivable arbs, so the operator wants the richest, not all of them
+    (run 38). ``top_n=0`` means no cap (all positive-net).
 
-    Returns ``(to_email, fresh)``. ``to_email`` is the full positive-net set when
-    something changed, else empty (no trigger → no email).
+    Returns ``(to_email, fresh)`` — the richest top_n when something changed in
+    that set, else empty (no trigger → no email).
     """
-    positive = [s for s in signals if s["net_accurate"] > min_net]
+    positive = sorted((s for s in signals if s["net_accurate"] > min_net),
+                      key=lambda s: -s["net_accurate"])
+    if top_n:
+        positive = positive[:top_n]
     fresh = filter_new(positive, state, realert_hours)
     if not fresh:
         return [], []
-    positive.sort(key=lambda s: -s["net_accurate"])
     return positive, fresh
 
 

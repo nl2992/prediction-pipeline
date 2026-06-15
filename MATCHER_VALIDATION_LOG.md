@@ -1091,6 +1091,25 @@ change this run.
 
 ---
 
+## Run 39 — 2026-06-16 (CAP 500→1500 + email top-50 richest, operator decision)
+
+Operator chose: scan at full diversity (cap 1500) but email only the richest 50.
+
+- **`CAP_LADDER=(1500,)`** — recovers the ~1775 real diverse pairs cap=500 missed
+  (run 38), now safe since precision fixes (runs 13-37) made the guarded top
+  mostly-real.
+- **`TOP_N=50`** in `signals_to_send` — emails the 50 richest by net-of-fees edge
+  (sorted desc), trigger still change-driven within that top-50. Keeps the inbox
+  manageable despite ~335 survivable arbs at cap=1500. `top_n=0` disables the cap.
+  - [x] `pytest` → **152 passed** (added top_n test); fixture parity held.
+  - Dry-run verification at cap=1500 (volume/diversity): in progress.
+
+Live `PredArbAlerter` picks up cap=1500 + top-50 on its next fire (~5 min scan,
+within the 20-min interval/limit). min_size=20 + v2 gates keep the 50 emailed
+arbs depth-backed and mostly-real across all categories.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -1179,7 +1198,9 @@ change this run.
 | 34 | 3b17330 | daily 8/8; negative-vs-positive bucket direction gate |
 | 35 | b97ddad | rich-pairs tail: song-vs-chart XOR gate + esports sweep action |
 | 36 | e43e6e7 | verification + diminishing-returns assessment (log only) |
-| 37 | _this commit_ | rich-pairs tail: coin-toss vs tournament gate |
+| 37 | f173237 | rich-pairs tail: coin-toss vs tournament gate |
+| 38 | 509aa8d | recall finding: cap=500 misses ~1775 real diverse pairs |
+| 39 | _this commit_ | cap 500→1500 + email top-50 richest (operator) |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
 | 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
 | 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |

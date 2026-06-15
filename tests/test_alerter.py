@@ -131,6 +131,12 @@ class SignalsToSend(unittest.TestCase):
         # sorted by net desc
         self.assertEqual([s["key"] for s in to_email], ["A", "B"])
 
+    def test_top_n_caps_the_email(self) -> None:
+        # 5 positive signals, top_n=3 -> email the 3 richest by net.
+        sigs = [self._sig(f"K{i}", net) for i, net in enumerate([0.02, 0.10, 0.05, 0.01, 0.08])]
+        to_email, fresh = signals_to_send(sigs, {}, realert_hours=6, top_n=3)
+        self.assertEqual([round(s["net_accurate"], 2) for s in to_email], [0.10, 0.08, 0.05])
+
     def test_no_email_when_nothing_changed(self) -> None:
         a = self._sig("A", 0.05)
         state = {"A": {"net": 0.05, "ts": time.time()}}
