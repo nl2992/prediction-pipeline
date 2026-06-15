@@ -1055,6 +1055,22 @@ subtle residual. Cap can rise for diversity whenever desired.
 
 ---
 
+## Run 37 — 2026-06-16 (rich-pairs tail: coin-toss gate)
+
+Curated offset 29 PASS; `pytest` → **151 passed**.
+
+- **Fix:** coin-toss vs winning the match/tournament ("Who wins the toss?" vs
+  "win the World Cup"). Both extract action `win`, so the disjoint gate missed it;
+  added a `toss` action + explicit XOR gate. Clean/unambiguous.
+  - [x] toss-vs-tournament rejected; real win↔win pairs kept; fixture parity held.
+
+This is the last cheap/safe one-off. Remaining residual (opposite correct-score
+winner-direction, song granularity, hold-vs-leave inverse, album specificity) are
+high-risk/low-yield semantic cases — see run 36 diminishing-returns assessment;
+not pursuing further narrow vetoes without operator direction.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -1141,7 +1157,9 @@ subtle residual. Cap can rise for diversity whenever desired.
 | 32 | 23a98e4 | rich-pairs: full-scale diverse but ~half-phantom top; corners fix |
 | 33 | 0733c54 | exact-title census (top ~80% real); numeric range-overlap gate |
 | 34 | 3b17330 | daily 8/8; negative-vs-positive bucket direction gate |
-| 35 | _this commit_ | rich-pairs tail: song-vs-chart XOR gate + esports sweep action |
+| 35 | b97ddad | rich-pairs tail: song-vs-chart XOR gate + esports sweep action |
+| 36 | e43e6e7 | verification + diminishing-returns assessment (log only) |
+| 37 | _this commit_ | rich-pairs tail: coin-toss vs tournament gate |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
 | 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
 | 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |

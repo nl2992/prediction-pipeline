@@ -283,6 +283,10 @@ def match_spec(
     # gate misses it because both share a spurious 'stat_prop' from "hit".
     if ("song_chart" in a.actions) != ("song_chart" in b.actions) and (a.entities & b.entities):
         return _reject("chart-achievement vs non-chart on same artist")
+    # Coin toss vs winning the match/tournament — both extract action 'win', so
+    # the disjoint gate misses it; gate on the 'toss' marker explicitly (run 37).
+    if ("toss" in a.actions) != ("toss" in b.actions):
+        return _reject("coin-toss vs non-toss contract")
     if (
         a.political_actions
         and b.political_actions

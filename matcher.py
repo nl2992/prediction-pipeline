@@ -1086,6 +1086,10 @@ def _contract_actions(text: str) -> set[str]:
     # sweep?" vs "B8 qualify for the Grand Final").
     if re.search(r"\bsweep\b|\bswept\b|\bsweeps\b", low):
         actions.add("sweep")
+    # Coin toss is a different contract from winning the match/tournament
+    # (run 37: "Who wins the toss?" vs "win the World Cup").
+    if re.search(r"\b(coin\s+)?toss\b", low):
+        actions.add("toss")
     if re.search(r"\bengag(?:e|ed|ement)\b", low):
         actions.add("engagement")
     if re.search(r"\barrest(?:ed)?\b", low):

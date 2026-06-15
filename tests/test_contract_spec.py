@@ -149,6 +149,13 @@ class SportsBetTypeGate(unittest.TestCase):
         self.assertTrue(decide("Bosnia-Herzegovina O/U 0.5",
                                "Will Bosnia and Herzegovina score over 0.5?").match)
 
+    def test_coin_toss_vs_tournament_rejected(self) -> None:
+        # Run 37: "Who wins the toss?" vs "win the tournament" — both action 'win'.
+        self.assertFalse(decide("England vs Ireland - Who wins the toss?",
+                                "Will Ireland win the Women's T20 World Cup?").match)
+        self.assertTrue(decide("Will Ireland win the Women's T20 World Cup?",
+                               "Ireland to win the Women's T20 World Cup").match)
+
     def test_chart_vs_nonchart_and_sweep_rejected(self) -> None:
         # Run 35: song entry vs #1-hit chart achievement; sweep vs qualify.
         self.assertFalse(decide("Hit The Wall - Gracie Abrams",
