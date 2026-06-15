@@ -36,7 +36,7 @@ explicitly.
 |---|---|---|
 | 2026-06-14 | **8 ✅ DAILY GOAL MET** (offsets 0, 21, 28, 35, 7, 14, 3, 10) | 8 |
 | 2026-06-15 | **8 ✅ DAILY GOAL MET** (offsets 17,24,31,5,12,19,26,33) | 8 |
-| 2026-06-16 | **1** (offset 0) | 8 |
+| 2026-06-16 | **2** (offsets 0, 7) | 8 |
 
 A run counts toward the streak only if all 20 pairs are Exact, engine match
 count == expected match count, and there are no false positives. Any failure
@@ -782,6 +782,26 @@ deepest item). Cap stays 200.
 
 ---
 
+## Run 27 — 2026-06-16 (curated offset 7 + correct-score bet-type)
+
+**Curated PASS** (streak **2/8**) + **precision PASS** (39/39) + **recall CLEAN**.
+
+- **Curated** (`--offset 7 --n 20`): exact 20/20, FP 0, missed 0.
+- **Fix:** added `correct_score` bet-type (exact scoreline "N - N", single-digit
+  & word-bounded to avoid years/dates). v2 now rejects exact-score vs win/margin
+  ("Saudi Arabia 0 - 2 Uruguay" ↔ "Saudi Arabia wins by 2") — note these were
+  also opposite outcomes. Ordered before `score` so "Brazil 2-1 … correct score?"
+  classifies as correct_score, not a to-score market.
+  - [x] Saudi correct-score-vs-win rejected; year/date rows unaffected (2028,
+        2026-06 → not correct_score); 50-pair fixture parity held.
+  - [x] `pytest` → **146 passed** (added 2 tests).
+
+Remaining phantom long-tail: corners-different-line value, song-vs-chart
+(Gracie-Abrams group option mis-pairing), borderline option-rows (event-group
+option validation — deepest item). Cap stays 200.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -859,7 +879,8 @@ deepest item). Cap stays 200.
 | 22 | ce6425f | enable min_size=20 in production alerter (operator decision) |
 | 23 | cdc29b5 | goals-vs-spread: distinct 'score' bet-type in v2 |
 | 24 | 51f02c2 | 2026-06-15 daily 8/8; cumulative re-quant (group mis-pairing is the wall) |
-| 26 | _this commit_ | v2: split line into total vs margin; full-title phantom census |
+| 26 | 9c173fc | v2: split line into total vs margin; full-title phantom census |
+| 27 | _this commit_ | v2: correct-score bet-type (exact scoreline vs win/margin) |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
 | 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
 | 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |

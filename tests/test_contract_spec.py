@@ -149,6 +149,16 @@ class SportsBetTypeGate(unittest.TestCase):
         self.assertTrue(decide("Bosnia-Herzegovina O/U 0.5",
                                "Will Bosnia and Herzegovina score over 0.5?").match)
 
+    def test_correct_score_vs_moneyline_rejected(self) -> None:
+        # Run 27: exact scoreline vs a win/margin market are different contracts.
+        self.assertFalse(decide("Saudi Arabia 0 - 2 Uruguay",
+                                "Will the final score be Saudi Arabia wins by 2 goals?").match)
+
+    def test_scoreline_does_not_catch_years(self) -> None:
+        # The single-digit scoreline regex must not classify "2028"/"2026-06" rows.
+        self.assertTrue(decide("Will Newsom win the 2028 Democratic nomination?",
+                               "Newsom to win 2028 Democratic nomination?").match)
+
 
 if __name__ == "__main__":
     unittest.main()

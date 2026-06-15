@@ -120,6 +120,12 @@ def _bet_type(text: str) -> str | None:
         if re.search(r"\(\s*[+-]?\d", low) or re.search(r"\bwins?\s+by\b|\bwin\s+by\b", low):
             return "margin"
         return "total"
+    # Exact correct-score ("Saudi Arabia 0 - 2 Uruguay", "Brazil 2-1 Argentina")
+    # is a different contract from a moneyline/margin on the same teams (run 27).
+    # Single-digit, word-bounded so it doesn't catch years/dates (e.g. 2026-06).
+    # Checked before 'score' so "Brazil 2-1 ... correct score?" is correct_score.
+    if re.search(r"\b\d\s*[-–]\s*\d\b", low):
+        return "correct_score"
     if re.search(r"\bboth teams\b.{0,20}\bscore\b|\bto score\b|\bscore\b\s*\??\s*$", low):
         return "score"
     if _is_player_prop(text):
