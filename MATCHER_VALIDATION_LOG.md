@@ -35,7 +35,7 @@ explicitly.
 | Calendar day | Consecutive "fully-correct" runs | Target |
 |---|---|---|
 | 2026-06-14 | **8 ✅ DAILY GOAL MET** (offsets 0, 21, 28, 35, 7, 14, 3, 10) | 8 |
-| 2026-06-15 | **7** (offsets 17, 24, 31, 5, 12, 19, 26) | 8 |
+| 2026-06-15 | **8 ✅ DAILY GOAL MET** (offsets 17,24,31,5,12,19,26,33) | 8 |
 
 A run counts toward the streak only if all 20 pairs are Exact, engine match
 count == expected match count, and there are no false positives. Any failure
@@ -700,6 +700,41 @@ run). Scheduled task picks up the change on its next fire (runs the local file).
 
 ---
 
+## Run 24 — 2026-06-15 (curated offset 33 → ✅ DAILY GOAL MET 8/8) + cumulative re-quantification
+
+**Result: PASS — 8/8 consecutive fully-correct curated runs for 2026-06-15.**
+Precision PASS (39/39), recall CLEAN, `pytest -q` → **142 passed**.
+
+- **Curated** (`--offset 33 --n 20`): exact 20/20, FP 0, missed 0.
+
+### Daily summary (2026-06-15)
+8 consecutive fully-correct curated runs (offsets 17,24,31,5,12,19,26,33).
+Beyond the streak, this day's real work was unblocking the cap via precision:
+v2 structural sports gate (run 17), liquidity filter built + enabled in production
+(runs 20/22), goals-vs-spread `score` type (run 23). Same honesty caveats hold
+(curated pool is designed-to-pass; live coverage election/political).
+
+- **Cumulative cap=1500 re-quantification** (effect of ALL fixes 13–23):
+  guarded no_liq=**445**, min20=**304**, min50=**229** — essentially flat vs run
+  20 (429/296/230). Honest read of the min20 top-14:
+  - Some "Bosnia O/U 0.5 ↔ score over 0.5" entries are now likely REAL
+    total-vs-total pairs (truncation hid "over N"), correctly retained.
+  - The DOMINANT remaining phantoms are NOT sports — they are the run-18
+    group-matcher option mis-pairings: "Morgan Stanley" ↔ "lead underwriter",
+    "United Kingdom" ↔ "which countries will have recession", "Gracie Abrams"
+    song ↔ "#1 hit", "IEM Cologne Major" ↔ "Legacy qualify".
+
+**Conclusion:** the sports phantom work (runs 13–23) is essentially complete and
+the bet-type/score/liquidity fixes hold, but they do NOT further reduce the
+guarded count because the remaining over-matching is the **group-matcher binding
+wrong options within event groups** (run-18 finding). THIS is the wall to raising
+the cap. It is a deeper, riskier discover change (must not break the legit
+Trump/Rubio group option-row arbs). Cap stays at **200**. Recommend deciding
+whether to attempt event-group option validation next, or accept cap=200 as the
+safe ceiling.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -775,7 +810,8 @@ run). Scheduled task picks up the change on its next fire (runs the local file).
 | 18 | 591a8c8 | core predicate-gate diagnosed unsafe (would break production option rows) |
 | 20 | 74fdb47 | liquidity/depth filter; cap=1500 guarded 429→230–296 |
 | 22 | ce6425f | enable min_size=20 in production alerter (operator decision) |
-| 23 | _this commit_ | goals-vs-spread: distinct 'score' bet-type in v2 |
+| 23 | cdc29b5 | goals-vs-spread: distinct 'score' bet-type in v2 |
+| 24 | _this commit_ | 2026-06-15 daily 8/8; cumulative re-quant (group mis-pairing is the wall) |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
 | 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
 | 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |
