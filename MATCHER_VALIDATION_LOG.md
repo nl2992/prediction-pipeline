@@ -1071,6 +1071,26 @@ not pursuing further narrow vetoes without operator direction.
 
 ---
 
+## Run 38 — 2026-06-16 (RECALL: cap=500 misses ~1775 real diverse pairs)
+
+Curated offset 36 PASS; `pytest` 151. Shifted to the recall side (step 4).
+
+**Ingestion probe cap 500 → 1500:** prod(500)=**240** pairs, wide(1500)=**2350**,
+new-only=2120, **v2-endorsed misses=1775** → REVIEW. The missed pairs are largely
+REAL and diverse: "country leave OPEC", "Bitcoin outperform Gold", "Messi play in
+World Cup", "Mamdani raise minimum wage", and MANY "Both Teams to Score" (real
+BTTS across dozens of matches). So **cap=500 leaves the bulk of real diverse rich
+pairs uncaptured** — they live in Kalshi events ranked 500-1500.
+
+**Implication:** the precision work (runs 13-37) made the top mostly-real, and now
+the recall data shows raising the cap to 1500 would recover ~1775 mostly-real
+diverse pairs (the diversity the operator wants). Tradeoff: email volume grows
+from ~90 survivable (cap 500) to ~335 (cap 1500), scan ~5 min. Operator decision
+on the cap (and whether to cap the email at top-N richest) requested. No code
+change this run.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
