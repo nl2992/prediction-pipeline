@@ -150,7 +150,8 @@ def _poly_url(p: dict) -> str:
 
 
 def compute_signals(pairs: list[dict], min_edge: float,
-                    require_v2: bool = True, max_edge: float = 0.25) -> list[dict]:
+                    require_v2: bool = True, max_edge: float = 0.25,
+                    min_size: float = 0.0) -> list[dict]:
     """Two-leg arb economics for every priced pair; keep net >= min_edge.
 
     Both directions, both fee models. ``net_accurate`` (Kalshi's real
@@ -167,6 +168,11 @@ def compute_signals(pairs: list[dict], min_edge: float,
       * ``max_edge`` — a net edge above this (default 25c) between two identical
         binary contracts on liquid venues does not exist; it is the signature of
         a mismatch or a one-sided/stale book, so it is dropped.
+      * ``min_size`` — minimum best-level depth (shares/contracts) on BOTH legs
+        actually executed in a direction. 0 (default) disables it; >0 drops
+        illiquid/one-sided books whose "edge" is unexecutable. Buying PM YES
+        takes the PM ask; buying Kalshi NO hits the Kalshi YES bid; buying Kalshi
+        YES takes the Kalshi ask; buying PM NO hits the PM YES bid.
     """
     signals: list[dict] = []
     for p in pairs:
@@ -174,8 +180,11 @@ def compute_signals(pairs: list[dict], min_edge: float,
             continue  # independent referee does not confirm same contract
         pb, pa = p.get("poly_bid"), p.get("poly_ask")
         kb, ka = p.get("kalshi_bid"), p.get("kalshi_ask")
+        pbs, pas = p.get("poly_bid_size"), p.get("poly_ask_size")
+        kbs, kas = p.get("kalshi_bid_size"), p.get("kalshi_ask_size")
         best = None
-        if pa is not None and kb is not None:
+        if (pa is not None and kb is not None
+                and (pas or 0) >= min_size and (kbs or 0) >= min_size):
             k_no = round(1.0 - kb, 6)
             gross = round(1.0 - (pa + k_no), 6)
             cand = {
@@ -186,7 +195,8 @@ def compute_signals(pairs: list[dict], min_edge: float,
                 "net_flat7": round(gross - FLAT_FEE, 6),
             }
             best = cand
-        if ka is not None and pb is not None:
+        if (ka is not None and pb is not None
+                and (kas or 0) >= min_size and (pbs or 0) >= min_size):
             p_no = round(1.0 - pb, 6)
             gross = round(1.0 - (ka + p_no), 6)
             cand = {

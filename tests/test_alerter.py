@@ -94,6 +94,24 @@ class PrecisionGuards(unittest.TestCase):
         self.assertEqual(len(compute_signals([rejected], min_edge=0.005, require_v2=False)), 1)
 
 
+class LiquidityFilter(unittest.TestCase):
+    """min_size drops illiquid/one-sided books; default (0) changes nothing."""
+
+    def test_thin_book_filtered(self) -> None:
+        thin = pair(0.38, 0.40, 0.65, 0.68, poly_ask_size=2, kalshi_bid_size=2,
+                    poly_bid_size=2, kalshi_ask_size=2)
+        self.assertEqual(compute_signals([thin], min_edge=0.005, min_size=20), [])
+
+    def test_deep_book_passes(self) -> None:
+        deep = pair(0.38, 0.40, 0.65, 0.68, poly_ask_size=100, kalshi_bid_size=100,
+                    poly_bid_size=100, kalshi_ask_size=100)
+        self.assertEqual(len(compute_signals([deep], min_edge=0.005, min_size=20)), 1)
+
+    def test_default_min_size_unchanged(self) -> None:
+        # No size fields + default min_size=0 -> still produces the signal.
+        self.assertEqual(len(compute_signals([pair(0.38, 0.40, 0.65, 0.68)], min_edge=0.005)), 1)
+
+
 class SignalsToSend(unittest.TestCase):
     """Trigger on change, but email EVERY positive-net pair."""
 

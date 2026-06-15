@@ -35,7 +35,7 @@ explicitly.
 | Calendar day | Consecutive "fully-correct" runs | Target |
 |---|---|---|
 | 2026-06-14 | **8 ✅ DAILY GOAL MET** (offsets 0, 21, 28, 35, 7, 14, 3, 10) | 8 |
-| 2026-06-15 | **3** (offsets 17, 24, 31) | 8 |
+| 2026-06-15 | **5** (offsets 17, 24, 31, 5, 12) | 8 |
 
 A run counts toward the streak only if all 20 pairs are Exact, engine match
 count == expected match count, and there are no false positives. Any failure
@@ -600,6 +600,53 @@ trail records WHY the core gate was not shipped.
 
 ---
 
+## Run 19 — 2026-06-15 (LIVE precision + recall + curated offset 5) — idle PASS, no commit
+
+**PASS + precision PASS + recall CLEAN.** Consecutive fully-correct curated runs:
+**4/8**.
+
+- **Live precision**: 39 pairs, v2 agree **39/39** → no FP candidates (sports
+  bet-type gate from run 17 active; cap=200 still election/political only).
+- **Live recall**: prod 39, relaxed 39, relaxed-only 0 → **CLEAN**.
+- **Curated** (`--offset 5 --n 20`): exact 20/20, FP 0, missed 0.
+- **Regression:** `pytest -q` → **137 passed**.
+
+No defect → **no code change → no commit**. (Cap stays 200; next substantive work
+is the liquidity/depth filter + event-group option validation per run 18 — awaiting
+operator go-ahead.)
+
+---
+
+## Run 20 — 2026-06-15 (curated offset 12 + LIQUIDITY filter built)
+
+**Curated PASS** (streak **5/8**) + **precision PASS** (39/39) + **recall CLEAN**.
+
+- **Curated** (`--offset 12 --n 20`): exact 20/20, FP 0, missed 0.
+- **Build:** added best-level depth to discover's pair dict (`poly_bid_size`,
+  `poly_ask_size`, `kalshi_bid_size`, `kalshi_ask_size`) and a `min_size`
+  liquidity guard to `compute_signals` (per-direction: checks only the two legs
+  actually executed). **Backward-compatible** — default `min_size=0` disables it,
+  so production at cap=200 is unchanged. Addresses the run-18 finding that several
+  high-edge "phantoms" are real matches with illiquid/stale one-sided books.
+  - [x] `pytest -q` → **140 passed** (added 3 liquidity-filter tests).
+  - **Live impact at cap=1500:** guarded no_liq=**429**, min_size≥20=**296**
+    (−31%), min_size≥50=**230** (−46%). Illiquidity was a major phantom source.
+    The surviving min_size≥20 top-12 shifted toward REAL/plausible pairs:
+    "Both Teams to Score" ↔ "Will both teams score" (real); "DR Congo (-1.5)" ↔
+    "wins by over 1.5 goals", "Bosnia (-2.5)" ↔ "wins by over 2.5 goals" (real
+    spread restatements); Fed hike/cut; option-rows (Bobby Witt → AL MVP, Mistral
+    → IPO). Remaining clear phantoms are now a SHORT list: "Gracie Abrams" song ↔
+    "#1 hit" (group mis-pair), "Bosnia (-1.5)" ↔ "score?" (goals-vs-spread).
+
+**Honest status:** sports gate (run 17) + liquidity filter (run 20) together cut
+the wide-cap guarded set from ~451 to ~230–296 and the survivors are now mostly
+real-or-plausible, not pure phantom. Not yet "clean enough to email at cap=1500",
+but the trajectory is real. Two concrete remaining items: goals-vs-spread veto,
+and the Gracie-Abrams-style group option mis-pairing. Production stays at cap=200,
+min_size=0 (unchanged) until the cap=200 effect of min_size is measured.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -635,10 +682,14 @@ trail records WHY the core gate was not shipped.
         row matches a market, require the entity to be a valid option of that
         market's event scope. Targets phantom option-rows without touching legit
         ones. Discover group-matcher change.
-  - [ ] **Liquidity/depth filter (`compute_signals`):** require two-sided books
-        with real size at the quote; removes high-edge phantoms caused by
-        illiquid/stale markets (several wide-cap "phantoms" are this, not
-        mismatches). Safe, no matcher risk. Likely the best next step.
+  - [x] **Liquidity/depth filter (`compute_signals`):** DONE (run 20). `min_size`
+        per-direction depth guard; cut cap=1500 guarded 429→296 (≥20) / 230 (≥50).
+        Backward-compatible (default 0). Next: measure cap=200 effect, then enable.
+  - [ ] **goals-vs-spread veto:** "Team (-1.5)" ↔ "Will Team score?" (spread vs
+        to-score). Sports pattern still leaking.
+  - [ ] **Gracie-Abrams-style group option mis-pairing:** song title ↔ "#1 hit";
+        a bare option row mis-bound in a group. Needs event-group option
+        validation in discover.
 - [ ] Minor sports lexicon gaps: "corners", bare "score" (to-score prop).
   - [ ] Re-quantify phantom reduction at cap=1500; only raise the cap once the
         guarded survivable set is verified mostly-real.
@@ -667,7 +718,9 @@ trail records WHY the core gate was not shipped.
 | 13 | ca1a323 | matcher: reject totals/spread vs moneyline-win |
 | 15 | ca05c56 | matcher: reject player stat-prop vs plain player |
 | 16 | e2ce3bc | matcher: extend player-prop lexicon; phantom measurement |
-| 17 | _this commit_ | structural v2 sports bet-type gate; generic over-matching identified |
+| 17 | 6680b8b | structural v2 sports bet-type gate; generic over-matching identified |
+| 18 | 591a8c8 | core predicate-gate diagnosed unsafe (would break production option rows) |
+| 20 | _this commit_ | liquidity/depth filter; cap=1500 guarded 429→230–296 |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
 | 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
 | 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |

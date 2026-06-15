@@ -1076,6 +1076,13 @@ def discover(
             "kalshi_close":     (pair.kalshi.close_time or "")[:10],
             "kalshi_bid":       kb,
             "kalshi_ask":       ka,
+            # Best-level depth (shares for Polymarket, contracts for Kalshi) so a
+            # liquidity filter can drop illiquid/one-sided books — a major source
+            # of high-edge phantom arbs at the wide cap (run 20).
+            "poly_bid_size":    pair.poly.orderbook.bids[0].size if pair.poly.orderbook.bids else None,
+            "poly_ask_size":    pair.poly.orderbook.asks[0].size if pair.poly.orderbook.asks else None,
+            "kalshi_bid_size":  pair.kalshi.orderbook.bids[0].size if pair.kalshi.orderbook.bids else None,
+            "kalshi_ask_size":  pair.kalshi.orderbook.asks[0].size if pair.kalshi.orderbook.asks else None,
             "arb_eligible":     arb_eligible,
             "arb_direction":    arb_dir,
             "arb_net_profit":   arb_profit,
