@@ -112,7 +112,14 @@ def _bet_type(text: str) -> str | None:
     # "(-1.5)" vs "Will Team score?" is rejected, while "Both Teams to Score" vs
     # "Will both teams score?" stays matched (run 23).
     if _is_ou_or_spread(text):
-        return "line"
+        # Split into TOTAL (sum of goals: "O/U 2.5", "score over 0.5") vs
+        # MARGIN/spread ("(-1.5)", "wins by over 2.5 goals"). These are different
+        # contracts — "Korea O/U 2.5" != "Korea wins by over 2.5 goals" (run 26) —
+        # while total↔total and margin↔margin stay matched (Bosnia totals, DR
+        # Congo "(-1.5)" ↔ "wins by over 1.5 goals").
+        if re.search(r"\(\s*[+-]?\d", low) or re.search(r"\bwins?\s+by\b|\bwin\s+by\b", low):
+            return "margin"
+        return "total"
     if re.search(r"\bboth teams\b.{0,20}\bscore\b|\bto score\b|\bscore\b\s*\??\s*$", low):
         return "score"
     if _is_player_prop(text):

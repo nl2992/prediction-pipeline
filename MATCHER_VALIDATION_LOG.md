@@ -36,6 +36,7 @@ explicitly.
 |---|---|---|
 | 2026-06-14 | **8 ✅ DAILY GOAL MET** (offsets 0, 21, 28, 35, 7, 14, 3, 10) | 8 |
 | 2026-06-15 | **8 ✅ DAILY GOAL MET** (offsets 17,24,31,5,12,19,26,33) | 8 |
+| 2026-06-16 | **1** (offset 0) | 8 |
 
 A run counts toward the streak only if all 20 pairs are Exact, engine match
 count == expected match count, and there are no false positives. Any failure
@@ -735,6 +736,52 @@ safe ceiling.
 
 ---
 
+## Run 25 — 2026-06-16 (new day; curated offset 0 + group-validation diagnosis)
+
+New calendar day → streak reset. **Curated PASS** (streak **1/8**), `pytest` 142.
+
+- **Curated** (`--offset 0 --n 20`): exact 20/20, FP 0, missed 0.
+- **Active:** began the operator-approved group option-validation work. Found
+  discover's `_match_outcomes_within_group` already gates on `is_compatible_match`
+  (line 566), so the phantom option-rows PASS it. Running a diagnostic to capture
+  the FULL phantom titles and confirm whether `is_compatible_match` accepts them
+  (→ fix there) or they slip another way — result + plan appended next; no code
+  change until the path is confirmed (avoid breaking legit Trump/Rubio option
+  rows, the run-18 trap).
+
+---
+
+## Run 26 — 2026-06-16 (total-vs-margin split + full-title phantom census)
+
+**Live precision PASS** (39/39), **recall CLEAN**, `pytest` → **144 passed**.
+
+**Full-title census of the cap=1500 guarded min20 top-14** (long-overdue honest
+breakdown — the truncated views hid this):
+- REAL (~5): total↔total ("Bosnia O/U 0.5" ↔ "score over 0.5"), margin↔margin
+  ("Bosnia (-2.5)" ↔ "wins by over 2.5 goals").
+- PHANTOM (~5): total-vs-margin ("Korea O/U 2.5" ↔ "Korea wins by over 2.5
+  goals"); corners different line ("O/U 2.5" ↔ "5+ corners"); opposite correct-
+  score ("Saudi 0-2 Uruguay" ↔ "Saudi Arabia wins"); song-vs-chart ("Hit The
+  Wall - Gracie Abrams" ↔ "Gracie Abrams #1 hit").
+- BORDERLINE (~4): "Morgan Stanley" ↔ "serve as lead underwriter" (option row,
+  likely real but illiquid); Fed hike; OpenAI "$1t+ IPO" ↔ "IPO". So the guarded
+  set is NOT mostly-phantom — it's ~1/3 real, ~1/3 phantom, ~1/3 borderline.
+
+**Fix (run 26):** split the `line` bet-type into `total` (sum: O/U, "score over
+N") vs `margin` ("(-N)" spread, "wins by over N"). v2 now rejects total-vs-margin
+("Korea O/U 2.5" ↔ "wins by over 2.5") while keeping total↔total and
+margin↔margin. Many of the leftover Bosnia/Korea "phantoms" were actually REAL
+total↔total pairs and correctly stay.
+  - [x] Korea total-vs-margin rejected; DR Congo / Bosnia reals kept; 5 probes ok.
+  - [x] `pytest` → **144 passed** (added 2 tests); 50-pair fixture parity held.
+
+Remaining phantom long-tail (lower frequency): corners-different-line value,
+correct-score-vs-win, song-vs-chart (the Gracie-Abrams group option mis-pairing),
+and the borderline option-rows (need event-group option validation — still the
+deepest item). Cap stays 200.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -811,7 +858,8 @@ safe ceiling.
 | 20 | 74fdb47 | liquidity/depth filter; cap=1500 guarded 429→230–296 |
 | 22 | ce6425f | enable min_size=20 in production alerter (operator decision) |
 | 23 | cdc29b5 | goals-vs-spread: distinct 'score' bet-type in v2 |
-| 24 | _this commit_ | 2026-06-15 daily 8/8; cumulative re-quant (group mis-pairing is the wall) |
+| 24 | 51f02c2 | 2026-06-15 daily 8/8; cumulative re-quant (group mis-pairing is the wall) |
+| 26 | _this commit_ | v2: split line into total vs margin; full-title phantom census |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
 | 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
 | 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |

@@ -139,6 +139,16 @@ class SportsBetTypeGate(unittest.TestCase):
         # "score over 0.5" is a TOTAL line, matches an O/U line (not 'score').
         self.assertTrue(decide("Saudi Arabia O/U 0.5", "Saudi Arabia score over 0.5?").match)
 
+    def test_total_vs_margin_rejected(self) -> None:
+        # Run 26: a total (sum of goals) vs a margin/spread are different.
+        self.assertFalse(decide("Korea Republic O/U 2.5",
+                                "Republic of Korea wins by over 2.5 goals?").match)
+
+    def test_total_total_and_margin_margin_still_match(self) -> None:
+        self.assertTrue(decide("DR Congo (-1.5)", "Congo DR wins by over 1.5 goals?").match)
+        self.assertTrue(decide("Bosnia-Herzegovina O/U 0.5",
+                               "Will Bosnia and Herzegovina score over 0.5?").match)
+
 
 if __name__ == "__main__":
     unittest.main()
