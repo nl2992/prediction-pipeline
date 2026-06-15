@@ -36,7 +36,7 @@ explicitly.
 |---|---|---|
 | 2026-06-14 | **8 ✅ DAILY GOAL MET** (offsets 0, 21, 28, 35, 7, 14, 3, 10) | 8 |
 | 2026-06-15 | **8 ✅ DAILY GOAL MET** (offsets 17,24,31,5,12,19,26,33) | 8 |
-| 2026-06-16 | **2** (offsets 0, 7) | 8 |
+| 2026-06-16 | **4** (offsets 0, 7, 14, 21) | 8 |
 
 A run counts toward the streak only if all 20 pairs are Exact, engine match
 count == expected match count, and there are no false positives. Any failure
@@ -802,6 +802,43 @@ option validation — deepest item). Cap stays 200.
 
 ---
 
+## Run 28 — 2026-06-16 (curated offset 14) — idle PASS, no commit
+
+**Curated PASS** (streak **3/8**) + **precision PASS** (39/39) + **recall CLEAN**.
+`pytest` → **146 passed**.
+
+- **Curated** (`--offset 14 --n 20`): exact 20/20, FP 0, missed 0.
+
+No defect surfaced this run → **no code change → no commit**. Remaining phantom
+tail (corners line-value, song-vs-chart option-row group validation) unchanged;
+those are the deeper items left toward a cap raise.
+
+---
+
+## Run 29 — 2026-06-16 (different-team mismatch via country lexicon)
+
+**Curated PASS** (streak **4/8**) + **precision PASS** (39/39, re-checked after the
+change) + **recall CLEAN**.
+
+- **Curated** (`--offset 21 --n 20`): exact 20/20, FP 0, missed 0.
+- **Fix:** the different-team phantom ("West Indies" ↔ "Pakistan" in the same
+  tournament) wasn't caught because those teams were absent from
+  `_COUNTRY_ALIASES`, so neither hit the v2 jurisdiction gate. Added ~28
+  unambiguous national sports teams (Pakistan, Uruguay, Bosnia, Senegal, Nigeria,
+  Croatia, Serbia, Portugal, Netherlands, DR Congo, West Indies, etc.; merged
+  "Republic of Korea" into South Korea). Deliberately EXCLUDED ambiguous words
+  (Georgia/Jordan/Chad) to avoid false extraction. Now different teams → disjoint
+  jurisdictions → reject; same country/aliases and generic option rows (Rubio ↔
+  "who will win") stay matched (generic side has no jurisdiction → gate inert).
+  - [x] West Indies↔Pakistan & Senegal↔Nigeria rejected; Brazil WC, South
+        Korea↔Republic-of-Korea, Lakers kept; live precision still 39/39.
+  - [x] `pytest` → **146 passed**; 50-pair fixture parity held.
+
+Remaining tail: corners line-value, song-vs-chart option-row group validation
+(deepest). Cap stays 200.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -821,7 +858,8 @@ option validation — deepest item). Cap stays 200.
 - **Sports-matcher precision (BLOCKER for widening the cap).** Prerequisite for
   the operator's "raise to 1500 / >=50 survivable" request. Progress:
   - [x] Reject totals/spread (O/U-line) vs moneyline win (Run 13).
-  - [ ] Reject different teams in the same tournament ("West Indies" ↔ "Pakistan").
+  - [x] Reject different teams in the same tournament ("West Indies" ↔
+        "Pakistan") via expanded country lexicon + jurisdiction gate (Run 29).
   - [x] Reject player-name vs stat-prop ("Cody Gakpo" ↔ "Cody Gakpo: 2+
         assists") (Run 15).
   - [x] Extend player-prop lexicon with baseball/basketball stats (Run 16).
@@ -880,7 +918,8 @@ option validation — deepest item). Cap stays 200.
 | 23 | cdc29b5 | goals-vs-spread: distinct 'score' bet-type in v2 |
 | 24 | 51f02c2 | 2026-06-15 daily 8/8; cumulative re-quant (group mis-pairing is the wall) |
 | 26 | 9c173fc | v2: split line into total vs margin; full-title phantom census |
-| 27 | _this commit_ | v2: correct-score bet-type (exact scoreline vs win/margin) |
+| 27 | a8c66e8 | v2: correct-score bet-type (exact scoreline vs win/margin) |
+| 29 | _this commit_ | matcher: +28 national teams to country lexicon (different-team gate) |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
 | 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
 | 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |

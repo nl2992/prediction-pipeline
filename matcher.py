@@ -218,12 +218,41 @@ _COUNTRY_ALIASES: dict[str, tuple[str, ...]] = {
     "australia": ("australia", "australian"),
     "italy": ("italy", "italian"),
     "spain": ("spain", "spanish"),
-    "south korea": ("south korea", "korean"),
+    "south korea": ("south korea", "republic of korea", "korea republic", "korean"),
     "argentina": ("argentina", "argentine", "argentinian"),
     "ukraine": ("ukraine", "ukrainian"),
     "venezuela": ("venezuela", "venezuelan"),
     "iran": ("iran", "iranian"),
     "north korea": ("north korea", "north korean"),
+    # National sports teams (soccer/cricket/etc.) — added so different-team
+    # mismatches ("West Indies" vs "Pakistan" in the same tournament) hit the
+    # jurisdiction gate (run 29). Deliberately exclude ambiguous words that are
+    # also names/US-states (Georgia, Jordan, Chad) to avoid false extraction.
+    "pakistan": ("pakistan", "pakistani"),
+    "bosnia": ("bosnia and herzegovina", "bosnia-herzegovina", "bosnia", "herzegovina", "bosnian"),
+    "uruguay": ("uruguay", "uruguayan"),
+    "ecuador": ("ecuador", "ecuadorian"),
+    "tunisia": ("tunisia", "tunisian"),
+    "saudi arabia": ("saudi arabia", "saudi"),
+    "west indies": ("west indies", "west indian"),
+    "dr congo": ("dr congo", "congo dr", "democratic republic of congo"),
+    "senegal": ("senegal", "senegalese"),
+    "nigeria": ("nigeria", "nigerian"),
+    "morocco": ("morocco", "moroccan"),
+    "croatia": ("croatia", "croatian"),
+    "serbia": ("serbia", "serbian"),
+    "portugal": ("portugal", "portuguese"),
+    "netherlands": ("netherlands", "dutch"),
+    "belgium": ("belgium", "belgian"),
+    "switzerland": ("switzerland", "swiss"),
+    "sweden": ("sweden", "swedish"),
+    "denmark": ("denmark", "danish"),
+    "poland": ("poland", "polish"),
+    "egypt": ("egypt", "egyptian"),
+    "peru": ("peru", "peruvian"),
+    "chile": ("chile", "chilean"),
+    "south africa": ("south africa", "south african"),
+    "new zealand": ("new zealand",),
 }
 
 # Foreign (non-US) countries. US states and "united states" are domestic and
