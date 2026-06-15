@@ -36,7 +36,7 @@ explicitly.
 |---|---|---|
 | 2026-06-14 | **8 ✅ DAILY GOAL MET** (offsets 0, 21, 28, 35, 7, 14, 3, 10) | 8 |
 | 2026-06-15 | **8 ✅ DAILY GOAL MET** (offsets 17,24,31,5,12,19,26,33) | 8 |
-| 2026-06-16 | **6** (offsets 0, 7, 14, 21, 28, 35) | 8 |
+| 2026-06-16 | **7** (offsets 0, 7, 14, 21, 28, 35, 1) | 8 |
 
 A run counts toward the streak only if all 20 pairs are Exact, engine match
 count == expected match count, and there are no false positives. Any failure
@@ -930,6 +930,41 @@ raise the cap.
 
 ---
 
+## Run 33 — 2026-06-16 (rich-pairs: re-census after corners fix)
+
+**Curated PASS** (streak **7/8**), `pytest` 147.
+
+- **Curated** (`--offset 1 --n 20`): exact 20/20.
+- Probed the run-32 top phantoms with approximate titles: most (weather
+  range-vs-threshold, "Golden State Warriors" vs player-award) are ALREADY
+  rejected (low token sim / existing gates); only the GDP bucket mismatch
+  ("Negative GDP growth" vs "GDP growth 4.1% to 4.5%") clearly still leaks
+  (v2=True). Guessed titles are unreliable, so re-running the full cap=5000 scan
+  to capture the EXACT current guarded top-25 (post-corners-fix) and fix what
+  genuinely remains phantom.
+- **Rescan cap=5000 (exact titles):** 2823 pairs, guarded=335; top-50 mix
+  `pop 32, economic 9, election 4, sports 3, political 2` (diverse). With EXACT
+  titles the guarded top-25 is **~75-80% REAL** — many suspected phantoms are
+  actually real option-rows: "78-79°F"↔"high temp 78-79°", "Golden State
+  Warriors"↔"Giannis's next team? Golden State", "Algeria"↔"Algeria win World
+  Cup", Venezuela races, "Will Venable"↔"Venable win AL MOTY", Morgan Stanley /
+  Mistral / SpaceX IPO option-rows, FISA 702. Confirmed REMAINING phantoms (hard
+  one-offs): OpenAI "$1t+ IPO"↔"IPO" (conditional vs plain), IEM "Grand Final
+  sweep"↔"B8 qualify" (esports), "Hit The Wall - Gracie Abrams"↔"#1 hit"
+  (song-vs-chart), "Negative GDP"↔"4.6-5.0%" (direction bucket).
+- **Fix this run (33):** numeric range-overlap gate in v2 — two non-overlapping
+  buckets ("GDP 2.0-2.5%" vs "4.6-5.0%") rejected; overlapping ("78-79°F" vs "78
+  to 79°", "2.0-2.5%" vs "2.1-2.5%") kept; years excluded (<100 guard).
+  - [x] `pytest` → **147 passed**; fixture parity held; curated offset 1 PASS
+        (streak 7/8).
+
+**Net:** the engine's richest top is now DIVERSE + ~80% real. Remaining phantoms
+are hard one-offs (conditional-threshold, esports predicate, song-vs-chart,
+negative-direction bucket) with diminishing returns per veto. Production cap stays
+500 pending those; the diverse + real richest set is close.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -1013,7 +1048,8 @@ raise the cap.
 | 29 | a9800c5 | matcher: +28 national teams to country lexicon (different-team gate) |
 | 30 | 3578d87 | cap=1500 re-quant: top-of-book now ~85% real (was ~⅓) |
 | 31 | 034c262 | CAP RAISED 200→500; 88 survivable arbs (>=50 target met) |
-| 32 | _this commit_ | rich-pairs: full-scale diverse but ~half-phantom top; corners fix |
+| 32 | 23a98e4 | rich-pairs: full-scale diverse but ~half-phantom top; corners fix |
+| 33 | _this commit_ | exact-title census (top ~80% real); numeric range-overlap gate |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
 | 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
 | 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |

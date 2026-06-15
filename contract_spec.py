@@ -135,6 +135,23 @@ def _bet_type(text: str) -> str | None:
     return None
 
 
+_RANGE_RE = re.compile(r"(-?\d+(?:\.\d+)?)\s*%?\s*(?:to|[-–—])\s*(-?\d+(?:\.\d+)?)")
+
+
+def _num_range(text: str) -> tuple[float, float] | None:
+    """Extract a small numeric bucket "A to B" / "A-B" (GDP %, temperature °,
+    correct-score). Returns (lo, hi) or None. Excludes large numbers (years,
+    ids) so "2026-06" isn't read as a range.
+    """
+    m = _RANGE_RE.search(_ascii_lower(text))
+    if not m:
+        return None
+    a, b = float(m.group(1)), float(m.group(2))
+    if abs(a) >= 100 or abs(b) >= 100:
+        return None
+    return (min(a, b), max(a, b))
+
+
 def _polarity(text: str) -> bool:
     low = _ascii_lower(text)
     for neg, _pos in _INVERSION_ANTONYMS:
@@ -313,6 +330,14 @@ def match_spec(
                 return _reject("deadline-scope mismatch: specific date vs calendar year, horizons differ")
             if a_day and b_day and a_day.isdisjoint(b_day):
                 return _reject(f"deadline-day mismatch: {sorted(a_day)} vs {sorted(b_day)}")
+
+    # --- numeric range buckets (GDP %, temperature, etc.) ---------------------
+    # Two non-overlapping numeric buckets are different contracts ("GDP 2.0-2.5%"
+    # vs "GDP 4.6-5.0%"); overlapping buckets stay matched ("78-79F" vs "78 to
+    # 79", "2.0-2.5%" vs "2.1-2.5%"). Run 33.
+    ra, rb = _num_range(a.raw), _num_range(b.raw)
+    if ra and rb and (ra[1] < rb[0] - 1e-9 or rb[1] < ra[0] - 1e-9):
+        return _reject(f"numeric range mismatch: {ra} vs {rb}")
 
     # --- threshold & settlement (with inversion detection) --------------------
     if a.threshold and b.threshold:

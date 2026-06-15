@@ -149,6 +149,14 @@ class SportsBetTypeGate(unittest.TestCase):
         self.assertTrue(decide("Bosnia-Herzegovina O/U 0.5",
                                "Will Bosnia and Herzegovina score over 0.5?").match)
 
+    def test_numeric_range_mismatch_rejected(self) -> None:
+        # Run 33: non-overlapping buckets differ; overlapping ones stay matched.
+        self.assertFalse(decide("GDP growth in 2026? 2.0% to 2.5%",
+                                "GDP growth in 2026? 4.6% to 5.0%").match)
+        self.assertTrue(decide("GDP growth 2.0% to 2.5%",
+                               "GDP growth in 2026? 2.1% to 2.5%").match)
+        self.assertTrue(decide("high temp 78-79 on Jun 15?", "high temp 78 to 79?").match)
+
     def test_corners_total_vs_count_rejected(self) -> None:
         # Run 32: "Corners O/U 2.5" (total) vs "8+ corners" (count) — different.
         self.assertFalse(decide("New Zealand Corners: O/U 2.5", "New Zealand: 8+ corners").match)
