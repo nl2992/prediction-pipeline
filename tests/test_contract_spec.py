@@ -149,6 +149,14 @@ class SportsBetTypeGate(unittest.TestCase):
         self.assertTrue(decide("Bosnia-Herzegovina O/U 0.5",
                                "Will Bosnia and Herzegovina score over 0.5?").match)
 
+    def test_negative_vs_positive_bucket_rejected(self) -> None:
+        # Run 34: a negative/contraction bucket vs an explicit positive range.
+        self.assertFalse(decide("Negative GDP growth in 2026?",
+                                "GDP growth in 2026? 4.6% to 5.0%").match)
+        # Two positive overlapping buckets (no negative cue) still match.
+        self.assertTrue(decide("GDP growth 2.0% to 2.5%",
+                               "GDP growth in 2026? 2.1% to 2.5%").match)
+
     def test_numeric_range_mismatch_rejected(self) -> None:
         # Run 33: non-overlapping buckets differ; overlapping ones stay matched.
         self.assertFalse(decide("GDP growth in 2026? 2.0% to 2.5%",

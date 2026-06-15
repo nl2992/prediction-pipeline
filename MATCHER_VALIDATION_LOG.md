@@ -36,7 +36,7 @@ explicitly.
 |---|---|---|
 | 2026-06-14 | **8 ✅ DAILY GOAL MET** (offsets 0, 21, 28, 35, 7, 14, 3, 10) | 8 |
 | 2026-06-15 | **8 ✅ DAILY GOAL MET** (offsets 17,24,31,5,12,19,26,33) | 8 |
-| 2026-06-16 | **7** (offsets 0, 7, 14, 21, 28, 35, 1) | 8 |
+| 2026-06-16 | **8 ✅ DAILY GOAL MET** (offsets 0,7,14,21,28,35,1,8) | 8 |
 
 A run counts toward the streak only if all 20 pairs are Exact, engine match
 count == expected match count, and there are no false positives. Any failure
@@ -965,6 +965,29 @@ negative-direction bucket) with diminishing returns per veto. Production cap sta
 
 ---
 
+## Run 34 — 2026-06-16 (✅ DAILY 8/8 + negative-direction bucket gate)
+
+**Curated PASS (offset 8) → 8/8 consecutive for 2026-06-16 — daily goal met.**
+`pytest` → **148 passed**.
+
+- **Fix:** negative/contraction bucket vs an explicit positive numeric bucket are
+  mutually-exclusive ("Negative GDP growth" vs "GDP growth 4.6% to 5.0%"). Added a
+  direction gate (unambiguous downturn words only: negative/contraction/recession/
+  shrink/below-zero — NOT "decline") that rejects when one side is negative-cued
+  and the other has a positive range. Reals kept (overlapping positive buckets,
+  both-downturn pairs unaffected since the gate needs exactly one negative side).
+  - [x] Negative-GDP phantom rejected; fixture parity held; `pytest` 148.
+
+### Daily summary (2026-06-16)
+8/8 curated (offsets 0,7,14,21,28,35,1,8). The day's real work: the RICH-PAIRS
+push — cap raised 200→500 (run 31), then full-scale census proving the richest
+arbs are diverse (pop/econ/sports/election) and the engine's richest top-25 is
+~80% real after a string of precision fixes (corners, numeric-range, negative
+bucket). Remaining phantoms are hard one-offs (conditional-threshold IPO, esports
+sweep-vs-qualify, song-vs-chart). Production cap stays 500 pending those.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -1049,7 +1072,8 @@ negative-direction bucket) with diminishing returns per veto. Production cap sta
 | 30 | 3578d87 | cap=1500 re-quant: top-of-book now ~85% real (was ~⅓) |
 | 31 | 034c262 | CAP RAISED 200→500; 88 survivable arbs (>=50 target met) |
 | 32 | 23a98e4 | rich-pairs: full-scale diverse but ~half-phantom top; corners fix |
-| 33 | _this commit_ | exact-title census (top ~80% real); numeric range-overlap gate |
+| 33 | 0733c54 | exact-title census (top ~80% real); numeric range-overlap gate |
+| 34 | _this commit_ | daily 8/8; negative-vs-positive bucket direction gate |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
 | 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
 | 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |

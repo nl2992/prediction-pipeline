@@ -339,6 +339,16 @@ def match_spec(
     if ra and rb and (ra[1] < rb[0] - 1e-9 or rb[1] < ra[0] - 1e-9):
         return _reject(f"numeric range mismatch: {ra} vs {rb}")
 
+    # Negative/contraction bucket vs an explicitly positive numeric bucket are
+    # mutually-exclusive outcomes ("Negative GDP growth" vs "GDP growth 4.6% to
+    # 5.0%"). Run 34. (Unambiguous downturn words only — not "decline".)
+    _neg = re.compile(r"\b(negative|contraction|recession|shrinks?|shrinking|below zero|sub[- ]?zero)\b")
+    neg_a, neg_b = bool(_neg.search(a.raw.lower())), bool(_neg.search(b.raw.lower()))
+    if neg_a != neg_b:
+        pos = rb if neg_a else ra
+        if pos and pos[0] > 0:
+            return _reject("direction mismatch: negative vs positive bucket")
+
     # --- threshold & settlement (with inversion detection) --------------------
     if a.threshold and b.threshold:
         if _threshold_equal(a.threshold, b.threshold):
