@@ -1004,10 +1004,26 @@ def discover(
     pairs = _match_groups_then_individual(k_snaps, p_snaps, min_sim=min_sim)
     print(f"      {len(pairs)} pairs found")
 
+    # v2 verdicts are TEXT-ONLY (no prices). The alerter / compute_signals discard
+    # any pair whose v2_match isn't True (require_v2), so compute v2 up front and
+    # fetch live order books ONLY for v2-endorsed pairs — enriching the rest is
+    # pure waste (they can never become a signal). Provably lossless for the
+    # alerter; non-endorsed pairs keep catalog prices (review-only). The verdict is
+    # reused in the results loop below so v2 is computed once. (run 47)
+    from contract_spec import explain as _v2_explain
+    v2_by_pair: dict = {}
+    for pair in pairs:
+        try:
+            v2_by_pair[id(pair)] = _v2_explain(pair.poly, pair.kalshi)
+        except Exception as exc:  # shadow mode must never break production
+            v2_by_pair[id(pair)] = exc
+
     if show_prices and pairs:
-        print(f"      Fetching live orderbooks for {len(pairs)} pairs…", flush=True)
-        _enrich_kalshi([p.kalshi for p in pairs])
-        _enrich_polymarket([p.poly for p in pairs])
+        endorsed = [p for p in pairs if getattr(v2_by_pair.get(id(p)), "match", False) is True]
+        print(f"      Fetching live orderbooks for {len(endorsed)} v2-endorsed "
+              f"of {len(pairs)} pairs…", flush=True)
+        _enrich_kalshi([p.kalshi for p in endorsed])
+        _enrich_polymarket([p.poly for p in endorsed])
 
     # ── Format results ────────────────────────────────────────────────────────
     from matcher import is_arb_eligible
@@ -1038,21 +1054,18 @@ def discover(
         p_event_title = pair.poly.extra.get("event_title") or pair.poly.title
         cat = _category({"title": k_event_title or p_event_title})
 
-        # v2 SHADOW MODE: the structured decision engine (contract_spec) renders
-        # an independent verdict on every v1-matched pair. v1 stays authoritative;
-        # v2's verdict + reasons ride along so live sessions accumulate migration
-        # evidence (PIPELINE_REDESIGN.md). A v2 rejection of a v1 match is a
-        # candidate v1 false positive — surfaced loudly, never silently dropped.
-        try:
-            from contract_spec import explain as _v2_explain
-            _v2 = _v2_explain(pair.poly, pair.kalshi)
+        # v2 SHADOW MODE: structured decision engine (contract_spec) verdict,
+        # precomputed above (text-only) and reused here. A v2 rejection of a v1
+        # match is a candidate v1 false positive — surfaced, never silently dropped.
+        _v2 = v2_by_pair.get(id(pair))
+        if isinstance(_v2, Exception):  # shadow mode must never break production
+            v2_fields = {"v2_match": None, "v2_error": str(_v2)}
+        else:
             v2_fields = {
                 "v2_match": _v2.match,
                 "v2_inverted": _v2.inverted,
                 "v2_reasons": _v2.reasons,
             }
-        except Exception as exc:  # shadow mode must never break production
-            v2_fields = {"v2_match": None, "v2_error": str(exc)}
 
         results.append({
             "confidence":       round(pair.confidence, 3),

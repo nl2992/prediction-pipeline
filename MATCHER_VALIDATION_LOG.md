@@ -1264,12 +1264,38 @@ scalability failure PIPELINE_REDESIGN.md warned about, re-triggered by the cap.)
 BOUNDED scan; the full crawl is reserved for genuinely unbounded scans. Killed the
 stuck pythonw process (pid 39304).
 - [x] `pytest` → **154 passed**.
-- Timed cap=1500 dry-run (confirm blocking + completes in-window + emails): in
-  progress.
+- Dry-run at cap=1500 with the fix: **completes cleanly, no CYCLE ERROR, would
+  email 50 pairs** (best 5.84c) — confirms blocking path works (a crawl would
+  never finish). Task ExecutionTimeLimit raised 20→30 min for headroom.
+  Production task triggered to verify headless end-to-end.
+- **RESOLVED — verified in production:** task `LastResult 0x0`; cron log shows
+  "per-event blocking, 1500 events" (no crawl); "scan done in **807s**, 857
+  pairs, 197 survivable"; **EMAILED 50 signals (best 6.84c)** to all 3 recipients.
+  Notifications restored. (807s = ~13.5 min, under the 30-min limit but slow —
+  the enrichment of 857 pairs dominates → see the pre-filter optimization next.)
 
 ---
 
-## Backlog / open items (unchecked = not done)
+## Run 47 — 2026-06-17 (enrichment pre-filter + honest perf analysis)
+
+Operator asked: would Rust be faster? **No — the pipeline is I/O-bound** (HTTP +
+exchange rate limits ~10 req/s), not CPU-bound. Catalog fetch ~20-30s; the 1500
+per-event market fetches dominate; matching + v2 gates + fee math are a few
+seconds. Rust optimizes CPU (<5% of wall time) → ~0 gain, huge rewrite risk.
+
+**Optimization shipped (lossless):** enrich live order books ONLY for v2-endorsed
+pairs (compute_signals discards the rest via require_v2; v2 is text-only). Verified
+LOSSLESS: 198 survivable vs 197 baseline (≈ market drift); pytest **154 passed**.
+- Honest caveat: only ~6% fewer enrichments (806 of 860) because **94% of pairs
+  are v2-endorsed**, so the win is small. The 807s→516s wall-clock drop is mostly
+  scan-to-scan variance (catalog cache + network), NOT this change. Enrichment was
+  not the bottleneck.
+
+**Real bottleneck = the 1500 per-event Kalshi market fetches** (network, rate-
+limited). The only lever that materially cuts scan time is **fewer events (lower
+cap)** — a direct trade against the diversity the operator chose (cap=1500). CPU/
+language is irrelevant. Recommend deciding the cap vs speed trade-off; no further
+code micro-opt is worth the accuracy risk.
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
       via `discover.py` and referees precision/polarity with the v2 engine
@@ -1364,7 +1390,9 @@ stuck pythonw process (pid 39304).
 | 41 | 3d4f895 | adjacent-bucket gate tighten; richest=politics/econ finding |
 | 42 | ffb9816 | different-player (shared first name) gate; verify top-25 ~88% real |
 | 43 | 0cf9800 | bilateral different-partner-country gate + ME country lexicon |
-| 44 | _this commit_ | top-50 verification (~88% real, diverse); goal assessment (log only) |
+| 44 | ddf3145 | top-50 verification (~88% real, diverse); goal assessment (log only) |
+| 46 | 66b92ba | PRODUCTION OUTAGE FIX: per-event blocking for bounded scans |
+| 47 | _this commit_ | enrich only v2-endorsed pairs (lossless); perf analysis (Rust unneeded) |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
 | 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
 | 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |
