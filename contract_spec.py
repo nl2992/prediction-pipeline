@@ -346,7 +346,11 @@ def match_spec(
     # vs "GDP 4.6-5.0%"); overlapping buckets stay matched ("78-79F" vs "78 to
     # 79", "2.0-2.5%" vs "2.1-2.5%"). Run 33.
     ra, rb = _num_range(a.raw), _num_range(b.raw)
-    if ra and rb and (ra[1] < rb[0] - 1e-9 or rb[1] < ra[0] - 1e-9):
+    # Reject non-overlapping OR merely touching buckets: "1.5-2.0%" and "1.1-1.5%"
+    # are ADJACENT outcome buckets (share only the 1.5 boundary), not the same
+    # contract. Genuinely overlapping ranges (78-79 vs 78-79; 2.0-2.5 vs 2.1-2.5)
+    # stay matched. (run 41)
+    if ra and rb and (ra[1] <= rb[0] + 1e-9 or rb[1] <= ra[0] + 1e-9):
         return _reject(f"numeric range mismatch: {ra} vs {rb}")
 
     # Negative/contraction bucket vs an explicitly positive numeric bucket are

@@ -1131,7 +1131,35 @@ Note: the same dry-run confirmed the v2 gates FIRE ON LIVE SNAPSHOTS at scale �
 "bet-type mismatch: total vs prop" rejecting Iraq/Austria/Senegal/Norway corners
 (run-32 fix working live), plus similarity-gate rejects. Precision holds at 1500.
 
-Dry-run re-verification (no CYCLE ERROR, would-email top-50): in progress.
+**Dry-run re-verification: PASS** — clean cycle, no CYCLE ERROR, would email
+"[Pred-Arb] 50 executable signals — best net edge 24.43c/$1 (50 pairs)". cap=1500
++ top-50 + unicode all work end-to-end.
+
+---
+
+## Run 41 — 2026-06-16 (adjacent-bucket fix + honest "richest is politics/econ" finding)
+
+The clean cap=1500 dry-run (run 40) emailed 50 pairs but exposed two things.
+
+- **Fix: adjacent numeric buckets.** "1.5-2.0%" vs "GDP 1.1% to 1.5%" (net 3.16c)
+  slipped — they only TOUCH at 1.5. Tightened the range gate to reject touching/
+  adjacent buckets (`<=` boundary), while genuinely-overlapping ranges (78-79 vs
+  78-79; 2.0-2.5 vs 2.1-2.5) stay matched.
+  - [x] adjacent GDP buckets rejected; reals kept; `pytest` **152 passed**;
+        fixture parity held.
+
+- **HONEST finding — the top-50 RICHEST is politics/econ-heavy, not sports.** The
+  dry-run's richest signals are Republican/Democratic House races, Rahm Emanuel,
+  GDP buckets, Reza Pahlavi recognition (3-24c). The earlier "diverse pop-heavy"
+  census (runs 30/33) was inflated by PHANTOM pop pairs (corners total-vs-count,
+  weather, etc.) that have since been filtered (runs 32-41). After cleaning, the
+  genuinely-RICH REAL arbs concentrate in **politics/econ/foreign-policy option
+  rows**; real sports arbs exist but are **low-edge** (BTTS/totals are pennies
+  after fees), so they fall below the top-50-by-edge cutoff. This directly answers
+  the operator's "are there far larger spreads elsewhere?" → mostly NO; the
+  apparent large non-politics spreads were phantom. Diversity vs richness is a
+  genuine tension: top-50-by-edge ⇒ politics/econ; forcing category diversity
+  would mean emailing lower-edge pairs. Operator decision pending.
 
 ---
 
@@ -1226,7 +1254,8 @@ Dry-run re-verification (no CYCLE ERROR, would-email top-50): in progress.
 | 37 | f173237 | rich-pairs tail: coin-toss vs tournament gate |
 | 38 | 509aa8d | recall finding: cap=500 misses ~1775 real diverse pairs |
 | 39 | 81775e7 | cap 500→1500 + email top-50 richest (operator) |
-| 40 | _this commit_ | fix cap=1500 unicode CYCLE ERROR (console + email utf-8) |
+| 40 | c16b769 | fix cap=1500 unicode CYCLE ERROR (console + email utf-8) |
+| 41 | _this commit_ | adjacent-bucket gate tighten; richest=politics/econ finding |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
 | 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
 | 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |
