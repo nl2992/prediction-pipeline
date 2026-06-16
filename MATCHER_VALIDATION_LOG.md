@@ -1188,6 +1188,25 @@ Curated offset 2 PASS.
 
 ---
 
+## Run 43 — 2026-06-16 (bilateral different-partner-country gate)
+
+Curated offset 9 PASS.
+
+- **Fix:** "Israel and Lebanon normalize relations" vs "Israel and Qatar
+  normalize relations" — same anchor country, different partner. The disjoint
+  jurisdiction gate missed it (they share Israel), and Lebanon/Qatar weren't even
+  in the lexicon. Added ~9 Middle-East countries (Lebanon, Qatar, Syria, Iraq,
+  Yemen, UAE, Kuwait, Bahrain, Oman) + a "mutual-unique-jurisdiction" gate: both
+  name ≥2 countries and each names one the other lacks → reject.
+  - [x] Israel+Lebanon vs Israel+Qatar rejected; US-Iran↔Iran (subset) and
+        same-set pairs kept; `pytest` → **154 passed**; fixture parity held.
+
+Top phantom residual now reduced to the Gracie-Abrams song-granularity case
+(same-action song_chart on both sides via event context) — genuinely hard, ~1
+pair, diminishing returns.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -1281,7 +1300,8 @@ Curated offset 2 PASS.
 | 39 | 81775e7 | cap 500→1500 + email top-50 richest (operator) |
 | 40 | c16b769 | fix cap=1500 unicode CYCLE ERROR (console + email utf-8) |
 | 41 | 3d4f895 | adjacent-bucket gate tighten; richest=politics/econ finding |
-| 42 | _this commit_ | different-player (shared first name) gate; verify top-25 ~88% real |
+| 42 | ffb9816 | different-player (shared first name) gate; verify top-25 ~88% real |
+| 43 | _this commit_ | bilateral different-partner-country gate + ME country lexicon |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
 | 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
 | 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |

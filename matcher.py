@@ -253,6 +253,17 @@ _COUNTRY_ALIASES: dict[str, tuple[str, ...]] = {
     "chile": ("chile", "chilean"),
     "south africa": ("south africa", "south african"),
     "new zealand": ("new zealand",),
+    # Middle East / additional (run 43) — for bilateral "normalize relations"
+    # markets where the partner country distinguishes the contract.
+    "lebanon": ("lebanon", "lebanese"),
+    "qatar": ("qatar", "qatari"),
+    "syria": ("syria", "syrian"),
+    "iraq": ("iraq", "iraqi"),
+    "yemen": ("yemen", "yemeni"),
+    "uae": ("united arab emirates", "uae"),
+    "kuwait": ("kuwait", "kuwaiti"),
+    "bahrain": ("bahrain", "bahraini"),
+    "oman": ("oman", "omani"),
 }
 
 # Foreign (non-US) countries. US states and "united states" are domestic and

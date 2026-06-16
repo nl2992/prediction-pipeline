@@ -149,6 +149,14 @@ class SportsBetTypeGate(unittest.TestCase):
         self.assertTrue(decide("Bosnia-Herzegovina O/U 0.5",
                                "Will Bosnia and Herzegovina score over 0.5?").match)
 
+    def test_bilateral_different_partner_country_rejected(self) -> None:
+        # Run 43: shared country but different partner = different bilateral pair.
+        self.assertFalse(decide("Israel and Lebanon normalize relations before 2027?",
+                                "Will Israel and Qatar normalize relations before 2027?").match)
+        # Subset (one country) and same-set pairs still match.
+        self.assertTrue(decide("Will the US and Iran reach a nuclear deal in 2026?",
+                               "Iran nuclear deal in 2026?").match)
+
     def test_different_player_same_first_name_rejected(self) -> None:
         # Run 42: two different players sharing a first name are different contracts.
         self.assertFalse(decide("Julian Ryerson: 1+ goals", "Julian Alvarez: 1+ goals").match)

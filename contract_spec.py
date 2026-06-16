@@ -256,6 +256,14 @@ def match_spec(
         return _reject(f"domain mismatch: {sorted(a.domains)} vs {sorted(b.domains)}")
     if a.jurisdictions and b.jurisdictions and a.jurisdictions.isdisjoint(b.jurisdictions):
         return _reject(f"jurisdiction mismatch: {sorted(a.jurisdictions)} vs {sorted(b.jurisdictions)}")
+    # Bilateral markets that share one country but each name another the other
+    # lacks are different contracts ("Israel and Lebanon normalize" vs "Israel
+    # and Qatar normalize") — the disjoint gate above misses them because they
+    # overlap on the shared country. (run 43)
+    if (len(a.jurisdictions) >= 2 and len(b.jurisdictions) >= 2
+            and (a.jurisdictions - b.jurisdictions) and (b.jurisdictions - a.jurisdictions)):
+        return _reject(
+            f"different country set: {sorted(a.jurisdictions)} vs {sorted(b.jurisdictions)}")
     if a.orgs and b.orgs and a.orgs.isdisjoint(b.orgs):
         return _reject(f"org mismatch: {sorted(a.orgs)} vs {sorted(b.orgs)}")
     if a.products and b.products and a.products.isdisjoint(b.products):
