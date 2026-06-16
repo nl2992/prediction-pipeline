@@ -152,6 +152,21 @@ def _num_range(text: str) -> tuple[float, float] | None:
     return (min(a, b), max(a, b))
 
 
+def _first_name_collision(an: frozenset[str], bn: frozenset[str]) -> bool:
+    """True when both sides name two-token people who share a FIRST name but have
+    DIFFERENT surnames — i.e. different people ("Julian Ryerson" vs "Julian
+    Alvarez"). False if either side has a single-token name or any surname is
+    shared, so "Trump"↔"Donald Trump" and "Lula"↔"Lula da Silva" are NOT flagged.
+    """
+    two_a = [n.split() for n in an if len(n.split()) == 2]
+    two_b = [n.split() for n in bn if len(n.split()) == 2]
+    if not two_a or not two_b:
+        return False
+    if {t[1] for t in two_a} & {t[1] for t in two_b}:   # shared surname = same person
+        return False
+    return bool({t[0] for t in two_a} & {t[0] for t in two_b})  # shared first name only
+
+
 def _polarity(text: str) -> bool:
     low = _ascii_lower(text)
     for neg, _pos in _INVERSION_ANTONYMS:
@@ -257,6 +272,12 @@ def match_spec(
         return _reject(
             f"selected-name mismatch: {sorted(a.selected_names)} vs {sorted(b.selected_names)}"
         )
+    # Different people who share a first name ("Julian Ryerson" vs "Julian
+    # Alvarez") — _names_overlap treats them as overlapping via the shared first
+    # name, so guard surnames explicitly on the SELECTED names (run 42). Entities
+    # are too broad (they broke fixture parity), so only selected_names is used.
+    if _first_name_collision(a.selected_names, b.selected_names):
+        return _reject("different person: shared first name, different surname")
 
     # --- sports bet-type gate -------------------------------------------------
     # A moneyline (win), a totals/spread line, and a player stat-prop are

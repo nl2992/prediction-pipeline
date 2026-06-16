@@ -149,6 +149,14 @@ class SportsBetTypeGate(unittest.TestCase):
         self.assertTrue(decide("Bosnia-Herzegovina O/U 0.5",
                                "Will Bosnia and Herzegovina score over 0.5?").match)
 
+    def test_different_player_same_first_name_rejected(self) -> None:
+        # Run 42: two different players sharing a first name are different contracts.
+        self.assertFalse(decide("Julian Ryerson: 1+ goals", "Julian Alvarez: 1+ goals").match)
+        # Same person variants (single-token / shared surname) still match.
+        self.assertTrue(decide("Will Donald Trump win?", "Trump to win?").match)
+        self.assertTrue(decide("Will Gavin Newsom win the 2028 nomination?",
+                               "Newsom to win 2028 nomination?").match)
+
     def test_coin_toss_vs_tournament_rejected(self) -> None:
         # Run 37: "Who wins the toss?" vs "win the tournament" — both action 'win'.
         self.assertFalse(decide("England vs Ireland - Who wins the toss?",

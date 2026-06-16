@@ -1159,7 +1159,32 @@ The clean cap=1500 dry-run (run 40) emailed 50 pairs but exposed two things.
   the operator's "are there far larger spreads elsewhere?" → mostly NO; the
   apparent large non-politics spreads were phantom. Diversity vs richness is a
   genuine tension: top-50-by-edge ⇒ politics/econ; forcing category diversity
-  would mean emailing lower-edge pairs. Operator decision pending.
+  would mean emailing lower-edge pairs. **Operator decision: keep top-50 by edge
+(richest)** — already the live behavior (TOP_N=50, sorted by net), no change
+needed. The richest real arbs being politics/econ-heavy is accepted as accurate.
+
+---
+
+## Run 42 — 2026-06-16 (verify scan + different-player fix)
+
+Full verify scan cap=1500: 2290 pairs, guarded=295; top-50 mix `pop 39, economic
+4, election 3, sports 2, political 2` (diverse this scan). Top-25 **~88% real**
+(Bosnia/Korea totals & margins, IPO option-rows, Fed, Bobby Witt MVP, BTTS).
+Curated offset 2 PASS.
+
+- **Fix:** #3-richest was a phantom — "Julian Ryerson: 1+ goals" vs "Julian
+  Alvarez: 1+ goals" (DIFFERENT players sharing first name "julian";
+  `_names_overlap` matched on the shared first name). Added `_first_name_collision`
+  on `selected_names`: two-token names sharing a first name but with different
+  surnames → reject. Single-token / shared-surname variants (Trump↔Donald Trump,
+  Newsom↔Gavin Newsom) unaffected.
+  - First cut also checked `entities` and broke fixture parity (entities too
+    broad) → narrowed to `selected_names` only.
+  - [x] Julian rejected; Trump/Newsom kept; `pytest` → **153 passed**; fixture
+        parity restored.
+- Remaining top phantoms (hard, known): Gracie-Abrams song granularity;
+  Israel+Lebanon vs Israel+Qatar (different partner country, shared-jurisdiction
+  set). Documented; diminishing returns.
 
 ---
 
@@ -1255,7 +1280,8 @@ The clean cap=1500 dry-run (run 40) emailed 50 pairs but exposed two things.
 | 38 | 509aa8d | recall finding: cap=500 misses ~1775 real diverse pairs |
 | 39 | 81775e7 | cap 500→1500 + email top-50 richest (operator) |
 | 40 | c16b769 | fix cap=1500 unicode CYCLE ERROR (console + email utf-8) |
-| 41 | _this commit_ | adjacent-bucket gate tighten; richest=politics/econ finding |
+| 41 | 3d4f895 | adjacent-bucket gate tighten; richest=politics/econ finding |
+| 42 | _this commit_ | different-player (shared first name) gate; verify top-25 ~88% real |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
 | 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
 | 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |
