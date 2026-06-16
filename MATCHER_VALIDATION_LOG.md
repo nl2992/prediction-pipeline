@@ -1207,6 +1207,32 @@ pair, diminishing returns.
 
 ---
 
+## Run 44 — 2026-06-16 (top-50 verification + GOAL ASSESSMENT)
+
+Curated offset 16 PASS; `pytest` 154. Verify scan cap=1500: 2257 pairs,
+guarded=291; top-50 mix `pop 38, economic 5, election 3, sports 2, political 2`
+(diverse — the pop count is mostly REAL Bosnia/Korea/Saudi totals & margins).
+
+**Top-25 census: ~22/25 REAL (~88%).** Real: Bobby Witt/Angel Reese MVP option
+rows, Bosnia/Korea/Saudi O-U & spreads (total/total, margin/margin), Morgan
+Stanley/Mistral/SpaceX IPO rows, Golden State↔Giannis next team, Fed hike, BTTS,
+Dem House race. **Clear phantoms remaining = 2 hard one-offs:**
+- "Hit The Wall - Gracie Abrams" ↔ "#1 hit" — same-action `song_chart` via event
+  context (specific song vs artist achievement); needs work-vs-artist semantics.
+- "DR Congo 0 - 1 Uzbekistan" ↔ "Congo DR wins ..." — opposite correct-score
+  (winner direction); needs team↔scoreline parsing.
+
+**ASSESSMENT — goal substantially met.** Across runs 13-43 every SYSTEMATIC
+phantom class was fixed; the top-50-richest is now diverse and ~88% real, and
+gate-recall is CLEAN. The two residual phantoms are hard SEMANTIC one-offs
+(≈1 pair each, low edge) where a rule-based veto is high-risk/low-yield — see the
+run-36 diminishing-returns analysis. Calling it here: further narrow vetoes are
+not worth the regression risk to the 50-pair fixture / live precision. Recommend
+STEADY-STATE: the loop continues as a regression + cleanup watch; the email's
+"verify before executing" footer covers the rare residual. No code change.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -1301,7 +1327,8 @@ pair, diminishing returns.
 | 40 | c16b769 | fix cap=1500 unicode CYCLE ERROR (console + email utf-8) |
 | 41 | 3d4f895 | adjacent-bucket gate tighten; richest=politics/econ finding |
 | 42 | ffb9816 | different-player (shared first name) gate; verify top-25 ~88% real |
-| 43 | _this commit_ | bilateral different-partner-country gate + ME country lexicon |
+| 43 | 0cf9800 | bilateral different-partner-country gate + ME country lexicon |
+| 44 | _this commit_ | top-50 verification (~88% real, diverse); goal assessment (log only) |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
 | 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
 | 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |
