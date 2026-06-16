@@ -1110,6 +1110,31 @@ arbs depth-backed and mostly-real across all categories.
 
 ---
 
+## Run 40 — 2026-06-16 (cap=1500 unicode bug fix — production-critical)
+
+The run-39 cap=1500 dry-run exposed a real production bug: `[alerter] CYCLE ERROR:
+'charmap' codec can't encode character '↓'`. Full-catalog scans surface
+foreign/special-char titles (↓ ° é, e.g. "RC Deportivo de la Coruña", "Norway
+Corners"); printing them to a Windows cp1252 console crashed the whole cycle (no
+email). cap=200/500 never hit it (ASCII US-politics titles). Also the email's
+default us-ascii `MIMEText`/Subject would fail to send non-ASCII titles.
+
+**Fixes:**
+- `sys.stdout/stderr.reconfigure(errors="backslashreplace")` at startup — prints
+  never crash on unencodable chars (verified: `import alerter; print('Coruña ↓')`
+  no longer raises).
+- `send_email`: `Header(subject, "utf-8")` + `MIMEText(html, "html", "utf-8")` —
+  non-ASCII titles now send correctly (verified message builds + serializes).
+- [x] `pytest` → **152 passed**; fixture parity held.
+
+Note: the same dry-run confirmed the v2 gates FIRE ON LIVE SNAPSHOTS at scale —
+"bet-type mismatch: total vs prop" rejecting Iraq/Austria/Senegal/Norway corners
+(run-32 fix working live), plus similarity-gate rejects. Precision holds at 1500.
+
+Dry-run re-verification (no CYCLE ERROR, would-email top-50): in progress.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs
@@ -1200,7 +1225,8 @@ arbs depth-backed and mostly-real across all categories.
 | 36 | e43e6e7 | verification + diminishing-returns assessment (log only) |
 | 37 | f173237 | rich-pairs tail: coin-toss vs tournament gate |
 | 38 | 509aa8d | recall finding: cap=500 misses ~1775 real diverse pairs |
-| 39 | _this commit_ | cap 500→1500 + email top-50 richest (operator) |
+| 39 | 81775e7 | cap 500→1500 + email top-50 richest (operator) |
+| 40 | _this commit_ | fix cap=1500 unicode CYCLE ERROR (console + email utf-8) |
 | 11 | 9ab8387 | add validate_ingestion.py; found cap=200 drops ~178 true pairs |
 | 12 | e3733fc | phantom-arb finding; compute_signals precision guards; cap clamped to 200 |
 | 13 | _this commit_ | matcher: reject totals/spread vs moneyline-win (sports precision) |

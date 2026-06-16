@@ -45,6 +45,7 @@ import smtplib
 import sys
 import time
 from datetime import datetime, timezone
+from email.header import Header
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -68,6 +69,15 @@ if sys.stdout is None or sys.stderr is None:
         sys.stdout = _cron_log
     if sys.stderr is None:
         sys.stderr = _cron_log
+
+# Full-catalog scans surface foreign/special-char titles (↓ ° é). Printing them
+# to a Windows cp1252 console raises UnicodeEncodeError and would abort the whole
+# cycle (no email). Make stdout/stderr replace unencodable chars instead.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(errors="backslashreplace")
+    except Exception:
+        pass
 
 # Adaptive ingestion cap. Run 11 (MATCHER_VALIDATION_LOG.md) showed the old
 # fixed cap of 200 Kalshi events silently dropped ~178 true pairs that live in
@@ -300,10 +310,12 @@ def build_email(signals: list[dict]) -> tuple[str, str]:
 
 def send_email(cfg: dict, subject: str, html: str) -> None:
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
+    # UTF-8 throughout — titles can contain non-ASCII (é, °, ↓) at full scale;
+    # default us-ascii would raise on send.
+    msg["Subject"] = Header(subject, "utf-8")
     msg["From"] = cfg["from_addr"]
     msg["To"] = ", ".join(cfg["recipients"])
-    msg.attach(MIMEText(html, "html"))
+    msg.attach(MIMEText(html, "html", "utf-8"))
     with smtplib.SMTP(cfg["smtp_host"], cfg["smtp_port"], timeout=30) as srv:
         srv.starttls()
         srv.login(cfg["smtp_user"], cfg["smtp_pass"])
