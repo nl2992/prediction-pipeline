@@ -1233,6 +1233,42 @@ STEADY-STATE: the loop continues as a regression + cleanup watch; the email's
 
 ---
 
+## Run 45 — 2026-06-16 (steady-state health) — no commit
+
+Per the run-44 assessment (goal substantially met; 2 residuals are hard semantic
+one-offs not worth rule-based vetoes), this is a maintenance iteration.
+
+- Curated offset 23: exact 20/20. `pytest` → **154 passed**. No regression.
+- No code change → no commit. The two residual phantoms (Gracie-Abrams song
+  granularity, opposite correct-score winner-direction) are unchanged and would
+  need a semantic/LLM judge or team↔scoreline parsing — out of scope for the
+  stdlib rule engine. Loop continues as a regression watch.
+
+---
+
+## Run 46 — 2026-06-17 (PRODUCTION OUTAGE FIX: notifications dead for hours)
+
+**Symptom:** operator reported no alert emails for hours. Diagnosis: the
+`PredArbAlerter` task was STUCK (State: Running, `LastResult 0x41301`) doing a
+**full Kalshi catalog crawl** — `alerter_cron.log` showed "[3/5] Fetching Kalshi
+markets (full catalog crawl)… fetched 700,000 rows…" and never finishing.
+
+**Root cause:** raising the alerter cap to 1500 (run 39) made the filtered event
+set = 1500, which exceeded `discover._BLOCKING_EVENT_LIMIT = 500`, so discover
+abandoned per-event blocking and crawled the entire ~750k-row catalog every scan
+→ each scan hung past the task window → no signals → no emails. (Exactly the
+scalability failure PIPELINE_REDESIGN.md warned about, re-triggered by the cap.)
+
+**Fix:** `use_blocking = (max_events_to_search is not None) or len(filtered) <=
+500` — per-event blocking (O(relevant events), parallel) is now used for ANY
+BOUNDED scan; the full crawl is reserved for genuinely unbounded scans. Killed the
+stuck pythonw process (pid 39304).
+- [x] `pytest` → **154 passed**.
+- Timed cap=1500 dry-run (confirm blocking + completes in-window + emails): in
+  progress.
+
+---
+
 ## Backlog / open items (unchecked = not done)
 
 - [x] **Live-fresh extraction (precision).** `validate_live.py` pulls live pairs

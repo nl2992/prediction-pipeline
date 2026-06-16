@@ -821,8 +821,13 @@ def discover(
     # Per-event fetching is O(relevant events), not O(exchange size). The full
     # crawl remains only for genuinely unbounded scans, which also pick up
     # markets whose parent event fell outside the event-catalog filter.
+    # Per-event blocking is O(relevant events) and bounded, so use it for ANY
+    # bounded scan (max_events_to_search set), regardless of count — the full
+    # 750k-row crawl is reserved for genuinely UNBOUNDED scans only. (Without
+    # this, raising the alerter cap to 1500 tripped the crawl and hung every scan
+    # → no emails for hours. run 46.)
     _BLOCKING_EVENT_LIMIT = 500
-    use_blocking = len(filtered) <= _BLOCKING_EVENT_LIMIT
+    use_blocking = (max_events_to_search is not None) or (len(filtered) <= _BLOCKING_EVENT_LIMIT)
     print(
         f"[3/5] Fetching Kalshi markets "
         f"({'per-event blocking, ' + str(len(filtered)) + ' events' if use_blocking else 'full catalog crawl'})…",
