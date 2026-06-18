@@ -8,7 +8,7 @@ from __future__ import annotations
 import unittest
 
 from pipeline import OrderBook, PriceLevel
-from book_arb import build_buy_ladder, executable_arb
+from book_arb import build_buy_ladder, executable_arb, cumulative_curve
 
 
 def ob(bids, asks):
@@ -60,6 +60,31 @@ class ExecutableArb(unittest.TestCase):
         r = executable_arb(poly, kalshi, "poly_yes__kalshi_no")["max"]
         self.assertEqual(r.contracts, 0.0)
         self.assertEqual(r.profit, 0.0)
+
+
+class CumulativeCurve(unittest.TestCase):
+    def setUp(self):
+        # PM YES asks: 0.40x100, 0.45x100
+        self.poly = ob(bids=[(0.30, 100)], asks=[(0.40, 100), (0.45, 100)])
+        # Kalshi YES bids 0.50x150, 0.42x100 -> NO 0.50x150, 0.58x100
+        self.kalshi = ob(bids=[(0.50, 150), (0.42, 100)], asks=[(0.95, 100)])
+
+    def test_curve_walks_full_overlap_and_crosses_breakeven(self):
+        legA = build_buy_ladder(self.poly, "yes")        # PM YES
+        legB = build_buy_ladder(self.kalshi, "no")        # Kalshi NO
+        curve = cumulative_curve(legA, legB, "B")         # Kalshi is leg B
+        # Lockstep chunks: 100 @ (0.40/0.50), 50 @ (0.45/0.50), 50 @ (0.45/0.58)
+        self.assertEqual([round(c[0], 1) for c in curve], [100.0, 150.0, 200.0])
+        # First two chunks profitable (<1), last chunk crosses break-even (>1)
+        self.assertLess(curve[0][3], 1.0)
+        self.assertLess(curve[1][3], 1.0)
+        self.assertGreater(curve[2][3], 1.0)
+
+    def test_empty_book_gives_empty_curve(self):
+        empty = ob(bids=[], asks=[])
+        legA = build_buy_ladder(empty, "yes")
+        legB = build_buy_ladder(self.kalshi, "no")
+        self.assertEqual(cumulative_curve(legA, legB, "B"), [])
 
 
 if __name__ == "__main__":

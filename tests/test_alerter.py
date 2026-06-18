@@ -194,12 +194,25 @@ class AdaptiveScan(unittest.TestCase):
 class EmailBody(unittest.TestCase):
     def test_subject_and_links_present(self) -> None:
         sigs = compute_signals([pair(0.38, 0.40, 0.65, 0.68)], min_edge=0.005)
-        subject, html = build_email(sigs)
+        subject, html, images = build_email(sigs)
+        self.assertIsInstance(images, list)
         self.assertIn("[Pred-Arb]", subject)
         self.assertIn("net edge", subject)
         self.assertIn("https://polymarket.com/event/pm-market", html)
         self.assertIn("https://kalshi.com/markets/kxser/", html)
         self.assertIn("per $1", html)
+
+    def test_books_produce_exec_block_and_inline_chart(self) -> None:
+        p = pair(0.38, 0.40, 0.65, 0.68)
+        p["poly_book"] = {"bids": [[0.30, 100]], "asks": [[0.40, 100], [0.45, 100]]}
+        p["kalshi_book"] = {"bids": [[0.65, 200], [0.50, 100]], "asks": [[0.95, 100]]}
+        sigs = compute_signals([p], min_edge=0.005)
+        _, html, images = build_email(sigs)
+        self.assertIn("Executable depth", html)
+        self.assertIn("Profit by budget", html)
+        if images:  # matplotlib present
+            self.assertTrue(html.count("cid:") == len(images))
+            self.assertTrue(images[0][1].startswith(b"\x89PNG"))
 
 
 if __name__ == "__main__":

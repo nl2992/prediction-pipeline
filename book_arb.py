@@ -103,6 +103,38 @@ def _fill(legA: list[tuple[float, float]], legB: list[tuple[float, float]],
     )
 
 
+def cumulative_curve(legA: list[tuple[float, float]], legB: list[tuple[float, float]],
+                     kalshi_leg: str) -> list[tuple[float, float, float, float]]:
+    """Walk the full overlapping depth (ignoring profitability) and record, at each
+    chunk boundary, ``(cum_contracts, price_a, price_b, combined_cost_with_fee)``.
+
+    Used to chart how the per-contract cost rises with depth and where it crosses
+    break-even (1.0) — i.e. exactly how much is arbable.
+    """
+    ia = ib = 0
+    ra = legA[ia][1] if legA else 0.0
+    rb = legB[ib][1] if legB else 0.0
+    cum = 0.0
+    out: list[tuple[float, float, float, float]] = []
+    while ia < len(legA) and ib < len(legB):
+        pa, pb = legA[ia][0], legB[ib][0]
+        fee = kalshi_taker_fee(pa if kalshi_leg == "A" else pb)
+        q = min(ra, rb)
+        if q <= 1e-9:
+            break
+        cum += q
+        out.append((round(cum, 4), pa, pb, round(pa + pb + fee, 6)))
+        ra -= q
+        rb -= q
+        if ra <= 1e-9:
+            ia += 1
+            ra = legA[ia][1] if ia < len(legA) else 0.0
+        if rb <= 1e-9:
+            ib += 1
+            rb = legB[ib][1] if ib < len(legB) else 0.0
+    return out
+
+
 # Direction → (leg A side, leg B side, which leg is the Kalshi leg)
 _DIRECTIONS = {
     "poly_yes__kalshi_no": ("yes", "no", "B"),   # A=PM YES, B=Kalshi NO

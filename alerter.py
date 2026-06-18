@@ -46,6 +46,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from email.header import Header
+from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -236,6 +237,10 @@ def compute_signals(pairs: list[dict], min_edge: float,
             "poly_bid": pb, "poly_ask": pa, "kalshi_bid": kb, "kalshi_ask": ka,
             "confidence": p.get("confidence"),
             "v2_match": p.get("v2_match"),
+            # Full ladders for the executable-depth charts (top-30/side from
+            # discover); stripped before persisting to the signal log.
+            "poly_book": p.get("poly_book"),
+            "kalshi_book": p.get("kalshi_book"),
             **best,
             "key": f"{p.get('poly_id')}|{p.get('kalshi_ticker')}|{best['direction']}",
         })
@@ -281,45 +286,97 @@ def signals_to_send(signals: list[dict], state: dict, realert_hours: float,
 # Email
 # ---------------------------------------------------------------------------
 
-def build_email(signals: list[dict]) -> tuple[str, str]:
+def _exec_block(s: dict) -> tuple[str, bytes | None, str | None]:
+    """Return (html_fragment, png_bytes_or_None, cid_or_None) for one signal's
+    executable-depth analysis: a profit-by-budget line plus the order-book chart.
+
+    Degrades gracefully: if the books are absent or matplotlib is unavailable the
+    chart is omitted and (where possible) the numbers still render as text.
+    """
+    try:
+        from arb_charts import executable_summary, make_arb_chart, BUDGETS
+    except Exception:
+        return "", None, None
+    summ = executable_summary(s)
+    if not summ:
+        return "", None, None
+    _, res = summ
+    mx = res["max"]
+    by = res["by_budget"]
+    budget_cells = " &nbsp;|&nbsp; ".join(
+        f"${b/1000:g}k&rarr;<b>${by[b].profit:,.0f}</b> ({by[b].contracts:,.0f}c)"
+        for b in BUDGETS)
+    text = (f"""
+        <tr><td>Executable depth</td><td><b>{mx.contracts:,.0f}</b> arbable contract-pairs &nbsp;|&nbsp; """
+            f"""max net profit <b>${mx.profit:,.0f}</b> (ROI {mx.roi*100:.2f}%) &nbsp;|&nbsp; """
+            f"""VWAP PM {mx.vwap_a:.3f} / Kalshi {mx.vwap_b:.3f}</td></tr>
+        <tr><td>Profit by budget</td><td>{budget_cells}</td></tr>""")
+    png = make_arb_chart(s)
+    if not png:
+        return text, None, None
+    cid = f"chart{s['key'].__hash__() & 0xffffffff:x}"
+    text += (f'<tr><td colspan="2"><img src="cid:{cid}" '
+             f'alt="order-book depth + profit chart" style="max-width:640px;width:100%"></td></tr>')
+    return text, png, cid
+
+
+def build_email(signals: list[dict]) -> tuple[str, str, list[tuple[str, bytes]]]:
     n = len(signals)
     top = signals[0]
     subject = (f"[Pred-Arb] {n} executable signal{'s' if n != 1 else ''} — "
                f"best net edge {top['net_accurate']*100:.2f}c/$1")
     rows = []
+    images: list[tuple[str, bytes]] = []
     for s in signals:
+        exec_html, png, cid = _exec_block(s)
+        if png and cid:
+            images.append((cid, png))
         rows.append(f"""
-        <tr><td colspan="2" style="padding-top:14px"><b>{s['poly_title']}</b> &harr; <b>{s['kalshi_title']}</b></td></tr>
+        <tr><td colspan="2" style="padding-top:18px;border-top:1px solid #eee"><b>{s['poly_title']}</b> &harr; <b>{s['kalshi_title']}</b></td></tr>
         <tr><td>Direction</td><td>{s['direction']}</td></tr>
         <tr><td>Legs</td><td>{s['legs']}</td></tr>
         <tr><td>Net edge (real Kalshi fee)</td><td><b>{s['net_accurate']*100:.2f}c per $1</b> (gross {s['gross']*100:.2f}c, worst-case-7%-fee net {s['net_flat7']*100:.2f}c)</td></tr>
-        <tr><td>Quotes</td><td>PM {s['poly_bid']}/{s['poly_ask']} &nbsp; Kalshi {s['kalshi_bid']}/{s['kalshi_ask']}</td></tr>
+        <tr><td>Quotes</td><td>PM {s['poly_bid']}/{s['poly_ask']} &nbsp; Kalshi {s['kalshi_bid']}/{s['kalshi_ask']}</td></tr>{exec_html}
         <tr><td>Polymarket</td><td><a href="{s['poly_url']}">{s['poly_url']}</a></td></tr>
         <tr><td>Kalshi</td><td><a href="{s['kalshi_url']}">{s['kalshi_url']}</a></td></tr>
         <tr><td>Matcher</td><td>confidence {s['confidence']} | v2 agrees: {s['v2_match']}</td></tr>""")
     html = f"""<html><body style="font-family:Segoe UI,Arial,sans-serif;font-size:14px">
     <p>Automated full cross-platform scan found <b>{n}</b> executable arb signal{'s' if n != 1 else ''}
     at {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}.</p>
+    <p style="color:#555;font-size:12px">Each pair shows the executable picture walked against the live
+    order book: how many contract-pairs are actually arbable, the VWAP per leg, and net profit for a
+    per-market budget of $1k/$2k/$2.5k/$5k. The chart's shaded region is the arbable depth before the
+    combined cost crosses the $1 break-even.</p>
     <table cellspacing="0" cellpadding="4">{''.join(rows)}</table>
     <p style="color:#888;font-size:12px">Edges are per $1 of payout, after Kalshi's real
     0.07·p·(1−p) taker fee (Polymarket CLOB fee-free). Verify depth/slippage before executing.
     Sent by alerter.py on the prediction-pipeline scanner.</p>
     </body></html>"""
-    return subject, html
+    return subject, html, images
 
 
-def send_email(cfg: dict, subject: str, html: str) -> None:
-    msg = MIMEMultipart("alternative")
+def send_email(cfg: dict, subject: str, html: str,
+               images: list[tuple[str, bytes]] | None = None) -> None:
+    # multipart/related wraps the HTML (in an alternative part) together with any
+    # inline CID images, so Gmail renders the charts inline.
+    root = MIMEMultipart("related")
     # UTF-8 throughout — titles can contain non-ASCII (é, °, ↓) at full scale;
     # default us-ascii would raise on send.
-    msg["Subject"] = Header(subject, "utf-8")
-    msg["From"] = cfg["from_addr"]
-    msg["To"] = ", ".join(cfg["recipients"])
-    msg.attach(MIMEText(html, "html", "utf-8"))
+    root["Subject"] = Header(subject, "utf-8")
+    root["From"] = cfg["from_addr"]
+    root["To"] = ", ".join(cfg["recipients"])
+    alt = MIMEMultipart("alternative")
+    alt.attach(MIMEText(html, "html", "utf-8"))
+    root.attach(alt)
+    for cid, png in (images or []):
+        img = MIMEImage(png, _subtype="png")
+        img.add_header("Content-ID", f"<{cid}>")
+        img.add_header("Content-Disposition", "inline", filename=f"{cid}.png")
+        root.attach(img)
     with smtplib.SMTP(cfg["smtp_host"], cfg["smtp_port"], timeout=30) as srv:
         srv.starttls()
         srv.login(cfg["smtp_user"], cfg["smtp_pass"])
-        srv.sendmail(cfg["from_addr"], cfg["recipients"], msg.as_string())
+        srv.sendmail(cfg["from_addr"], cfg["recipients"], root.as_string())
 
 
 # ---------------------------------------------------------------------------
@@ -370,19 +427,23 @@ def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False,
     if not to_email:
         return 0
 
+    # Persist a lean record — the full order-book ladders are large and only
+    # needed in-memory for the charts.
     with SIGNALS_FILE.open("a", encoding="utf-8") as f:
         for s in to_email:
-            f.write(json.dumps(s) + "\n")
+            lean = {k: v for k, v in s.items() if k not in ("poly_book", "kalshi_book")}
+            f.write(json.dumps(lean) + "\n")
     for s in to_email:
         flag = " (new/changed)" if s in fresh else ""
         print(f"[alerter] SIGNAL net={s['net_accurate']*100:.2f}c  {s['poly_title'][:40]!r} <-> {s['kalshi_title'][:40]!r}{flag}")
 
-    subject, html = build_email(to_email)
+    subject, html, images = build_email(to_email)
     if dry_run:
-        print(f"[alerter] DRY RUN — would email {cfg['recipients']}: {subject} ({len(to_email)} pairs)")
+        print(f"[alerter] DRY RUN — would email {cfg['recipients']}: {subject} "
+              f"({len(to_email)} pairs, {len(images)} charts)")
     elif email_configured(cfg):
         try:
-            send_email(cfg, subject, html)
+            send_email(cfg, subject, html, images)
             print(f"[alerter] EMAILED {cfg['recipients']}: {subject} ({len(to_email)} pairs)", flush=True)
         except Exception as exc:
             print(f"[alerter] EMAIL FAILED: {exc} — signal logged to {SIGNALS_FILE.name}", flush=True)
