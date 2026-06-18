@@ -1276,6 +1276,61 @@ stuck pythonw process (pid 39304).
 
 ---
 
+## Run 48 — 2026-06-19 (FULL-CATALOG rich-pairs census — 6,382 events)
+
+First census at TRUE full scale: `discover(max_events_to_search=8000)` pulled the
+entire 730-day catalog — **6,382 Kalshi events / 54,300 markets** (vs 1,500 in
+production) → **1,682 pairs**, guarded=1,310, raw=1,633. Scan 1,824s (~30 min).
+Curated offset 0 + 30 exact; `pytest` **166**. Recall gate **CLEAN**
+(`validate_recall`: 0 relaxed-only, 0 v2-endorsed misses).
+
+**Top-50 GUARDED census — category spread (answers "not just politics?"):**
+politics/elections ~26 (House races FL/CA/NY/KS/SC/WI/VA, 2028 nominees, Sweden),
+geopolitics ~7 (Israel-Lebanon, Venezuela head-of-state ×4, US-Iran embassy,
+Trump-meets MBS/Pope), sports ~7 (Shelton MOTY, Álvarez MVP, Messick Cy Young,
+Tolle ROTY, Green Bay NFL, Sinner US Open, +1 phantom), econ/finance ~5 (GDP
+buckets ×2, Fed cut, Mistral/Applied-Intuition IPO), tech ~3 (OpenAI AGI,
+OpenAI-Pinterest), legal 1 (FISA 702), health 1 (pandemic). **Genuinely
+multi-category — confirmed.**
+
+**~47/50 REAL (~94%).** Real richest include FISA-702-becomes-law (18.97c — real
+but illiquid/mispriced: PM 0.38/0.43 vs Kalshi 0.17/0.18), Mistral/Applied IPO,
+Israel-Lebanon, Venezuela leader slate, OpenAI AGI, the House-race slate, MLB
+award rows. **3 phantoms — and 2 are the literal top-2 by edge, so they would head
+the email (worse than run-44's low-edge residuals):**
+- **#2 (17.32c) "Mamdani freeze NYC rents" ↔ "NYC buses become free"** — only
+  shared entity is `nyc`; subjects differ (rents vs buses). Pure semantic-subject
+  coincidence (token sim 0.36, just over the 0.30 gate).
+- **#3 (11.47c) "Fed *emergency* rate cut" ↔ "Fed cut rates (any)"** — an emergency
+  (unscheduled) cut ⊂ any cut; distinguished only by the lone token "emergency".
+- **#14 (3.67c) "Ben Olsen" (MLS COY) ↔ "Ben Johnson" (NFL COTY)** — different
+  person + different league.
+
+**Why none is SAFELY fixable (probed via `contract_spec.explain`):** all three pass
+on token-similarity with NO structured gate firing.
+- Mamdani/buses: no shared specific entity to gate on; a "rents vs buses" noun rule
+  is unbounded/overfit.
+- Fed emergency: gating the single token "emergency" overfits one pair.
+- Ben Olsen/Johnson: the existing different-person gate (`_first_name_collision`)
+  can't fire — PM extracts a multi-token name blob (`ben olsen mls coach`), and
+  generalizing to "first two tokens" would FALSE-REJECT real same-person pairs
+  (middle initials "Robert F. Kennedy", "Lula da Silva"). The league gate
+  (matcher.py:1283) can't fire either — the Kalshi title has **no league token**
+  (NFL is only in ticker `KXNFLCOTY`, not the matched text); MLS isn't even in
+  `_sports_league`. A confidence floor doesn't separate them (real Naftali Bennett
+  0.353, FISA 0.465 sit at/below the phantoms).
+
+**Decision — NO code change (consistent with run 44/45).** The full-scale pass
+surfaced no new systematic class and no missed real pair; the 3 residuals are hard
+long-tail one-offs where every candidate rule risks the 50/50 fixture or recall.
+Forcing a fragile veto would trade audited precision for unaudited regression.
+A genuinely safe future lever (separate task, not a quick rule): plumb the Kalshi
+**ticker prefix** (KXNFLCOTY/KXMLB…) into the league/sport field so cross-league
+award phantoms like Ben-Olsen/Ben-Johnson gate structurally — but ticker taxonomy
+is non-standard, so it needs its own fixture, not an inline hack here.
+
+---
+
 ## Run 47 — 2026-06-17 (enrichment pre-filter + honest perf analysis)
 
 Operator asked: would Rust be faster? **No — the pipeline is I/O-bound** (HTTP +
