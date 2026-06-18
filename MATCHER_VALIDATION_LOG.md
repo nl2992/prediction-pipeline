@@ -1276,6 +1276,42 @@ stuck pythonw process (pid 39304).
 
 ---
 
+## Run 53 — 2026-06-19 (FIX: proper-noun bridge for verbose legislation)
+
+Fixed the second run-51 false reject: **"Housing for the 21st Century Act"** (PM)
+↔ Kalshi's 40-word legal description that repeats the Act name — identical
+contract, but boilerplate dragged token similarity to 0.29, below the 0.30 gate.
+
+**Why the run-51 attempt failed and this one works:** run 51 tried a token-SET
+SUBSET test, which broke because PM's `full_question` adds tokens absent from
+Kalshi. This run keys on the shared **multi-token named entity** (the Act name)
+instead — robust to extra tokens on either side. Diagnosed against REAL contract
+text fetched directly from the APIs.
+
+**Fix (contract_spec.py acceptance):** when both sides share a 2+token
+`selected_name` (the bill/act name) AND a shared entity AND same horizon AND
+sim>=0.25, bridge the gate. Safety: the shared name must be 2+ tokens, so generic
+boilerplate ("become law before 2027") and single common words cannot trigger it;
+DIFFERENT bills have distinct names and are rejected by the selected-name-mismatch
+gate BEFORE the bridge (verified both directions: FISA-PM×Housing-K and
+Housing-PM×FISA-K stay rejected).
+
+**Verified (full-scale audit):**
+- Bridge accepts **EXACTLY ONE pair** (Housing) across the 54k-market catalog —
+  **no phantom inflation**.
+- Fixture parity **PASS** (FP=0, missed=0); `pytest` **170** (+1 test);
+  `validate_recall` **CLEAN**; guarded 1,331 (stable vs run-52 1,338).
+- Guarded top-30 census: only residual phantoms are the 4 known semantic one-offs
+  (Mamdani/buses, Fed-emergency, Trump-nationalize-object, Democrats-core-four).
+  Confirms run-52's collision fix also introduced no new phantom. Commit: e9bf19c.
+
+**Both run-51 false rejects now fixed** (Ro Khanna in run 52, Housing here). Still
+deferred: Liga-1 Peru club pairs (non-person club fragments — same class as run 52
+but needs club-token handling) and the 4 hard semantic phantoms (object/scope/
+qualifier mismatches a stdlib rule engine can't safely encode).
+
+---
+
 ## Run 52 — 2026-06-19 (FIX: office/party fragments falsely colliding as people)
 
 Fixed one of the two run-51 false rejects: **"Ro Khanna" ↔ "Ro Khanna … VP
