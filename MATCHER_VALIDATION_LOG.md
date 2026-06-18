@@ -1276,6 +1276,49 @@ stuck pythonw process (pid 39304).
 
 ---
 
+## Run 52 — 2026-06-19 (FIX: office/party fragments falsely colliding as people)
+
+Fixed one of the two run-51 false rejects: **"Ro Khanna" ↔ "Ro Khanna … VP
+nominee"** (same person, 2028 Dem VP nominee, 3.66c) was rejected as "different
+person". Avoided the run-51 mistake (reconstructed text) by fetching the REAL
+contract text DIRECTLY from the Polymarket/Kalshi APIs.
+
+**Root cause:** `_first_name_collision` compares two-token names, but office/party
+descriptor fragments leaked in as pseudo-names — PM extracted `democratic vice`
+(from "Democratic Vice-Presidential"), Kalshi `democratic vp` (from "VP nominee").
+They share the "first name" *democratic* with different "surnames" *vice*/*vp* →
+phantom collision. These fragments are not people.
+
+**Fix (contract_spec.py):** exclude two-token fragments containing a party/office
+token (`_NON_PERSON_NAME_TOKENS` = democratic/republican/party/vice/vp/presidency/
+presidential/president/nominee/senate/house/governor) from the collision check.
+Surgical — only the different-person gate is affected; name overlap/extraction
+elsewhere is unchanged.
+
+**Verified:**
+- Ro Khanna now **endorsed** (v2 sim 0.86) in a full-scale audit.
+- Genuine different-person rejections **preserved**: Ben Olsen↔Ben Johnson,
+  Brian Schmetzer↔Brian Schottenheimer (run 49), Julian Alvarez↔Julian Ryerson.
+- Fixture parity **PASS** (offset 0: FP=0, missed=0); `pytest` **169** (+1 test);
+  `validate_recall` **CLEAN**. Guarded 1,338 (prior 1,297–1,310; rise = recovered
+  office-fragment false-rejects + drift). Different candidates stay rejected via
+  the independent selected-name-mismatch gate, so the looser collision gate does
+  not create cross-candidate phantoms. Commit ad-hoc: 327ff66.
+
+**Still open (documented, not fixed):**
+- **Housing for the 21st Century Act** (other run-51 false reject): both titles
+  literally share the phrase "Housing for the 21st Century Act" but Kalshi's
+  40-word legal description tanks token similarity to 0.29. Confirmed with REAL
+  text. Needs a SEQUENCE-based shared-proper-noun-phrase bridge (contiguous
+  n-gram ≥ ~3 content tokens + same horizon), not the token-SET subset attempted
+  (and reverted) in run 51 — deferred as a focused next step.
+- **Liga-1 Peru club pairs** ("Cusco FC" ↔ "Cusco FC win the Liga 1 Peru?", etc.)
+  show the SAME non-person-fragment pattern (club tokens FC/Sport/Deportivo/CYC
+  colliding). Same class as this fix; deferred (needs club-token handling, broader
+  and riskier than the party/office set).
+
+---
+
 ## Run 51 — 2026-06-19 (hunted GUARD-DROPPED rich pairs; bridge attempt reverted)
 
 New angle this run: instead of the guarded list, audited the **rich pairs the
