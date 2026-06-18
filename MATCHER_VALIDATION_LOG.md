@@ -1276,6 +1276,49 @@ stuck pythonw process (pid 39304).
 
 ---
 
+## Run 50 — 2026-06-19 (full-scale re-census post run-49; no safe fix found)
+
+Re-ran the full catalog (`max_events=8000`): **1,646 pairs, guarded 1,308** (run 48:
+1,682/1,310 — stable, no real-pair loss). The run-49 league-acronym fix **held** —
+no Ben-Olsen/Ben-Johnson or other cross-league COY phantom in the top-50. Curated
+offset 10 PASS; `pytest` **168**; `validate_recall` **CLEAN** (0 misses).
+
+**Guarded top-50 census — ~45/50 REAL (90%), multi-category.** Reals span
+geopolitics (Israel-Lebanon, Venezuela leader slate, Delcy/Jorge Rodríguez,
+Edmundo González, Merz chancellorship), sports (Shelton MOTY, Sinner US Open, Eala
+Berlin, Álvarez/Bryce Harper MVP, Messick Cy Young, Tolle ROTY, Green Bay NFL),
+tech (Mistral IPO, OpenAI AGI/Pinterest), culture (Jonathan Majors as Kang), econ
+(GDP buckets), legal (FISA-702), plus the House-race/nominee slate. Not just
+politics — confirmed again.
+
+**5 residual phantoms — all semantic/contextual one-offs, none safely fixable:**
+- #2 (17.32c) Mamdani rent-freeze ↔ NYC free-buses — semantic OBJECT (rents vs
+  buses); only shared entity is "nyc".
+- #3 (12.63c) Fed *emergency* cut ↔ Fed any-cut — single-token qualifier subset.
+- #13 (4.67c) "Trump nationalize **elections**" ↔ "Trump nationalize **SpaceX**" —
+  semantic OBJECT; SpaceX is one-sided (the org/product mismatch gate is bilateral,
+  so it can't fire).
+- #16 (4.28c) Democrats win "**core four**" ↔ Democrats win the **senate** — SCOPE
+  (4 specific seats vs chamber); needs "core four" semantics.
+- #44 (2.29c) "Donald Trump" ↔ "Donald J. Trump **Jr.**" — generational (father vs
+  son).
+
+**Generational-suffix gate considered and REJECTED (honest):** a "Jr/Sr/III
+presence mismatch ⇒ different person" rule would catch #44, but the default
+generation is family-dependent — "Robert F. Kennedy" with no suffix now denotes
+RFK **Jr**, not the father — so a blanket suffix veto would FALSE-REJECT real
+matches for prominent Jr candidates. That over-rejection is invisible to the 50-pair
+fixture and to `validate_recall` (which measures gate recall, not precision-veto
+over-reach), so its safety can't be verified. Per the run-44 principle (don't trade
+audited precision for unaudited regression), no change shipped.
+
+**Net:** the run-49 fix removed the last cleanly-structural phantom class
+(cross-league different-person). The remaining residuals require object/scope/
+contextual semantics a stdlib rule engine can't safely encode; the email's
+"verify before executing" footer covers them. No commit (no code change).
+
+---
+
 ## Run 49 — 2026-06-19 (FIX: league acronym glomming onto person names)
 
 Acted on the run-48 phantom **"Ben Olsen" (MLS Coach of the Year) ↔ "Ben Johnson"
