@@ -1276,6 +1276,51 @@ stuck pythonw process (pid 39304).
 
 ---
 
+## Run 51 — 2026-06-19 (hunted GUARD-DROPPED rich pairs; bridge attempt reverted)
+
+New angle this run: instead of the guarded list, audited the **rich pairs the
+guard DROPS** — raw top-50 with `v2=False` — to find v2 FALSE rejects (a recall
+bug is a SAFE fix: it only adds real pairs). Full scale: 1,646 pairs, guarded
+1,297 (stable). Run-49 fix still holding (Ben Olsen, Brian Schmetzer both rejected).
+
+**12 guard-dropped rich pairs — 10 are CORRECT rejects:** OpenAI/Anthropic
+*acquired* vs *IPO*; Elon Musk *richest-person* vs *CEO-of-X*; Zuckerberg
+*richest* vs *TBPN-guest*; South Korea *Trump-visit* vs *recognize-Palestine*;
+$8/$9 *ground-beef-price* vs soccer *corners*; Lana Del Rey *wedding-guest* vs
+*Coachella*; Negative-GDP direction. All genuinely different contracts. ✓
+
+**2 are genuine FALSE REJECTS (real recall bugs):**
+- **"Housing for the 21st Century Act" ↔ Kalshi verbose bill text** (3.67c) — same
+  Act, same "which bills become law" event, 1-day-apart close, shared entity — but
+  Kalshi's 40-word legal description drags token similarity to 0.29, below gate.
+- **"Ro Khanna" ↔ "Ro Khanna … VP nominee"** (3.66c) — same person, same 2028 Dem
+  VP nominee contract, but rejected as "different person: shared first name,
+  different surname" (collision-gate misfire).
+
+**Attempted fix (containment bridge) — built, tested locally, then REVERTED as
+ineffective.** Idea: bridge the similarity gate when the short side's tokens are a
+SUBSET of the long side's, with shared entity + same horizon (phantoms always add
+a distinguishing token — "freeze rents", "elections", "acquired" — so are never a
+clean subset). It passed a local probe and 2 unit tests. But the full-scale audit
+showed **0 acceptances across the entire 54k-market catalog** and Housing STILL
+rejected: the local probe omitted Polymarket's `full_question` field (discover does
+not expose it), which on real data adds tokens absent from the Kalshi side and
+breaks the subset condition. Shipping it would be dead, unverified code → reverted.
+`pytest` back to **168**; no diff vs run-49.
+
+**Honest status of the 2 bugs (unfixed, documented):**
+- Housing needs a SEQUENCE-based "shared bill-name n-gram" bridge (both titles
+  literally contain "Housing for the 21st Century Act") rather than a token-SET
+  test — a larger change requiring the full contract text; deferred.
+- Ro Khanna's collision misfire is unreproducible without the exact PM
+  `full_question`, and loosening `_first_name_collision` risks the different-person
+  precision it correctly enforces (Trump Jr, Cy Young pitchers, Liga-1 clubs — all
+  in this run's reject list). Not touched.
+
+No commit (no code change; bridge reverted).
+
+---
+
 ## Run 50 — 2026-06-19 (full-scale re-census post run-49; no safe fix found)
 
 Re-ran the full catalog (`max_events=8000`): **1,646 pairs, guarded 1,308** (run 48:
