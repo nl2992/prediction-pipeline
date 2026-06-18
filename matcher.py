@@ -867,6 +867,11 @@ _GENERIC_NAME_TERMS = frozenset({
     "nba", "wnba", "nfl", "nhl", "mlb", "mls", "ncaa",
 })
 
+# League acronyms that can glom onto a person's name when a title ("Ben Olsen")
+# is concatenated with its event ("MLS 2026 Coach of the Year"). Trimmed from
+# name edges so the clean person name survives for collision/overlap checks.
+_LEAGUE_NAME_NOISE = frozenset({"nba", "wnba", "nfl", "wnfl", "nhl", "mlb", "mls", "ncaa"})
+
 _LEADING_QUESTION_WORDS = re.compile(
     r"\b(Will|Who|Which|What|When|Where|How|Does|Is|Are|Can|Should)\b\s+"
 )
@@ -881,6 +886,21 @@ def _proper_names(text: str) -> set[str]:
         ascii_text,
     ):
         name = match.group(1).lower()
+        # Trim league acronyms that glom onto a real name at either edge: the
+        # greedy capitalized-run regex captures "Ben Olsen MLS" (title "Ben Olsen"
+        # + event "MLS 2026 …") as one 3-token blob, which then evades the 2-token
+        # first-name-collision gate (run 49). A league acronym is never part of a
+        # person's name, so stripping yields the clean "ben olsen". Scoped to
+        # leagues only — trimming broader contest terms (e.g. "Senate") would
+        # leak a bare jurisdiction ("Georgia Senate" → "Georgia") as a name.
+        parts = name.split()
+        while parts and parts[-1] in _LEAGUE_NAME_NOISE:
+            parts.pop()
+        while parts and parts[0] in _LEAGUE_NAME_NOISE:
+            parts.pop(0)
+        if not parts:
+            continue
+        name = " ".join(parts)
         toks = _tokens(name)
         if _offices(name) and _jurisdictions(name):
             continue

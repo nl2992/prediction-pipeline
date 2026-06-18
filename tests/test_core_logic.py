@@ -599,6 +599,30 @@ class CoreLogicTests(unittest.TestCase):
                          extra={"full_question": "Will Democratics win the Senate race in Texas? Colin Allred"})
         self.assertFalse(is_compatible_match(poly, kalshi_tx))
 
+    def test_league_acronym_trimmed_from_person_name(self) -> None:
+        # "Ben Olsen" (title) concatenated with its event "MLS 2026 Coach of the
+        # Year" used to extract the 3-token blob "ben olsen mls", which evaded the
+        # 2-token first-name-collision gate. The league acronym must be trimmed so
+        # the clean person name survives (run 49).
+        self.assertEqual(_proper_names("Ben Olsen MLS 2026 Coach of the Year"),
+                         {"ben olsen"})
+        # ...but an office+jurisdiction phrase must NOT leak a bare jurisdiction.
+        self.assertEqual(_proper_names("Georgia Senate race in 2026"), set())
+
+    def test_cross_league_different_person_award_rejected(self) -> None:
+        # PHANTOM (run 48/49): "Ben Olsen" winning MLS Coach of the Year is NOT
+        # "Ben Johnson" winning NFL Coach of the Year — different person sharing a
+        # first name. The v2 referee must reject it (it surfaced at 3.67c net).
+        from contract_spec import explain
+        poly = titled_snap("polymarket", "poly-coy", "Ben Olsen",
+                           "2026-12-31T00:00:00Z",
+                           extra={"event_title": "MLS 2026 Coach of the Year"})
+        kalshi = titled_snap("kalshi", "kalshi-coy",
+                             "Will Ben Johnson win the Coach of the Year?",
+                             "2026-12-31T00:00:00Z",
+                             extra={"event_title": "Coach of the Year Winner"})
+        self.assertFalse(explain(poly, kalshi).match)
+
     def test_count_threshold_cutoff_normalization(self) -> None:
         # "more than 84.5 games" and "at least 85 games" are the same cutoff (85).
         self.assertEqual(_numeric_threshold("win more than 84.5 games"), ("up", 85.0, "count"))
