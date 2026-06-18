@@ -1276,6 +1276,47 @@ stuck pythonw process (pid 39304).
 
 ---
 
+## Run 49 — 2026-06-19 (FIX: league acronym glomming onto person names)
+
+Acted on the run-48 phantom **"Ben Olsen" (MLS Coach of the Year) ↔ "Ben Johnson"
+(NFL Coach of the Year)** — different people sharing a first name (surfaced at
+3.67c in production, cap 1500).
+
+**Root cause (probed via `contract_spec.explain`):** the v2 first-name-collision
+gate only inspects 2-token names, but the PM contract text "Ben Olsen" + event
+"MLS 2026 Coach of the Year" extracted as the 3-token blob `ben olsen mls` — the
+greedy capitalized-run regex in `_proper_names` swallowed the uppercase league
+acronym. A 3-token name evades the gate, so the phantom passed on token
+similarity (0.33).
+
+**Fix (matcher.py `_proper_names`):** trim league acronyms (`_LEAGUE_NAME_NOISE` =
+nba/wnba/nfl/wnfl/nhl/mlb/mls/ncaa) from either edge of a matched name →
+`ben olsen mls` becomes the clean `ben olsen`, which then trips the collision gate.
+Scoped to LEAGUE acronyms only: an earlier broad trim of all `_GENERIC_NAME_TERMS`
+leaked a bare jurisdiction ("Georgia Senate" → "Georgia") as a name and broke
+`test_party_race_matches_despite_candidate_label`; narrowing to leagues fixed that.
+
+**Verified:**
+- Phantom now rejected: `explain` → match=False "different person: shared first
+  name, different surname".
+- **Bonus:** same fix also rejects **"Brian Schmetzer" (MLS) ↔ "Brian
+  Schottenheimer" (NFL) Coach of the Year** — confirms a systematic cross-league
+  different-person class, not a one-off.
+- Fixture parity **PASS** (offset 0: expected=42 engine=42 exact=42 FP=0 missed=0).
+- `pytest` **168** (added 2 regression tests: league-acronym trim + cross-league
+  award rejection).
+- Recall **CLEAN** (`validate_recall`: 0 relaxed-only, 0 v2-endorsed misses).
+- Cap-1500 rescan: 790 pairs / guarded 681; Ben-Olsen/Ben-Johnson **absent**; pair
+  count stable (no real pairs lost). Top-20 guarded shows no visible phantom.
+
+**Honest scope:** this fixes the cross-league different-person award phantoms that
+DO appear in production (cap 1500). The two richest run-48 phantoms — Mamdani-rent-
+freeze ↔ NYC-free-buses (semantic subject) and Fed-*emergency*-cut ↔ Fed-any-cut
+(single-token qualifier) — are NOT fixed; they remain hard one-offs and only
+surface at full 6,382-event scale, not in production. Commit: ad5b74e.
+
+---
+
 ## Run 48 — 2026-06-19 (FULL-CATALOG rich-pairs census — 6,382 events)
 
 First census at TRUE full scale: `discover(max_events_to_search=8000)` pulled the
