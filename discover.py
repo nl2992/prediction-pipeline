@@ -1101,6 +1101,16 @@ def discover(
             "poly_ask_size":    pair.poly.orderbook.asks[0].size if pair.poly.orderbook.asks else None,
             "kalshi_bid_size":  pair.kalshi.orderbook.bids[0].size if pair.kalshi.orderbook.bids else None,
             "kalshi_ask_size":  pair.kalshi.orderbook.asks[0].size if pair.kalshi.orderbook.asks else None,
+            # Full ladders (top 30 levels/side) so the alerter can compute
+            # executable depth / VWAP / profit-by-budget and chart it (book_arb).
+            "poly_book": {
+                "bids": [[l.price, l.size] for l in (pair.poly.orderbook.bids or [])[:30]],
+                "asks": [[l.price, l.size] for l in (pair.poly.orderbook.asks or [])[:30]],
+            },
+            "kalshi_book": {
+                "bids": [[l.price, l.size] for l in (pair.kalshi.orderbook.bids or [])[:30]],
+                "asks": [[l.price, l.size] for l in (pair.kalshi.orderbook.asks or [])[:30]],
+            },
             "arb_eligible":     arb_eligible,
             "arb_direction":    arb_dir,
             "arb_net_profit":   arb_profit,
