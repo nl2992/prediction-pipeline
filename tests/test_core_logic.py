@@ -609,6 +609,31 @@ class CoreLogicTests(unittest.TestCase):
         # ...but an office+jurisdiction phrase must NOT leak a bare jurisdiction.
         self.assertEqual(_proper_names("Georgia Senate race in 2026"), set())
 
+    def test_proper_noun_bridge_recovers_verbose_legislation(self) -> None:
+        # FALSE REJECT recovered (run 53): Polymarket names a bill tersely while
+        # Kalshi wraps the identical Act in 40 words of legal boilerplate, dropping
+        # token similarity to 0.29. A shared 2+token Act name + shared entity +
+        # same horizon bridges it.
+        from contract_spec import explain
+        poly = titled_snap("polymarket", "poly-bill", "Housing for the 21st Century Act",
+                           "2026-12-31T00:00:00Z",
+                           extra={"event_title": "Which bills will become law in 2026?"})
+        kalshi = titled_snap(
+            "kalshi", "kalshi-bill",
+            "Will legislation that would revise federal housing programs to increase "
+            "housing supply and affordability by expanding federal financing and grant "
+            "authority for affordable housing and streamlining federal requirements that "
+            "delay housing development become law before Jan 1, 2027? Housing for the 21st Century Act",
+            "2027-01-01T00:00:00Z",
+            extra={"event_title": "Which bills will become law in 2026?"})
+        self.assertTrue(explain(poly, kalshi).match)
+        # A DIFFERENT bill must NOT bridge to it (distinct Act name → selected-name
+        # mismatch fires before the bridge).
+        other = titled_snap("polymarket", "poly-fisa", "FISA Section 702 reauthorization",
+                            "2026-12-31T00:00:00Z",
+                            extra={"event_title": "Which bills will become law in 2026?"})
+        self.assertFalse(explain(other, kalshi).match)
+
     def test_office_fragment_not_treated_as_person_collision(self) -> None:
         # FALSE REJECT fixed (run 52): "Ro Khanna" ↔ "Ro Khanna … VP nominee" was
         # rejected because office/party fragments "democratic vice" vs "democratic

@@ -468,6 +468,21 @@ def match_spec(
         )
         return MatchDecision(True, inverted, max(sim, 0.5), reasons)
 
+    # proper-noun bridge: a shared MULTI-TOKEN named entity (a bill/act name) plus
+    # same horizon justifies a modestly lower similarity bar. Recovers the "short
+    # bill name vs verbose legal description" class (run 53): Polymarket "Housing
+    # for the 21st Century Act" vs Kalshi's 40-word description that repeats the Act
+    # name — identical contract, but the boilerplate drags token similarity to 0.29.
+    # The shared name must be 2+ tokens, so generic boilerplate ("become law before
+    # 2027") and single common words cannot trigger it, and DIFFERENT bills (whose
+    # distinctive names differ) never share one. sim>=0.25 keeps it a modest relax.
+    shared_named = {n for n in (a.selected_names & b.selected_names) if len(n.split()) >= 2}
+    if shared_named and (a.entities & b.entities) and same_horizon and sim >= 0.25:
+        reasons.append(
+            f"proper-noun bridge: shared name {sorted(shared_named)}, sim {sim:.2f}"
+        )
+        return MatchDecision(True, inverted, max(sim, 0.5), reasons)
+
     return MatchDecision(False, False, sim, reasons + [f"similarity {sim:.2f} below gate"])
 
 
