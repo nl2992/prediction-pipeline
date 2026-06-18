@@ -609,6 +609,20 @@ class CoreLogicTests(unittest.TestCase):
         # ...but an office+jurisdiction phrase must NOT leak a bare jurisdiction.
         self.assertEqual(_proper_names("Georgia Senate race in 2026"), set())
 
+    def test_office_fragment_not_treated_as_person_collision(self) -> None:
+        # FALSE REJECT fixed (run 52): "Ro Khanna" ↔ "Ro Khanna … VP nominee" was
+        # rejected because office/party fragments "democratic vice" vs "democratic
+        # vp" shared the "first name" democratic. Such fragments are not people.
+        from contract_spec import _first_name_collision
+        self.assertFalse(_first_name_collision(
+            frozenset({"khanna democratic vp nominee", "democratic vice"}),
+            frozenset({"democratic vp", "vice presidency"})))
+        # Genuine different people sharing a first name must STILL collide.
+        self.assertTrue(_first_name_collision(
+            frozenset({"ben olsen"}), frozenset({"ben johnson", "year"})))
+        self.assertTrue(_first_name_collision(
+            frozenset({"julian alvarez"}), frozenset({"julian ryerson"})))
+
     def test_cross_league_different_person_award_rejected(self) -> None:
         # PHANTOM (run 48/49): "Ben Olsen" winning MLS Coach of the Year is NOT
         # "Ben Johnson" winning NFL Coach of the Year — different person sharing a

@@ -152,14 +152,37 @@ def _num_range(text: str) -> tuple[float, float] | None:
     return (min(a, b), max(a, b))
 
 
+# Party/office descriptor tokens that are NOT parts of a person's name. A
+# two-token fragment containing one ("Democratic Vice", "Democratic VP", "Vice
+# Presidency") is an office label, not a person, and must not drive the
+# different-person collision gate (run 52: "Ro Khanna" ↔ "Ro Khanna … VP nominee"
+# was falsely rejected because "democratic vice" vs "democratic vp" shared the
+# "first name" democratic).
+_NON_PERSON_NAME_TOKENS = frozenset({
+    "democratic", "republican", "party", "vice", "vp", "presidency",
+    "presidential", "president", "nominee", "senate", "house", "governor",
+})
+
+
 def _first_name_collision(an: frozenset[str], bn: frozenset[str]) -> bool:
     """True when both sides name two-token people who share a FIRST name but have
     DIFFERENT surnames — i.e. different people ("Julian Ryerson" vs "Julian
     Alvarez"). False if either side has a single-token name or any surname is
     shared, so "Trump"↔"Donald Trump" and "Lula"↔"Lula da Silva" are NOT flagged.
+
+    Office/party descriptor fragments ("Democratic Vice", "Vice Presidency") are
+    not people and are excluded, so they cannot create a phantom collision.
     """
-    two_a = [n.split() for n in an if len(n.split()) == 2]
-    two_b = [n.split() for n in bn if len(n.split()) == 2]
+    def people(names: frozenset[str]) -> list[list[str]]:
+        out = []
+        for n in names:
+            toks = n.split()
+            if len(toks) == 2 and not (set(toks) & _NON_PERSON_NAME_TOKENS):
+                out.append(toks)
+        return out
+
+    two_a = people(an)
+    two_b = people(bn)
     if not two_a or not two_b:
         return False
     if {t[1] for t in two_a} & {t[1] for t in two_b}:   # shared surname = same person
