@@ -1276,6 +1276,24 @@ stuck pythonw process (pid 39304).
 
 ---
 
+## Run 82 — 2026-06-20 (verify always-include series content is REAL — all clean)
+
+Audited every guarded pair from the run-78 always-include series (KXBILLS /
+KXUSACOMPANYSTAKE / KXIPO), since those now lead the emails. (Run 81's check was
+buggy — it filtered on a non-existent signal field; fixed here by reading the
+ticker from `signal['key']`.)
+
+**4 guarded series pairs, all REAL:** Freeport-McMoRan↔US-stake 16.43c (commodities,
+emailed), Housing-Act↔bills 6.82c (legislation, emailed), Applied-Intuition↔IPO
+6.01c (tech, emailed), Ripple↔IPO 2.37c (real, below the 3% email threshold). The
+IPO phantom class stays gated — v2 rejects "Anthropic acquired ↔ IPO Anthropic".
+FISA churned out this scan (cross-venue price gap converged; real when present).
+
+No phantom reaches the top of the inbox via the always-include path. No code change.
+(799 pairs, 188 guarded; production on the new >3% format per run 80.)
+
+---
+
 ## Run 78 — 2026-06-20 (operator: email only >3%; clearer email/diagrams; surface beyond-cap arbs)
 
 Three operator-requested changes (commit b029f9d), all verified with `--once
