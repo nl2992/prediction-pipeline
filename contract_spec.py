@@ -359,6 +359,14 @@ def match_spec(
     # live as a phantom 41c arb signal.
     if ("removal" in a.actions) != ("removal" in b.actions):
         return _reject("outcome-bar mismatch: removal-from-office on one side only")
+    # "Emergency" (unscheduled/crisis) is a distinct event-bar from the plain
+    # event: "Fed EMERGENCY rate cut before 2027" vs "Fed cuts rates before 2027"
+    # diverge — a scheduled cut settles the latter YES but the former NO — so they
+    # are different contracts (run 56, surfaced as a ~15c phantom at full scale).
+    a_emerg = re.search(r"\bemergency\b", a.raw.lower()) is not None
+    b_emerg = re.search(r"\bemergency\b", b.raw.lower()) is not None
+    if a_emerg != b_emerg:
+        return _reject("event-qualifier mismatch: 'emergency' on one side only")
     if (
         "monetary_policy" in a.actions
         and "monetary_policy" in b.actions

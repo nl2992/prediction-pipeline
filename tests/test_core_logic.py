@@ -655,6 +655,26 @@ class CoreLogicTests(unittest.TestCase):
         self.assertTrue(_first_name_collision(
             frozenset({"julian alvarez"}), frozenset({"julian ryerson"})))
 
+    def test_emergency_qualifier_mismatch_rejected(self) -> None:
+        # PHANTOM (run 56): "Fed EMERGENCY rate cut" is an unscheduled/crisis event,
+        # distinct from "Fed cuts rates" (any cut) — a scheduled cut settles the
+        # latter YES but the former NO, so they are different contracts (~15c
+        # phantom at full scale).
+        from contract_spec import explain
+        poly = titled_snap("polymarket", "poly-emr", "Fed emergency rate cut before 2027?",
+                           "2027-01-29T00:00:00Z",
+                           extra={"event_title": "Fed emergency rate cut before 2027?"})
+        kalshi = titled_snap("kalshi", "kalshi-cut",
+                             "Will the Federal Reserve cut rates before 2027? Cuts",
+                             "2027-01-01T00:00:00Z",
+                             extra={"event_title": "Will the Federal Reserve cut rates before 2027?"})
+        self.assertFalse(explain(poly, kalshi).match)
+        # Control: when NEITHER side says "emergency", the gate must not fire.
+        poly2 = titled_snap("polymarket", "poly-cut", "Fed rate cut before 2027?",
+                            "2027-01-29T00:00:00Z",
+                            extra={"event_title": "Fed rate cut before 2027?"})
+        self.assertTrue(explain(poly2, kalshi).match)
+
     def test_cross_league_different_person_award_rejected(self) -> None:
         # PHANTOM (run 48/49): "Ben Olsen" winning MLS Coach of the Year is NOT
         # "Ben Johnson" winning NFL Coach of the Year — different person sharing a
