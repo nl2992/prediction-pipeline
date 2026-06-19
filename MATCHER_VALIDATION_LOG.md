@@ -1276,6 +1276,41 @@ stuck pythonw process (pid 39304).
 
 ---
 
+## Run 57 — 2026-06-19 (FIX: cross-sport same-city phantom IN PRODUCTION EMAILS)
+
+Censused the PRODUCTION-scale (cap 1500) **emailed** top-50 — what the operator
+actually receives — rather than only the full-scale list. 49/50 real; one phantom
+was reaching the inbox: **"Los Angeles FC" (MLS Cup) ↔ "Los Angeles Kings win the
+2026-27 Stanley Cup Finals" (NHL)** — different teams, different sports, sharing
+only the city "Los Angeles" (0.50 token sim, 1.80c, rank 33). The first emailed
+phantom found this loop that actually ships (the run 48-56 residuals all live in
+events beyond the cap).
+
+**Root cause (REAL text via extract_spec hook):** `_sports_league` knew league
+ACRONYMS but not CHAMPIONSHIP names, so neither "MLS Cup" nor "Stanley Cup"
+resolved a league and the league-mismatch gate (matcher.py is_compatible_match)
+never fired.
+
+**Fix (matcher.py):** teach `_sports_league` the unambiguous championship names —
+Stanley Cup→nhl, World Series→mlb, Super Bowl→nfl, NBA Finals→nba — and add MLS.
+PM {mls} vs Kalshi {nhl} disjoint → rejected. The gate only fires when BOTH sides
+resolve a league AND they differ, so same-sport pairs are untouched.
+
+**Verified:**
+- Cap-1500 audit: LA-FC↔LA-Kings **gone** from the emailed top-50; the legit NFL
+  champ pairs (Green Bay / San Francisco / Tampa Bay ↔ "Pro Football Championship")
+  **survive**; same-team LAFC↔LAFC control still matches.
+- Fixture parity PASS (FP=0, missed=0); `pytest` **174** (+1 test w/ same-sport
+  control); `validate_recall` CLEAN. Commit: ee757d4.
+
+**Production emailed top-50 is now all-real** (multi-category: politics/House races,
+geopolitics Netanyahu, sports NFL champs, nominee markets incl. the correct Trump
+Jr. and run-52-recovered Ro Khanna). The 3 remaining full-scale-only phantoms
+(Mamdani-rents↔buses, Trump-nationalize↔SpaceX, Democrats-core-four) stay below the
+production cap and lack a safe structured hook.
+
+---
+
 ## Run 56 — 2026-06-19 (FIX: 'emergency' event-bar qualifier mismatch)
 
 Took down one of the 4 residual semantic phantoms: **Fed *emergency* rate cut ↔
