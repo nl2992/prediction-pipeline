@@ -1276,6 +1276,35 @@ stuck pythonw process (pid 39304).
 
 ---
 
+## Run 58 — 2026-06-19 (order-book VERIFIED correct + VWAP-label bug fixed)
+
+Operator asked to confirm the order book is correct and to see executable depth /
+VWAP profit as bar charts. Verified end-to-end and found one display bug.
+
+**Order book is CORRECT (independent live re-fetch).** Re-fetched the live
+Polymarket CLOB and Kalshi books for the richest emailed pair (Benjamin Netanyahu
+PM, 7.6c) directly from the exchange APIs and compared to the book the scan used:
+- PM bids descending (0.37,0.36,0.35,…), asks ascending (0.38,0.39,…), all in
+  [0,1], no crossed book. Same price levels as the scan; sizes drift normally.
+- Kalshi bids descending; YES-ask correctly derived as 1 − NO-bid; in [0,1].
+- Executable from the live ladders reconciles: ~275–337 arbable pairs (Kalshi
+  depth-limited), VWAP Kalshi ≈0.300 / PM ≈0.630, net profit ≈$15–20 — i.e. the
+  7.6c edge only yields ~$15–20 because the Kalshi book is shallow (~$210 of
+  depth). The flat profit across $1k/$2k/$2.5k/$5k IS the honest "as deep as the
+  book is" answer.
+
+**BUG FOUND + FIXED — VWAP labels swapped.** The email "Executable" headline
+hardcoded "VWAP PM {vwap_a} / Kalshi {vwap_b}", but for the "buy YES on Kalshi +
+buy NO on Polymarket" direction leg A is the KALSHI leg, so the two VWAPs were
+attributed to the wrong exchanges for ~half the emailed pairs (values right, labels
+swapped). Fixed to map vwap_a/b to the correct exchange by direction; the chart was
+already correct. `pytest` **175** (+1 regression test). Commit: 30f51e1.
+
+(No matcher/precision change this run; production emailed top-50 remains all-real
+per run 57.)
+
+---
+
 ## Run 57 — 2026-06-19 (FIX: cross-sport same-city phantom IN PRODUCTION EMAILS)
 
 Censused the PRODUCTION-scale (cap 1500) **emailed** top-50 — what the operator
