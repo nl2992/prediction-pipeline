@@ -1276,6 +1276,33 @@ stuck pythonw process (pid 39304).
 
 ---
 
+## Run 78 — 2026-06-20 (operator: email only >3%; clearer email/diagrams; surface beyond-cap arbs)
+
+Three operator-requested changes (commit b029f9d), all verified with `--once
+--dry-run` before commit (the scheduled task runs from disk):
+
+1. **Email only net edge >3%** (`MIN_NET_EMAIL=0.03`). Dry-run: 50 → **16 pairs**,
+   min 3.05c — the long tail of 1–3% pairs is gone.
+2. **Clearer + more accurate email/diagrams.** Each pair now leads with the % net
+   edge + a plain-language "the trade" line, "Execute now: N pairs (~$X)", "Net
+   profit by stake/market", correctly-labelled VWAP. Chart redesigned to two
+   intuitive panels — "How much you make, by stake" and "How deep the edge lasts"
+   (edge-per-pair shrinking with depth) — replacing the technical cost curve.
+3. **Surface rich beyond-cap arbs** (`discover._apply_event_cap` +
+   `_ALWAYS_INCLUDE_SERIES` = KXUSACOMPANYSTAKE / KXBILLS / KXIPO). The
+   close-time-sorted cap=1500 was dropping far-dated 2027 events holding the
+   richest REAL non-political arbs; these series are now always scanned (bounded,
+   per-event-blocking so no crawl/hang). 
+
+**Result (dry-run emailed list, richest first, all REAL, all >3%, multi-category):**
+FISA-702 22.97c (legal), Freeport-McMoRan US-stake 14.43c (commodities), Housing
+Act 6.82c (legislation), Applied Intuition IPO 6.01c (tech), then House races /
+nominees. Directly answers the operator's "not just politics" + ">3% only" +
+"accurate, easy-to-understand emails" asks. `pytest` **176**; clean dry-run, 16
+charts, no errors.
+
+---
+
 ## Run 76 — 2026-06-20 (full census; rich REAL commodities arb found BEYOND the cap)
 
 Full-scale census (1,628 pairs, guarded 1,280). Top-40 37/40 real; the 3 phantoms
