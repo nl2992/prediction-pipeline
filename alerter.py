@@ -300,7 +300,7 @@ def _exec_block(s: dict) -> tuple[str, bytes | None, str | None]:
     summ = executable_summary(s)
     if not summ:
         return "", None, None
-    _, res = summ
+    direction, res = summ
     by = res["by_budget"]
     # Headline = the LARGEST realistic budget tier ($5k/market), not the unbounded
     # full-book "max": on illiquid markets the deep book is thin/stale, so the
@@ -308,13 +308,18 @@ def _exec_block(s: dict) -> tuple[str, bytes | None, str | None]:
     # obscure longshot) overstates what is actually executable. The $5k/market cap
     # equals the full depth whenever the book is shallower than that.
     cap = by[max(BUDGETS)]
+    # vwap_a/vwap_b are leg A / leg B. Leg A is PM only for the poly_yes direction;
+    # for kalshi_yes__poly_no, leg A is Kalshi — so map to the right exchange label
+    # (a hardcoded "PM=vwap_a" mislabelled the VWAP for ~half the pairs, run 58).
+    pm_vwap, k_vwap = ((cap.vwap_a, cap.vwap_b) if direction == "poly_yes__kalshi_no"
+                       else (cap.vwap_b, cap.vwap_a))
     budget_cells = " &nbsp;|&nbsp; ".join(
         f"${b/1000:g}k&rarr;<b>${by[b].profit:,.0f}</b> ({by[b].contracts:,.0f}c)"
         for b in BUDGETS)
     text = (f"""
         <tr><td>Executable (≤ $5k/market)</td><td><b>{cap.contracts:,.0f}</b> arbable contract-pairs &nbsp;|&nbsp; """
             f"""net profit <b>${cap.profit:,.0f}</b> (ROI {cap.roi*100:.2f}%) &nbsp;|&nbsp; """
-            f"""VWAP PM {cap.vwap_a:.3f} / Kalshi {cap.vwap_b:.3f}</td></tr>
+            f"""VWAP PM {pm_vwap:.3f} / Kalshi {k_vwap:.3f}</td></tr>
         <tr><td>Profit by budget</td><td>{budget_cells}</td></tr>""")
     png = make_arb_chart(s)
     if not png:

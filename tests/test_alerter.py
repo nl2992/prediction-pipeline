@@ -231,6 +231,27 @@ class EmailBody(unittest.TestCase):
         self.assertNotIn(f"{res['max'].contracts:,.0f}", html)  # NOT the unbounded max
         self.assertIn("$5k/market", html)
 
+    def test_exec_block_vwap_labels_match_exchange_for_kalshi_yes_dir(self) -> None:
+        # Direction "buy YES on Kalshi + buy NO on Polymarket": leg A is KALSHI,
+        # leg B is PM. The headline must attribute each VWAP to the right exchange
+        # (a hardcoded PM=vwap_a swapped them for this direction — run 58).
+        from arb_charts import executable_summary, BUDGETS
+        s = {
+            "key": "k|x|buy YES on Kalshi + buy NO on Polymarket",
+            "direction": "buy YES on Kalshi + buy NO on Polymarket",
+            # Buy Kalshi YES @ 0.30 (ask) + PM NO @ 0.63 (1 - 0.37 bid) = 0.93 < 1.
+            "poly_book": {"bids": [[0.37, 5000]], "asks": [[0.40, 5000]]},
+            "kalshi_book": {"bids": [[0.25, 100]], "asks": [[0.30, 5000]]},
+        }
+        direction, res = executable_summary(s)
+        cap = res["by_budget"][max(BUDGETS)]
+        html, _p, _c = _exec_block(s)
+        # leg A (vwap_a) is the Kalshi leg here -> must appear after "Kalshi",
+        # leg B (vwap_b) is the PM leg -> must appear after "PM".
+        self.assertIn(f"PM {cap.vwap_b:.3f}", html)
+        self.assertIn(f"Kalshi {cap.vwap_a:.3f}", html)
+        self.assertNotEqual(round(cap.vwap_a, 3), round(cap.vwap_b, 3))  # distinct, so the test is meaningful
+
 
 if __name__ == "__main__":
     unittest.main()
