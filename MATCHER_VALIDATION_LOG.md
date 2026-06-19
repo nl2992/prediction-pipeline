@@ -1276,6 +1276,45 @@ stuck pythonw process (pid 39304).
 
 ---
 
+## Run 55 — 2026-06-19 (convergence check: recall pool clean, no safe fix left)
+
+Fresh full census (1,639 pairs, guarded 1,324) re-checking BOTH sides after the
+runs 49–54 fixes. No code change — none safely available.
+
+**Recall side (guard-dropped rich pairs, raw top-50 v2≠True) — now ALL correct
+rejects.** The run-51 false rejects (Housing, Ro Khanna) are gone, recovered by
+runs 52–54. Remaining drops are genuinely different contracts: acquired≠IPO
+(Anthropic/OpenAI), richest-person≠CEO-of-X (Musk), richest≠TBPN (Zuckerberg),
+ground-beef-price≠soccer-corners ($8/$9), Trump-visit≠recognize-Palestine (S.Korea),
+wedding-guest≠Coachella (Lana Del Rey), album-release≠stream-count (Taylor Swift),
+negative≠positive GDP, and Ben Olsen≠Ben Johnson (run 49). One niche borderline:
+"↓300" ↔ "Creed Aventus … 300" (perfume price, possible missed inversion) — but
+the sides share NO entity, so neither the threshold-led nor proper-noun bridge can
+recover it safely; left as a documented low-value miss.
+
+**Precision side (guarded top-30):** the only phantoms are the **4 known hard
+SEMANTIC one-offs** — Mamdani-rents↔buses (17c), Fed-emergency↔any-cut (15c),
+Democrats-core-four↔senate (5c), Trump-nationalize-elections↔SpaceX (4.7c). Each
+turns on an OBJECT/SCOPE/QUALIFIER distinction in a common noun (rents vs buses,
+emergency, core-four, elections vs SpaceX) that the entity/threshold/action
+features can't compare; the differing token is not a recognized entity, so there
+is no structured field to gate on. Everything else is real and spans many
+categories (geopolitics: Maduro/González/Israel-Lebanon/MBS; econ: GDP buckets,
+billionaire tax; sports: Shelton/Sinner/Tolle; health: measles, UNRWA-Nobel;
+politics slate). Multi-category confirmed again.
+
+`validate_matcher` offset 20 PASS; `pytest` **170**. Curated regression healthy.
+
+**ASSESSMENT — converged on safely-fixable issues.** Across this loop the four
+NON-PERSON-FRAGMENT false-reject classes were all fixed (cross-league person r49,
+office/party r52, verbose-legislation r53, competition r54) and the recall pool is
+now clean. The residual 4 phantoms are semantic cases a stdlib rule engine can't
+veto without risking the 50/50 fixture / 39/39 live precision (re-confirmed the
+run-44 diminishing-returns finding). The email's "verify before executing" footer
+covers them. No commit (no code change).
+
+---
+
 ## Run 54 — 2026-06-19 (FIX: competition fragments falsely colliding as people)
 
 Fixed the deferred Liga-1 Peru class: **same-club** pairs ("Cusco FC" ↔ "Cusco FC
