@@ -14,6 +14,17 @@ def signal_with_books():
     }
 
 
+def deep_book_signal():
+    # Super-cheap PM leg + deep Kalshi book: unbounded max is ~1M contracts, but
+    # the $5k/market tier is far smaller. Mirrors the Rahm-Emanuel longshot case.
+    return {
+        "key": "deep|x|buy YES on Polymarket + buy NO on Kalshi",
+        "direction": "buy YES on Polymarket + buy NO on Kalshi",
+        "poly_book": {"bids": [[0.01, 1000000]], "asks": [[0.02, 1000000]]},
+        "kalshi_book": {"bids": [[0.04, 1000000]], "asks": [[0.99, 100]]},
+    }
+
+
 class ExecutableSummary(unittest.TestCase):
     def test_maps_direction_and_computes_profit(self):
         summ = executable_summary(signal_with_books())
@@ -27,6 +38,16 @@ class ExecutableSummary(unittest.TestCase):
         self.assertIsNone(executable_summary({"direction": "x"}))
         self.assertIsNone(executable_summary(
             {"direction": "buy YES on Polymarket + buy NO on Kalshi"}))
+
+    def test_budget_tier_far_below_unbounded_max(self):
+        # The deep-book longshot: unbounded max is huge; the $5k/market tier is a
+        # small, realistic fraction. The email headline must use the latter.
+        from arb_charts import BUDGETS
+        _, res = executable_summary(deep_book_signal())
+        cap = res["by_budget"][max(BUDGETS)]
+        self.assertGreater(res["max"].contracts, 100000)
+        self.assertLess(cap.contracts, 10000)
+        self.assertLessEqual(cap.cost_b, 5000 + 1)  # never exceeds $5k/market
 
 
 class MakeChart(unittest.TestCase):

@@ -65,11 +65,24 @@ def make_arb_chart(signal: dict, budgets: tuple[float, ...] = BUDGETS) -> bytes 
         b_label = "Kalshi NO" if pm_first else "PM NO"
         c_pm, c_k, c_comb, c_be, c_fill = "#2563eb", "#d97706", "#111827", "#dc2626", "#bbf7d0"
 
-        xs = [c[0] for c in curve]
-        pa = [c[1] for c in curve]
-        pb = [c[2] for c in curve]
-        comb = [c[3] for c in curve]
-        max_arb = res["max"].contracts
+        # Cap the plotted depth to the largest realistic budget tier ($5k/market)
+        # so an illiquid market's thin/stale deep book (often a single huge level)
+        # can't blow the x-axis out to ~1e6 contracts. When the book is shallower
+        # the cap is the full depth, so nothing changes for normal pairs.
+        cap = res["by_budget"][max(budgets)].contracts or res["max"].contracts
+        view = min(curve[-1][0], cap) if cap else curve[-1][0]
+        # Step coordinates for cost-vs-depth from depth 0: chunk i's price holds
+        # from the previous boundary to cum_i (clamped to the view). With
+        # where='post', y[i] paints segment [xs[i], xs[i+1]].
+        xs = [0.0]
+        pa, pb, comb = [], [], []
+        for c0, c1, c2, c3 in curve:
+            pa.append(c1); pb.append(c2); comb.append(c3)
+            xs.append(min(c0, view))
+            if c0 >= view:
+                break
+        pa.append(pa[-1]); pb.append(pb[-1]); comb.append(comb[-1])  # match xs length
+        max_arb = min(res["max"].contracts, view) if view else res["max"].contracts
 
         fig, (axL, axR) = plt.subplots(1, 2, figsize=(9.2, 3.4))
 
@@ -85,6 +98,8 @@ def make_arb_chart(signal: dict, budgets: tuple[float, ...] = BUDGETS) -> bytes 
             axL.annotate(f"{max_arb:,.0f} arbable", xy=(max_arb, 0.5),
                          xytext=(4, 0), textcoords="offset points", fontsize=8,
                          color="#16a34a", rotation=90, va="center")
+        if view and view > 0:
+            axL.set_xlim(0, view * 1.05)
         axL.set_xlabel("cumulative contracts (depth)", fontsize=9)
         axL.set_ylabel("price per $1 payout", fontsize=9)
         axL.set_title("Executable depth — both books", fontsize=10, fontweight="bold")

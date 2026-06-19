@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 import unittest
 
-from alerter import build_email, compute_signals, filter_new, signals_to_send
+from alerter import build_email, compute_signals, filter_new, signals_to_send, _exec_block
 
 
 def pair(pb, pa, kb, ka, **extra):
@@ -208,11 +208,28 @@ class EmailBody(unittest.TestCase):
         p["kalshi_book"] = {"bids": [[0.65, 200], [0.50, 100]], "asks": [[0.95, 100]]}
         sigs = compute_signals([p], min_edge=0.005)
         _, html, images = build_email(sigs)
-        self.assertIn("Executable depth", html)
+        self.assertIn("Executable (≤ $5k/market)", html)
         self.assertIn("Profit by budget", html)
         if images:  # matplotlib present
             self.assertTrue(html.count("cid:") == len(images))
             self.assertTrue(images[0][1].startswith(b"\x89PNG"))
+
+    def test_exec_block_headline_uses_budget_tier_not_unbounded_max(self) -> None:
+        # Deep-book longshot: unbounded max ~1M contracts, but the headline must
+        # report the realistic $5k/market tier (run: email-number sanity check).
+        from arb_charts import executable_summary, BUDGETS
+        s = {
+            "key": "deep|x|buy YES on Polymarket + buy NO on Kalshi",
+            "direction": "buy YES on Polymarket + buy NO on Kalshi",
+            "poly_book": {"bids": [[0.01, 1000000]], "asks": [[0.02, 1000000]]},
+            "kalshi_book": {"bids": [[0.04, 1000000]], "asks": [[0.99, 100]]},
+        }
+        _, res = executable_summary(s)
+        cap = res["by_budget"][max(BUDGETS)]
+        html, _png, _cid = _exec_block(s)
+        self.assertIn(f"{cap.contracts:,.0f}", html)          # the $5k-tier figure
+        self.assertNotIn(f"{res['max'].contracts:,.0f}", html)  # NOT the unbounded max
+        self.assertIn("$5k/market", html)
 
 
 if __name__ == "__main__":
