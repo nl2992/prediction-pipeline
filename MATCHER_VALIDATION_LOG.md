@@ -1276,6 +1276,27 @@ stuck pythonw process (pid 39304).
 
 ---
 
+## Run 61 — 2026-06-19 (PRODUCTION health check — alerter alive, fixes deployed)
+
+Shifted from matcher analysis to operational verification (the engine side is
+converged; the operator's real concern is that clean emails keep arriving).
+Checked the live scheduled-alerter cron log:
+
+- **Alive & on-cadence:** last scan started 05:59:36Z, done in 551s (~06:08Z);
+  current 06:14Z. Scanning every 20 min, no stall/outage. Lifetime: 283 scans,
+  146 emails to all 3 recipients.
+- **Recent emails sane:** best edges 5.72c / 6.56c / 6.72c — all real, sub-25c.
+  ~790 pairs / ~180 survivable per scan, stable (no regression from runs 49-60).
+- **My fixes are LIVE in production:** the cron log's v2-reject list shows the
+  run-49 gates firing — "Ben Olsen ↔ Ben Johnson" and "Brian Schmetzer ↔ Brian
+  Schottenheimer" both rejected as different-person. The scheduled task runs the
+  committed code, so all matcher fixes (runs 49/52/53/54/56/57) + the email-number
+  fixes (runs 58 email-audit/VWAP) are deployed.
+
+No code change. Engine + production pipeline both healthy; nothing to fix.
+
+---
+
 ## Run 60 — 2026-06-19 (RECALL: keyword-derivation miss probe — the uncovered dimension)
 
 First probe of the long-unchecked recall dimension: do real PM counterparts exist
