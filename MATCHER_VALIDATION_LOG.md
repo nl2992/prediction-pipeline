@@ -1276,6 +1276,31 @@ stuck pythonw process (pid 39304).
 
 ---
 
+## Run 76 — 2026-06-20 (full census; rich REAL commodities arb found BEYOND the cap)
+
+Full-scale census (1,628 pairs, guarded 1,280). Top-40 37/40 real; the 3 phantoms
+are the same semantic class (Trump-nationalize↔SpaceX, Elon-Rogan↔net-worth,
+core-four↔senate). Fixes hold (Housing matched 6.82c; cross-sport/Liga absent).
+
+**Notable NEW finding — #2 richest is a REAL non-political arb the operator never
+sees.** "Freeport-McMoRan" ↔ Kalshi `KXUSACOMPANYSTAKE-27JAN01-FCX` "Will any part
+of the United States federal government take a stake of above 0% in
+Freeport-McMoRan?" at **7.43c** — same contract, REAL (verified: the Kalshi series
+is "Which companies will the US take a stake in"; PM has the matching option).
+Category: commodities / government-policy.
+
+**It is full-scale-only — NOT in the cap-1500 production scan, so NOT emailed.**
+A whole series of these US-strategic-stake markets (Freeport, lithium, Ryanair,
+"Nationalize SpaceX") sits beyond the production cap. This is concrete evidence
+that the operator's cap=1500 is leaving **rich (~7c) REAL arbs on the table** — the
+single most actionable lever now is raising the cap (operator's speed/coverage
+decision; I won't change it unilaterally — cap raises caused the run-46 outage).
+
+No code change (the engine matches Freeport correctly; this is a coverage/cap
+matter, not a matcher bug). `pytest` 175 (run 75). Production alerter healthy.
+
+---
+
 ## Run 63 — 2026-06-19 (lightweight health tick — full scan paced down)
 
 Cron fired ~30 min after run 62's full-scale census. Markets barely move in 30 min,
