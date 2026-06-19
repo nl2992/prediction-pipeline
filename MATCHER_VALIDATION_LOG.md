@@ -1276,6 +1276,39 @@ stuck pythonw process (pid 39304).
 
 ---
 
+## Run 54 — 2026-06-19 (FIX: competition fragments falsely colliding as people)
+
+Fixed the deferred Liga-1 Peru class: **same-club** pairs ("Cusco FC" ↔ "Cusco FC
+win the Liga 1 Peru?", + 11 more) were falsely rejected as "different person".
+
+**Diagnosis (REAL text via an extract_spec hook during a full scan):** the event
+titles "Liga 1 Peru **Champion**" (Kalshi) and "Peru Liga 1: **Winner**" (PM)
+produce pseudo-names `peru champion` vs `peru winner`/`peru liga` that share the
+"first name" *peru* — a country, not a person. (PM lists clubs by short label, so
+no club surname overlapped to block the spurious collision.)
+
+**Fix (contract_spec.py):** extend `_NON_PERSON_NAME_TOKENS` (run 52) with
+competition/contest words (champion(s)/championship/winner/league/liga/cup/title/
+final/finals). Surgical — only the collision gate is affected.
+
+**Verified (full-scale audit):**
+- ALL **12** Liga-1 same-club pairs now **v2-endorsed** (each matching the same
+  club both sides — pure recall gain, no different-club phantom; different clubs
+  stay rejected via the selected-name-mismatch gate).
+- Genuine different-person collisions preserved (Ben Olsen↔Ben Johnson, Julian
+  Alvarez↔Julian Ryerson).
+- Fixture parity **PASS** (FP=0, missed=0); `pytest` **170**; `validate_recall`
+  **CLEAN**; guarded 1,320 (within drift of run-53 1,331). Commit: 839c762.
+
+**Loop status:** the three non-person-fragment false-reject classes are now all
+fixed — cross-league person (run 49), office/party (run 52), competition (run 54)
+— plus the verbose-legislation bridge (run 53). Remaining are the 4 hard SEMANTIC
+phantoms (Mamdani-rents/buses, Fed-emergency, Trump-nationalize-object,
+Democrats-core-four) that need object/scope/qualifier semantics a stdlib rule
+engine can't safely encode without risking the 50/50 fixture.
+
+---
+
 ## Run 53 — 2026-06-19 (FIX: proper-noun bridge for verbose legislation)
 
 Fixed the second run-51 false reject: **"Housing for the 21st Century Act"** (PM)
