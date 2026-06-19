@@ -642,6 +642,13 @@ class CoreLogicTests(unittest.TestCase):
         self.assertFalse(_first_name_collision(
             frozenset({"khanna democratic vp nominee", "democratic vice"}),
             frozenset({"democratic vp", "vice presidency"})))
+        # Competition fragments "{country} champion/winner/liga" are not people
+        # (run 54): same-club Liga-1 pairs were falsely rejected because PM's
+        # "peru liga"/"peru winner" collided with Kalshi's "peru champion".
+        self.assertFalse(_first_name_collision(
+            frozenset({"peru liga"}), frozenset({"cusco fc", "peru champion"})))
+        self.assertFalse(_first_name_collision(
+            frozenset({"peru winner"}), frozenset({"juan pablo ii college", "peru champion"})))
         # Genuine different people sharing a first name must STILL collide.
         self.assertTrue(_first_name_collision(
             frozenset({"ben olsen"}), frozenset({"ben johnson", "year"})))

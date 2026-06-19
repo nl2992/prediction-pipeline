@@ -159,8 +159,15 @@ def _num_range(text: str) -> tuple[float, float] | None:
 # was falsely rejected because "democratic vice" vs "democratic vp" shared the
 # "first name" democratic).
 _NON_PERSON_NAME_TOKENS = frozenset({
+    # party / office descriptors (run 52)
     "democratic", "republican", "party", "vice", "vp", "presidency",
     "presidential", "president", "nominee", "senate", "house", "governor",
+    # competition / contest descriptors (run 54): event titles like "Liga 1 Peru
+    # Champion" / "Peru Liga 1: Winner" produce pseudo-names "peru champion" vs
+    # "peru winner" that share the "first name" peru — a country, not a person —
+    # and falsely rejected same-club pairs (Cusco FC ↔ Cusco FC, etc.).
+    "champion", "champions", "championship", "winner", "league", "liga",
+    "cup", "title", "final", "finals",
 })
 
 
