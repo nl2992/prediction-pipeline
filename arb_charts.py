@@ -60,71 +60,66 @@ def make_arb_chart(signal: dict, budgets: tuple[float, ...] = BUDGETS) -> bytes 
         if not curve:
             return None
 
-        pm_first = direction == "poly_yes__kalshi_no"
-        a_label = "PM YES" if pm_first else "Kalshi YES"
-        b_label = "Kalshi NO" if pm_first else "PM NO"
-        c_pm, c_k, c_comb, c_be, c_fill = "#2563eb", "#d97706", "#111827", "#dc2626", "#bbf7d0"
+        c_bar, c_edge, c_fill, c_zero = "#16a34a", "#111827", "#bbf7d0", "#dc2626"
 
-        # Cap the plotted depth to the largest realistic budget tier ($5k/market)
-        # so an illiquid market's thin/stale deep book (often a single huge level)
-        # can't blow the x-axis out to ~1e6 contracts. When the book is shallower
-        # the cap is the full depth, so nothing changes for normal pairs.
+        # Right panel = net edge PER PAIR (cents) as you buy deeper; it shrinks as
+        # you take worse prices and hits 0 at the max profitable depth. Clamp the
+        # x-axis to the largest realistic budget tier ($5k/market) so an illiquid
+        # market's thin/stale deep book can't stretch it to ~1e6 contracts.
         cap = res["by_budget"][max(budgets)].contracts or res["max"].contracts
         view = min(curve[-1][0], cap) if cap else curve[-1][0]
-        # Step coordinates for cost-vs-depth from depth 0: chunk i's price holds
-        # from the previous boundary to cum_i (clamped to the view). With
-        # where='post', y[i] paints segment [xs[i], xs[i+1]].
         xs = [0.0]
-        pa, pb, comb = [], [], []
-        for c0, c1, c2, c3 in curve:
-            pa.append(c1); pb.append(c2); comb.append(c3)
+        edge = []  # net edge per pair, in cents, at each depth chunk
+        for c0, _c1, _c2, c3 in curve:
+            edge.append((1.0 - c3) * 100.0)
             xs.append(min(c0, view))
             if c0 >= view:
                 break
-        pa.append(pa[-1]); pb.append(pb[-1]); comb.append(comb[-1])  # match xs length
+        edge.append(edge[-1])  # match xs length for where='post'
         max_arb = min(res["max"].contracts, view) if view else res["max"].contracts
 
-        fig, (axL, axR) = plt.subplots(1, 2, figsize=(9.2, 3.4))
+        fig, (axL, axR) = plt.subplots(1, 2, figsize=(9.6, 3.5))
 
-        # ---- Panel 1: depth / arbable ----
-        axL.step(xs, pa, where="post", color=c_pm, lw=1.6, label=f"{a_label} cost")
-        axL.step(xs, pb, where="post", color=c_k, lw=1.6, label=f"{b_label} cost")
-        axL.step(xs, comb, where="post", color=c_comb, lw=2.0, label="combined + fee")
-        axL.axhline(1.0, color=c_be, ls="--", lw=1.2, label="break-even ($1)")
-        axL.fill_between(xs, comb, 1.0, where=[c < 1.0 for c in comb], step="post",
-                         color=c_fill, alpha=0.8, zorder=0)
-        if max_arb > 0:
-            axL.axvline(max_arb, color="#16a34a", ls=":", lw=1.3)
-            axL.annotate(f"{max_arb:,.0f} arbable", xy=(max_arb, 0.5),
-                         xytext=(4, 0), textcoords="offset points", fontsize=8,
-                         color="#16a34a", rotation=90, va="center")
-        if view and view > 0:
-            axL.set_xlim(0, view * 1.05)
-        axL.set_xlabel("cumulative contracts (depth)", fontsize=9)
-        axL.set_ylabel("price per $1 payout", fontsize=9)
-        axL.set_title("Executable depth — both books", fontsize=10, fontweight="bold")
-        axL.legend(fontsize=7, loc="best", framealpha=0.9)
-        axL.grid(True, alpha=0.25)
-        axL.tick_params(labelsize=8)
-
-        # ---- Panel 2: profit by budget ----
+        # ---- Panel 1: net profit by stake per market (the money question) ----
         buds = list(budgets)
         profits = [res["by_budget"][b].profit for b in buds]
         conts = [res["by_budget"][b].contracts for b in buds]
-        bars = axR.bar([f"${b/1000:g}k" for b in buds], profits, color=c_pm, alpha=0.85)
-        for bar, p, n in zip(bars, profits, conts):
-            axR.annotate(f"${p:,.0f}\n{n:,.0f}c", xy=(bar.get_x() + bar.get_width() / 2,
+        bars = axL.bar([f"${b/1000:g}k" for b in buds], profits, color=c_bar, alpha=0.9)
+        for bar, p, c in zip(bars, profits, conts):
+            axL.annotate(f"${p:,.0f}\n{c:,.0f} pairs", xy=(bar.get_x() + bar.get_width() / 2,
                          bar.get_height()), xytext=(0, 2), textcoords="offset points",
                          ha="center", va="bottom", fontsize=7.5)
-        axR.set_xlabel("investment per market", fontsize=9)
-        axR.set_ylabel("net profit ($, after fee)", fontsize=9)
-        axR.set_title("VWAP profit by budget", fontsize=10, fontweight="bold")
-        axR.grid(True, axis="y", alpha=0.25)
-        axR.tick_params(labelsize=8)
+        axL.set_xlabel("amount staked per market", fontsize=9)
+        axL.set_ylabel("net profit after fees ($)", fontsize=9)
+        axL.set_title("How much you make, by stake", fontsize=10, fontweight="bold")
+        axL.grid(True, axis="y", alpha=0.25)
+        axL.tick_params(labelsize=8)
         if profits and max(profits) > 0:
-            axR.set_ylim(0, max(profits) * 1.25)
+            axL.set_ylim(0, max(profits) * 1.28)
 
-        fig.tight_layout()
+        # ---- Panel 2: edge per pair vs how many you buy ----
+        axL2 = axR
+        axL2.step(xs, edge, where="post", color=c_edge, lw=2.0)
+        axL2.axhline(0.0, color=c_zero, ls="--", lw=1.2, label="break-even")
+        axL2.fill_between(xs, edge, 0.0, where=[e > 0 for e in edge], step="post",
+                          color=c_fill, alpha=0.85, zorder=0)
+        if max_arb > 0:
+            axL2.axvline(max_arb, color=c_bar, ls=":", lw=1.3)
+            axL2.annotate(f"{max_arb:,.0f} pairs\nprofitable", xy=(max_arb, max(edge) * 0.5 if edge else 1),
+                          xytext=(4, 0), textcoords="offset points", fontsize=8,
+                          color=c_bar, va="center")
+        if view and view > 0:
+            axL2.set_xlim(0, view * 1.05)
+        axL2.set_xlabel("contract-pairs bought (depth)", fontsize=9)
+        axL2.set_ylabel("net edge per pair (¢ / $1)", fontsize=9)
+        axL2.set_title("How deep the edge lasts", fontsize=10, fontweight="bold")
+        axL2.grid(True, alpha=0.25)
+        axL2.tick_params(labelsize=8)
+
+        edge0 = (1.0 - curve[0][3]) * 100.0
+        fig.suptitle(f"{(signal.get('poly_title') or '')[:42]}  ↔  {(signal.get('kalshi_title') or '')[:42]}"
+                     f"   ·   {edge0:.1f}¢/$1 net edge at best price", fontsize=8.5)
+        fig.tight_layout(rect=(0, 0, 1, 0.95))
         buf = io.BytesIO()
         fig.savefig(buf, format="png", dpi=110, bbox_inches="tight")
         plt.close(fig)

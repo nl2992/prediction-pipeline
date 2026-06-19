@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from arb import find_arb, kalshi_taker_fee
 from discover import _match_outcomes_within_group, _parse_dt as discover_parse_dt
-from discover import discover, _is_parlay_market
+from discover import discover, _is_parlay_market, _apply_event_cap, _event_series as _es
 from executor import TradeIntent, check_price_still_valid
 from kalshi.client import KalshiClient
 from matcher import (
@@ -671,6 +671,24 @@ class CoreLogicTests(unittest.TestCase):
         k_same = titled_snap("kalshi", "kalshi-lafc", "Will Los Angeles FC win the 2026 MLS Cup?",
                              "2026-12-06T00:00:00Z", extra={"event_title": "MLS Cup Winner"})
         self.assertTrue(is_compatible_match(pm, k_same))
+
+    def test_event_cap_always_includes_high_value_series(self) -> None:
+        # The close-time-sorted cap drops far-dated events, which truncated rich
+        # REAL non-political arbs (US-company-stake, bills-become-law, IPOs) that
+        # close in 2027. _apply_event_cap must keep those series past the cap (run 78).
+        ev = lambda st, tk="X-1": {"series_ticker": st, "event_ticker": tk}
+        filtered = [ev("KXHOUSERACE", f"KXHOUSERACE-{i}") for i in range(5)]
+        filtered += [ev("KXUSACOMPANYSTAKE", "KXUSACOMPANYSTAKE-27JAN01"),
+                     ev("KXBILLS", "KXBILLS-FISA"),
+                     ev("KXRANDOM", "KXRANDOM-9")]  # this one must stay dropped
+        kept = _apply_event_cap(filtered, cap=5)
+        series = {_es(e) for e in kept}
+        self.assertIn("KXUSACOMPANYSTAKE", series)   # rescued past the cap
+        self.assertIn("KXBILLS", series)             # rescued past the cap
+        self.assertNotIn("KXRANDOM", series)         # ordinary far-dated event still dropped
+        self.assertEqual(len([e for e in kept if e["series_ticker"] == "KXHOUSERACE"]), 5)
+        # No cap (None) or short list -> unchanged.
+        self.assertEqual(_apply_event_cap(filtered, None), filtered)
 
     def test_emergency_qualifier_mismatch_rejected(self) -> None:
         # PHANTOM (run 56): "Fed EMERGENCY rate cut" is an unscheduled/crisis event,

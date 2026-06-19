@@ -294,6 +294,33 @@ def _parse_dt(s: str | None) -> datetime | None:
     return None
 
 
+# Series whose events are ALWAYS scanned, even when they close later than the
+# close-time-sorted max_events_to_search cap would keep. These carry rich, REAL,
+# non-political cross-platform arbs that close far out (2027) and were therefore
+# truncated by the cap — verified examples: "Which companies will the US take a
+# stake in" (KXUSACOMPANYSTAKE — Freeport-McMoRan ~7.4c), "Which bills will become
+# law" (KXBILLS — FISA-702 ~23c, Housing-21st-Century-Act ~6.8c), "Who will IPO
+# before 2027" (KXIPO — Applied Intuition ~6c, Mistral). Each series is a handful
+# of events, so the cap's scan-time guarantee is preserved. (run 78)
+_ALWAYS_INCLUDE_SERIES = frozenset({
+    "KXUSACOMPANYSTAKE", "KXBILLS", "KXIPO",
+})
+
+
+def _event_series(ev: dict) -> str:
+    return ev.get("series_ticker") or (ev.get("event_ticker", "") or "").split("-")[0]
+
+
+def _apply_event_cap(filtered: list, cap: int | None) -> list:
+    """Truncate the (close-time-sorted) event list to ``cap`` events, but always
+    retain events from ``_ALWAYS_INCLUDE_SERIES`` even if they fall past the cap."""
+    if cap is None or len(filtered) <= cap:
+        return filtered
+    kept = filtered[:cap]
+    extra = [e for e in filtered[cap:] if _event_series(e) in _ALWAYS_INCLUDE_SERIES]
+    return kept + extra
+
+
 def _k_snap(m: dict, fetched_at: str, event_title: str = ""):
     from pipeline import MarketSnapshot, _parse_kalshi_top_of_book, kalshi_market_title
     ob = _parse_kalshi_top_of_book(m)
@@ -798,8 +825,7 @@ def discover(
         return dt if dt else now + timedelta(days=9999)
 
     filtered.sort(key=_sort_key)
-    if max_events_to_search is not None:
-        filtered = filtered[:max_events_to_search]
+    filtered = _apply_event_cap(filtered, max_events_to_search)
 
     cat_counts: dict[str, int] = {}
     for ev in filtered:

@@ -100,6 +100,10 @@ TOP_N = 50
 # measured cap=200: a floor of 20 keeps 20 of 25 arbs, dropping ~5 illiquid/dust
 # signals — operator opted to email only depth-backed, executable arbs.
 MIN_DEPTH = 20.0
+# Only email pairs with a real net-of-fees edge ABOVE this (operator: ">3%").
+# net_accurate is per $1 of payout, so 0.03 == 3c/$1 == 3%. Cuts the long tail of
+# sub-3% pairs so the email is just the genuinely rich, executable arbs. (run 78)
+MIN_NET_EMAIL = 0.03
 
 
 # ---------------------------------------------------------------------------
@@ -313,54 +317,51 @@ def _exec_block(s: dict) -> tuple[str, bytes | None, str | None]:
     # (a hardcoded "PM=vwap_a" mislabelled the VWAP for ~half the pairs, run 58).
     pm_vwap, k_vwap = ((cap.vwap_a, cap.vwap_b) if direction == "poly_yes__kalshi_no"
                        else (cap.vwap_b, cap.vwap_a))
-    budget_cells = " &nbsp;|&nbsp; ".join(
-        f"${b/1000:g}k&rarr;<b>${by[b].profit:,.0f}</b> ({by[b].contracts:,.0f}c)"
-        for b in BUDGETS)
+    deploy = cap.cost_a + cap.cost_b
+    budget_cells = " &nbsp;·&nbsp; ".join(
+        f"${b/1000:g}k&rarr;<b>${by[b].profit:,.0f}</b>" for b in BUDGETS)
     text = (f"""
-        <tr><td>Executable (≤ $5k/market)</td><td><b>{cap.contracts:,.0f}</b> arbable contract-pairs &nbsp;|&nbsp; """
-            f"""net profit <b>${cap.profit:,.0f}</b> (ROI {cap.roi*100:.2f}%) &nbsp;|&nbsp; """
-            f"""VWAP PM {pm_vwap:.3f} / Kalshi {k_vwap:.3f}</td></tr>
-        <tr><td>Profit by budget</td><td>{budget_cells}</td></tr>""")
+        <tr><td>Execute now</td><td>up to <b>{cap.contracts:,.0f}</b> contract-pairs (~${deploy:,.0f} total to enter), capped by available book depth</td></tr>
+        <tr><td>Net profit by stake / market</td><td>{budget_cells} &nbsp;<span style="color:#888">(after fees)</span></td></tr>
+        <tr><td>Avg fill price (VWAP)</td><td>PM {pm_vwap:.2f} &nbsp;·&nbsp; Kalshi {k_vwap:.2f}</td></tr>""")
     png = make_arb_chart(s)
     if not png:
         return text, None, None
     cid = f"chart{s['key'].__hash__() & 0xffffffff:x}"
-    text += (f'<tr><td colspan="2"><img src="cid:{cid}" '
-             f'alt="order-book depth + profit chart" style="max-width:640px;width:100%"></td></tr>')
+    text += (f'<tr><td colspan="2" style="padding-top:6px"><img src="cid:{cid}" '
+             f'alt="net profit by stake, and profitable depth" style="max-width:680px;width:100%"></td></tr>')
     return text, png, cid
 
 
 def build_email(signals: list[dict]) -> tuple[str, str, list[tuple[str, bytes]]]:
     n = len(signals)
     top = signals[0]
-    subject = (f"[Pred-Arb] {n} executable signal{'s' if n != 1 else ''} — "
-               f"best net edge {top['net_accurate']*100:.2f}c/$1")
+    subject = (f"[Pred-Arb] {n} arb{'s' if n != 1 else ''} >3% net — "
+               f"best {top['net_accurate']*100:.1f}%")
     rows = []
     images: list[tuple[str, bytes]] = []
-    for s in signals:
+    for i, s in enumerate(signals):
         exec_html, png, cid = _exec_block(s)
         if png and cid:
             images.append((cid, png))
+        edge = s["net_accurate"] * 100
         rows.append(f"""
-        <tr><td colspan="2" style="padding-top:18px;border-top:1px solid #eee"><b>{s['poly_title']}</b> &harr; <b>{s['kalshi_title']}</b></td></tr>
-        <tr><td>Direction</td><td>{s['direction']}</td></tr>
-        <tr><td>Legs</td><td>{s['legs']}</td></tr>
-        <tr><td>Net edge (real Kalshi fee)</td><td><b>{s['net_accurate']*100:.2f}c per $1</b> (gross {s['gross']*100:.2f}c, worst-case-7%-fee net {s['net_flat7']*100:.2f}c)</td></tr>
-        <tr><td>Quotes</td><td>PM {s['poly_bid']}/{s['poly_ask']} &nbsp; Kalshi {s['kalshi_bid']}/{s['kalshi_ask']}</td></tr>{exec_html}
-        <tr><td>Polymarket</td><td><a href="{s['poly_url']}">{s['poly_url']}</a></td></tr>
-        <tr><td>Kalshi</td><td><a href="{s['kalshi_url']}">{s['kalshi_url']}</a></td></tr>
-        <tr><td>Matcher</td><td>confidence {s['confidence']} | v2 agrees: {s['v2_match']}</td></tr>""")
-    html = f"""<html><body style="font-family:Segoe UI,Arial,sans-serif;font-size:14px">
-    <p>Automated full cross-platform scan found <b>{n}</b> executable arb signal{'s' if n != 1 else ''}
-    at {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}.</p>
-    <p style="color:#555;font-size:12px">Each pair shows the executable picture walked against the live
-    order book: how many contract-pairs are actually arbable, the VWAP per leg, and net profit for a
-    per-market budget of $1k/$2k/$2.5k/$5k. The chart's shaded region is the arbable depth before the
-    combined cost crosses the $1 break-even.</p>
-    <table cellspacing="0" cellpadding="4">{''.join(rows)}</table>
-    <p style="color:#888;font-size:12px">Edges are per $1 of payout, after Kalshi's real
-    0.07·p·(1−p) taker fee (Polymarket CLOB fee-free). Verify depth/slippage before executing.
-    Sent by alerter.py on the prediction-pipeline scanner.</p>
+        <tr><td colspan="2" style="padding-top:20px;border-top:2px solid #e5e7eb">
+            <span style="font-size:16px;color:#16a34a"><b>{edge:.1f}% net edge</b></span>
+            &nbsp;&nbsp;<b>{s['poly_title']}</b> &harr; <b>{s['kalshi_title']}</b></td></tr>
+        <tr><td style="white-space:nowrap">The trade</td><td>{s['legs']} &nbsp;<span style="color:#888">— exactly one side pays $1 at settlement; you keep ~{edge:.1f}c per $1 after fees</span></td></tr>{exec_html}
+        <tr><td>Open</td><td><a href="{s['poly_url']}">Polymarket</a> &nbsp;·&nbsp; <a href="{s['kalshi_url']}">Kalshi</a> &nbsp;<span style="color:#aaa;font-size:12px">(match confidence {s['confidence']}{', independently confirmed' if s['v2_match'] else ''})</span></td></tr>""")
+    html = f"""<html><body style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#111">
+    <p><b>{n}</b> cross-platform arbitrage{'s' if n != 1 else ''} with a net edge above 3% (after fees),
+    {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}, richest first.</p>
+    <p style="color:#555;font-size:12px">For each pair: buy YES on one venue and NO on the other so exactly one
+    side pays $1 — the <b>net edge</b> is what you keep per $1 after Kalshi's fee. Numbers below are walked
+    against the <b>live order book</b>, so "execute now" and the per-stake profits already account for paying
+    worse prices as you buy deeper (VWAP). Left chart = profit by stake; right chart = how many pairs stay
+    profitable as you buy more.</p>
+    <table cellspacing="0" cellpadding="5" style="border-collapse:collapse">{''.join(rows)}</table>
+    <p style="color:#888;font-size:12px">Edges are per $1 of payout, net of Kalshi's 0.07·p·(1−p) taker fee
+    (Polymarket CLOB is fee-free). Liquidity moves fast — re-check the book before executing.</p>
     </body></html>"""
     return subject, html, images
 
@@ -431,9 +432,9 @@ def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False,
           f"{survivable} survivable arb(s) (>= {min_edge*100:.2f}c net)", flush=True)
 
     state = load_state()
-    # Trigger on change; email EVERY positive-net (after-fees) pair, not just the
-    # changed one. `fresh` is only used to decide whether to send this cycle.
-    to_email, fresh = signals_to_send(signals, state, realert_hours)
+    # Trigger on change; email the richest pairs with a real net edge ABOVE
+    # MIN_NET_EMAIL (>3%). `fresh` is only used to decide whether to send this cycle.
+    to_email, fresh = signals_to_send(signals, state, realert_hours, min_net=MIN_NET_EMAIL)
     if not to_email:
         return 0
 

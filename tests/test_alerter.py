@@ -197,10 +197,10 @@ class EmailBody(unittest.TestCase):
         subject, html, images = build_email(sigs)
         self.assertIsInstance(images, list)
         self.assertIn("[Pred-Arb]", subject)
-        self.assertIn("net edge", subject)
+        self.assertIn(">3% net", subject)
         self.assertIn("https://polymarket.com/event/pm-market", html)
         self.assertIn("https://kalshi.com/markets/kxser/", html)
-        self.assertIn("per $1", html)
+        self.assertIn("net edge", html)
 
     def test_books_produce_exec_block_and_inline_chart(self) -> None:
         p = pair(0.38, 0.40, 0.65, 0.68)
@@ -208,8 +208,8 @@ class EmailBody(unittest.TestCase):
         p["kalshi_book"] = {"bids": [[0.65, 200], [0.50, 100]], "asks": [[0.95, 100]]}
         sigs = compute_signals([p], min_edge=0.005)
         _, html, images = build_email(sigs)
-        self.assertIn("Executable (≤ $5k/market)", html)
-        self.assertIn("Profit by budget", html)
+        self.assertIn("Execute now", html)
+        self.assertIn("Net profit by stake", html)
         if images:  # matplotlib present
             self.assertTrue(html.count("cid:") == len(images))
             self.assertTrue(images[0][1].startswith(b"\x89PNG"))
@@ -229,7 +229,7 @@ class EmailBody(unittest.TestCase):
         html, _png, _cid = _exec_block(s)
         self.assertIn(f"{cap.contracts:,.0f}", html)          # the $5k-tier figure
         self.assertNotIn(f"{res['max'].contracts:,.0f}", html)  # NOT the unbounded max
-        self.assertIn("$5k/market", html)
+        self.assertIn("Execute now", html)
 
     def test_exec_block_vwap_labels_match_exchange_for_kalshi_yes_dir(self) -> None:
         # Direction "buy YES on Kalshi + buy NO on Polymarket": leg A is KALSHI,
@@ -248,9 +248,9 @@ class EmailBody(unittest.TestCase):
         html, _p, _c = _exec_block(s)
         # leg A (vwap_a) is the Kalshi leg here -> must appear after "Kalshi",
         # leg B (vwap_b) is the PM leg -> must appear after "PM".
-        self.assertIn(f"PM {cap.vwap_b:.3f}", html)
-        self.assertIn(f"Kalshi {cap.vwap_a:.3f}", html)
-        self.assertNotEqual(round(cap.vwap_a, 3), round(cap.vwap_b, 3))  # distinct, so the test is meaningful
+        self.assertIn(f"PM {cap.vwap_b:.2f}", html)
+        self.assertIn(f"Kalshi {cap.vwap_a:.2f}", html)
+        self.assertNotEqual(round(cap.vwap_a, 2), round(cap.vwap_b, 2))  # distinct, so the test is meaningful
 
 
 if __name__ == "__main__":
