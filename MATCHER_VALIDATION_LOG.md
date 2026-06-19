@@ -1276,6 +1276,37 @@ stuck pythonw process (pid 39304).
 
 ---
 
+## Run 56 — 2026-06-19 (FIX: 'emergency' event-bar qualifier mismatch)
+
+Took down one of the 4 residual semantic phantoms: **Fed *emergency* rate cut ↔
+Fed any-cut** (the #2 richest guarded pair at full scale, ~15c).
+
+**Why it's a real difference (REAL text fetched from the APIs):** PM "Fed emergency
+rate cut before 2027?" is an UNSCHEDULED/crisis cut; Kalshi "Will the Federal
+Reserve cut rates before 2027? Cuts" is ANY cut. A scheduled cut settles Kalshi YES
+but PM NO → different contracts. They matched on 0.67 token similarity.
+
+**Fix (contract_spec.py):** an event-qualifier gate next to the existing "removal"
+outcome-bar gate — if exactly one side's text contains the word "emergency",
+reject. "emergency X" (emergency cut / national emergency / emergency session) is
+reliably a distinct event from plain "X".
+
+**Verified:** full-scale audit shows the gate rejects **EXACTLY ONE pair** across
+the 54k-market catalog (the Fed phantom) — zero collateral. Fixture parity PASS
+(FP=0, missed=0); `pytest` **173** (+1 test, incl. a control that a plain "Fed rate
+cut" still matches); `validate_recall` CLEAN; guarded 1,320 (stable). Fed-emergency
+is gone from the guarded top; the next richest is now the real Applied Intuition
+IPO. Commit: ef8c77c.
+
+**Phantom count: 4 → 3 remaining** (Mamdani-rents↔buses, Trump-nationalize-object,
+Democrats-core-four). These 3 turn on a COMMON-NOUN object/scope difference (rents
+vs buses, elections vs SpaceX, core-four vs senate) with no recognized entity or
+qualifier token to gate on — unlike "emergency", they have no structured hook, so
+they remain the genuinely-hard residue. NB: none of the residual full-scale
+phantoms reach PRODUCTION emails (cap 1500; they live in events beyond the cap).
+
+---
+
 ## Run 55 — 2026-06-19 (convergence check: recall pool clean, no safe fix left)
 
 Fresh full census (1,639 pairs, guarded 1,324) re-checking BOTH sides after the
