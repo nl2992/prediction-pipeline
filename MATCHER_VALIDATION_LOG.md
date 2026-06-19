@@ -1276,6 +1276,37 @@ stuck pythonw process (pid 39304).
 
 ---
 
+## Run 62 — 2026-06-19 (fresh full-scale census; fixes hold; new semantic phantom churns in)
+
+First full-scale (cap 8000) census since run 56. 1,640 pairs, guarded 1,276,
+**47/50 top guarded REAL (~94%)**. `validate_matcher` offset 30 PASS; `pytest` 175.
+
+**All prior fixes hold at full scale:** Ben Olsen + Brian Schmetzer rejected
+(run 49), Fed-emergency rejected (run 56). **Housing-21st-Century-Act is now MATCHED
+at 3.77c** (#16) — confirms the run-53 proper-noun bridge works on live full-scale
+data. Liga-1 / cross-sport pairs absent this scan (markets churned).
+
+**3 phantoms, all the same "same-subject / different-predicate" class:**
+- #4 (5.73c) Trump nationalize elections ↔ SpaceX (known)
+- #8 (5.28c) Democrats "core four" ↔ 2026 senate (known)
+- #17 (3.61c) **NEW** — "Elon Musk go on Joe Rogan" ↔ "Elon Musk's net worth for
+  June above $X": same person, different events (podcast appearance vs a net-worth
+  threshold). Considered a "one side has a $ threshold, the other doesn't" gate but
+  rejected it as too risky (would false-reject legit threshold/non-threshold
+  phrasings). No safe structured hook.
+
+**Key observation:** Mamdani/buses churned OUT of the top-50 and the Elon pair
+churned IN — this semantic class regenerates as markets turn over, so it cannot be
+fixed by enumerating instances; it needs predicate/object comparison a stdlib rule
+engine can't safely do. Count holds at ~3 because instances rotate, not accumulate.
+
+Multi-category: legal (FISA), geopolitics (Maduro/González/Merz/Israel-Lebanon),
+culture (Jon Favreau as Happy Hogan), tech (Mistral/OpenAI IPO), econ (GDP buckets,
+billionaire tax), sports (Shelton/Sinner/Tolle/Álvarez MVP), health (measles),
+Nobel (UNRWA), politics slate. No code change.
+
+---
+
 ## Run 61 — 2026-06-19 (PRODUCTION health check — alerter alive, fixes deployed)
 
 Shifted from matcher analysis to operational verification (the engine side is
