@@ -1218,18 +1218,25 @@ def _sports_league(text: str) -> set[str]:
     """
     low = _ascii_lower(text)
     leagues: set[str] = set()
+    # Each league is also matched by its unambiguous CHAMPIONSHIP name, so a
+    # shared-city cross-sport phantom is caught: "Los Angeles FC (MLS Cup)" vs
+    # "Los Angeles Kings (Stanley Cup)" share only the city, but mls vs nhl are
+    # disjoint -> rejected (run 57). Same-sport pairs share a league, so they are
+    # unaffected.
     if re.search(r"\bwnba\b|women'?s? (?:pro )?basketball", low):
         leagues.add("wnba")
-    elif re.search(r"\bnba\b|\bpro basketball\b", low):
+    elif re.search(r"\bnba\b|\bpro basketball\b|\bnba finals\b", low):
         leagues.add("nba")
     if re.search(r"\bwnfl\b", low):
         leagues.add("wnfl")
-    elif re.search(r"\bnfl\b|\bpro football\b", low):
+    elif re.search(r"\bnfl\b|\bpro football\b|\bsuper ?bowl\b", low):
         leagues.add("nfl")
-    if re.search(r"\bnhl\b|\bpro hockey\b", low):
+    if re.search(r"\bnhl\b|\bpro hockey\b|\bstanley cup\b", low):
         leagues.add("nhl")
-    if re.search(r"\bmlb\b|\bpro baseball\b", low):
+    if re.search(r"\bmlb\b|\bpro baseball\b|\bworld series\b", low):
         leagues.add("mlb")
+    if re.search(r"\bmls\b|\bmls cup\b", low):
+        leagues.add("mls")
     return leagues
 
 

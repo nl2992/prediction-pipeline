@@ -655,6 +655,23 @@ class CoreLogicTests(unittest.TestCase):
         self.assertTrue(_first_name_collision(
             frozenset({"julian alvarez"}), frozenset({"julian ryerson"})))
 
+    def test_cross_sport_same_city_rejected(self) -> None:
+        # PHANTOM (run 57, surfaced in production emails): "Los Angeles FC" (MLS
+        # Cup) and "Los Angeles Kings" (Stanley Cup) share only the city — soccer
+        # vs hockey, different teams. League detection via championship names makes
+        # them disjoint -> rejected.
+        pm = titled_snap("polymarket", "poly-lafc", "Los Angeles FC",
+                         "2026-12-06T00:00:00Z", extra={"event_title": "MLS Cup Winner 2026"})
+        k = titled_snap("kalshi", "kalshi-lak",
+                        "Will Los Angeles Kings win the 2026-27 Stanley Cup Finals?",
+                        "2027-06-20T00:00:00Z",
+                        extra={"event_title": "2026-27 Stanley Cup Finals Winner"})
+        self.assertFalse(is_compatible_match(pm, k))
+        # Control: the SAME team in the SAME competition still matches.
+        k_same = titled_snap("kalshi", "kalshi-lafc", "Will Los Angeles FC win the 2026 MLS Cup?",
+                             "2026-12-06T00:00:00Z", extra={"event_title": "MLS Cup Winner"})
+        self.assertTrue(is_compatible_match(pm, k_same))
+
     def test_emergency_qualifier_mismatch_rejected(self) -> None:
         # PHANTOM (run 56): "Fed EMERGENCY rate cut" is an unscheduled/crisis event,
         # distinct from "Fed cuts rates" (any cut) — a scheduled cut settles the
