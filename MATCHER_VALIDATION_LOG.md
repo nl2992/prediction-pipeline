@@ -1276,6 +1276,31 @@ stuck pythonw process (pid 39304).
 
 ---
 
+## Run 59 — 2026-06-19 (production emailed top-50 = 50/50 real; no cross-sport sibling)
+
+Followed up run 57 (cross-sport same-city phantom) by hunting for SIBLINGS in the
+actually-emailed list. Production scan (cap 1500): 791 pairs, 180 guarded, emailing
+top 50.
+
+**Emailed top-50: 50/50 REAL.** A same-locale/distinct-extras heuristic flagged
+exactly two pairs — Green Bay Packers ↔ "Green Bay win the 2027 Pro Football
+Championship" and Tampa Bay Buccaneers ↔ "Tampa Bay win …" — both FALSE ALARMS
+(same NFL team; the flag fired only on the mascot vs "Football/2027" tokens). No
+LA-FC/LA-Kings-style cross-sport phantom remains; run 57's championship-name league
+detection holds with no gap in the emailed set.
+
+Categories present: politics (House-race party slate, 2028 nominees incl. correct
+Trump Jr.↔Jr. and Ro Khanna, governor), sports (NFL champs Green Bay/SF/Tampa Bay),
+intl (Flávio Bolsonaro & Renan Santos 3rd-place, Brazil), legal (Kash Patel leaves
+FBI Director). Edge math spot-checked consistent.
+
+`validate_matcher` offset 40 PASS; `pytest` **175**. No code change (no phantom in
+the emailed list; the 3 residual full-scale-only semantic phantoms — Mamdani-rents↔
+buses, Trump-nationalize↔SpaceX, Democrats-core-four — stay below the cap and lack a
+safe structured hook). The emails the operator actually receives are clean.
+
+---
+
 ## Run 58 — 2026-06-19 (order-book VERIFIED correct + VWAP-label bug fixed)
 
 Operator asked to confirm the order book is correct and to see executable depth /
