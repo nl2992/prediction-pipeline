@@ -1276,6 +1276,36 @@ stuck pythonw process (pid 39304).
 
 ---
 
+## Run 60 — 2026-06-19 (RECALL: keyword-derivation miss probe — the uncovered dimension)
+
+First probe of the long-unchecked recall dimension: do real PM counterparts exist
+for UNMATCHED Kalshi markets (keyword-derivation misses)? Hooked `_k_snap` to
+capture all 11,840 Kalshi markets in a cap-1500 scan; 790 matched. Examined the
+unmatched set and searched PM (via `search_events(keywords=...)`, the path discover
+uses) for the plausible-counterpart topics.
+
+**Finding: no actionable missed rich pair.** The prominent unmatched Kalshi markets
+have NO PM counterpart at all:
+- "Who will be the next DNC Chair?" (40+ candidate rows) — PM has no DNC-chair
+  market (only a false "Fed Chair" hit).
+- "Who will the next Pope be?" — PM has many "next X" markets but no next-Pope.
+- "Supervolcano erupt", "colonize Mars", "pass 2°C" — 0 PM results.
+- "Mamdani become President" — a 0-volume 2028 longshot; PM has 2028 presidential
+  markets but this isn't an actionable (liquid) miss, and Mamdani's VP-nominee row
+  IS already matched.
+
+**Honest caveats:** (1) discover's Kalshi fetch doesn't populate volume/OI, so I
+sampled unmatched markets by plausibility, not strictly by liquidity. (2) PM's
+gamma API caps pagination at ~offset 2100 (422 beyond), so events past that aren't
+scanned — a PM-API limit, not a matcher bug. Within these limits, the
+keyword-derivation dimension is clean: unmatched = counterpart-less or illiquid.
+
+Recall scorecard now: gate recall CLEAN (validate_recall), cap recall = known
+speed/coverage tradeoff (operator chose 1500), keyword-derivation = no actionable
+miss (this run). `validate_matcher` offset 0 PASS; `pytest` **175**. No code change.
+
+---
+
 ## Run 59 — 2026-06-19 (production emailed top-50 = 50/50 real; no cross-sport sibling)
 
 Followed up run 57 (cross-sport same-city phantom) by hunting for SIBLINGS in the
