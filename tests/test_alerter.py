@@ -223,6 +223,23 @@ class AnnualisedRanking(unittest.TestCase):
         self.assertEqual((days, settle), (None, None))
         self.assertAlmostEqual(ann, 0.07)
 
+    def test_ai_settlement_date_preferred_over_contractual(self) -> None:
+        from datetime import datetime, timezone
+        yr = datetime.now(timezone.utc).year + 1
+        # Contractual close is Dec; AI says it really resolves in March (earlier).
+        s = {"net_accurate": 0.06, "poly_close": f"{yr}-12-31", "kalshi_close": f"{yr}-12-31",
+             "ai_poly_close": f"{yr}-03-01", "ai_kalshi_close": f"{yr}-03-01"}
+        _ann, _days, settle = _settle_horizon(s)
+        self.assertTrue(settle.endswith("-03-01"))  # used the AI's earlier date
+
+    def test_ai_date_ignored_if_garbage(self) -> None:
+        from datetime import datetime, timezone
+        yr = datetime.now(timezone.utc).year + 1
+        s = {"net_accurate": 0.06, "poly_close": f"{yr}-09-01", "kalshi_close": f"{yr}-09-01",
+             "ai_poly_close": "not-a-date", "ai_kalshi_close": "1999-01-01"}  # unparseable / past
+        _ann, _days, settle = _settle_horizon(s)
+        self.assertTrue(settle.endswith("-09-01"))  # fell back to contractual
+
 
 class EmailBody(unittest.TestCase):
     def test_subject_and_links_present(self) -> None:

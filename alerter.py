@@ -44,7 +44,7 @@ import re
 import smtplib
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.header import Header
 from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
@@ -309,18 +309,27 @@ def _settle_horizon(s: dict) -> tuple[float, int | None, str | None]:
     are missing, assume a 1-year horizon so ranking still works (returns days=None
     so the display can omit it).
     """
+    now = datetime.now(timezone.utc)
     closes = []
-    for k in ("poly_close", "kalshi_close"):
-        v = s.get(k)
-        if v:
+    # Per leg, prefer the AI verifier's implied settlement date (set in the gate
+    # from each market's rules) over the contractual close; ignore unparseable or
+    # past dates. The contractual close is the fallback.
+    for ai_key, raw_key in (("ai_poly_close", "poly_close"),
+                            ("ai_kalshi_close", "kalshi_close")):
+        for v in (s.get(ai_key), s.get(raw_key)):
+            if not v:
+                continue
             try:
-                closes.append(datetime.fromisoformat(str(v)[:10]).replace(tzinfo=timezone.utc))
+                d = datetime.fromisoformat(str(v)[:10]).replace(tzinfo=timezone.utc)
             except ValueError:
-                pass
+                continue
+            if d >= now - timedelta(days=1):
+                closes.append(d)
+                break  # took the first valid date for this leg (AI preferred)
     net = s.get("net_accurate", 0.0)
     if closes:
         settle = max(closes)
-        days = max((settle - datetime.now(timezone.utc)).days, 1)
+        days = max((settle - now).days, 1)
         return net * 365.0 / days, days, settle.date().isoformat()
     return net, None, None  # unknown horizon -> rank as if ~1 year, hide the field
 
@@ -334,7 +343,8 @@ def _ai_verify_gate(to_email: list[dict], cfg: dict) -> list[dict]:
     Fail-open: a None verdict (API error / no key) keeps the pair. Every verdict is
     appended to ai_verify.jsonl for auditing.
     """
-    api_key = cfg.get("deepseek_api_key")
+    # Key lives ONLY in the DEEPSEEK_API_KEY env var (never in the repo/config).
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
     if not api_key:
         return to_email
     mode = cfg.get("ai_verify_mode", "shadow")
@@ -356,6 +366,12 @@ def _ai_verify_gate(to_email: list[dict], cfg: dict) -> list[dict]:
         except Exception:
             pass
         if v["same"]:
+            # Attach the AI's implied settlement dates so _settle_horizon can use
+            # them for a more accurate annualised return than the contractual close.
+            if v.get("poly_settlement"):
+                s["ai_poly_close"] = v["poly_settlement"]
+            if v.get("kalshi_settlement"):
+                s["ai_kalshi_close"] = v["kalshi_settlement"]
             kept.append(s)
         else:
             tag = "AI-DROP" if mode == "enforce" else "AI-FLAG(shadow)"
@@ -530,6 +546,8 @@ def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False,
     to_email = _ai_verify_gate(to_email, cfg)
     if not to_email:
         return 0
+    # Re-rank by annualised return now that the AI may have refined settlement dates.
+    to_email.sort(key=lambda s: -_settle_horizon(s)[0])
 
     # Persist a lean record — the full order-book ladders are large and only
     # needed in-memory for the charts.

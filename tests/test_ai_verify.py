@@ -66,24 +66,28 @@ class Gate(unittest.TestCase):
     def test_no_key_is_noop(self):
         from alerter import _ai_verify_gate
         sigs = [self._sig("A"), self._sig("B")]
-        self.assertEqual(_ai_verify_gate(sigs, {}), sigs)
+        with patch.dict("os.environ", {}, clear=True):  # no DEEPSEEK_API_KEY
+            self.assertEqual(_ai_verify_gate(sigs, {}), sigs)
 
     def test_enforce_drops_different_shadow_keeps(self):
         from alerter import _ai_verify_gate
         sigs = [self._sig("REAL"), self._sig("PHANTOM")]
         def fake_verify(s, key, **kw):
-            return {"same": s["poly_title"] == "REAL", "settlement_date": None, "reason": "r"}
-        with patch("ai_verify.verify_signal", side_effect=fake_verify):
-            enforced = _ai_verify_gate(sigs, {"deepseek_api_key": "k", "ai_verify_mode": "enforce"})
-            shadow = _ai_verify_gate(sigs, {"deepseek_api_key": "k", "ai_verify_mode": "shadow"})
+            return {"same": s["poly_title"] == "REAL", "poly_settlement": None,
+                    "kalshi_settlement": None, "reason": "r"}
+        with patch.dict("os.environ", {"DEEPSEEK_API_KEY": "k"}), \
+             patch("ai_verify.verify_signal", side_effect=fake_verify):
+            enforced = _ai_verify_gate(sigs, {"ai_verify_mode": "enforce"})
+            shadow = _ai_verify_gate(sigs, {"ai_verify_mode": "shadow"})
         self.assertEqual([s["poly_title"] for s in enforced], ["REAL"])     # phantom dropped
         self.assertEqual(len(shadow), 2)                                     # shadow keeps both
 
     def test_failopen_keeps_on_none(self):
         from alerter import _ai_verify_gate
         sigs = [self._sig("A")]
-        with patch("ai_verify.verify_signal", return_value=None):
-            self.assertEqual(_ai_verify_gate(sigs, {"deepseek_api_key": "k", "ai_verify_mode": "enforce"}), sigs)
+        with patch.dict("os.environ", {"DEEPSEEK_API_KEY": "k"}), \
+             patch("ai_verify.verify_signal", return_value=None):
+            self.assertEqual(_ai_verify_gate(sigs, {"ai_verify_mode": "enforce"}), sigs)
 
 
 if __name__ == "__main__":

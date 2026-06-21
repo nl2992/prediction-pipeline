@@ -92,25 +92,26 @@ def verify(text_a: str, text_b: str, api_key: str | None,
 
 
 def verify_signal(signal: dict, api_key: str | None, **kw) -> dict | None:
-    """Verify one alerter signal, composing the richest available context text."""
-    def _txt(title_key, ev_key):
+    """Verify one alerter signal, composing the richest available context text —
+    including each market's contractual close date so the model can anchor the year
+    and return an accurate implied settlement date."""
+    def _txt(title_key, ev_key, close_key):
         ev = signal.get(ev_key) or ""
         t = signal.get(title_key) or ""
-        return f"{ev} — {t}".strip(" —") if ev and ev != t else t
-    return verify(_txt("poly_title", "poly_event_title"),
-                  _txt("kalshi_title", "kalshi_event_title"), api_key, **kw)
+        base = f"{ev} — {t}".strip(" —") if ev and ev != t else t
+        c = signal.get(close_key)
+        return f"{base} (market closes no later than {c})" if c else base
+    return verify(_txt("poly_title", "poly_event_title", "poly_close"),
+                  _txt("kalshi_title", "kalshi_event_title", "kalshi_close"), api_key, **kw)
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
         print('usage: python ai_verify.py "market A text" "market B text"')
         raise SystemExit(2)
-    try:
-        from alerter import load_config
-        _key = load_config().get("deepseek_api_key")
-    except Exception:
-        _key = None
+    import os
+    _key = os.environ.get("DEEPSEEK_API_KEY")
     if not _key:
-        print("No deepseek_api_key in alert_config.json — set it to use the verifier.")
+        print("Set the DEEPSEEK_API_KEY environment variable to use the verifier.")
         raise SystemExit(1)
     print(json.dumps(verify(sys.argv[1], sys.argv[2], _key), indent=2))
