@@ -337,11 +337,14 @@ def _settle_horizon(s: dict) -> tuple[float, int | None, str | None]:
 def _ai_verify_gate(to_email: list[dict], cfg: dict) -> list[dict]:
     """Optional DeepSeek settlement-equivalence check on the about-to-email pairs.
 
-    No-op unless ``deepseek_api_key`` is configured. ``ai_verify_mode``:
+    No-op unless the DEEPSEEK_API_KEY env var is set. ``ai_verify_mode``:
       * "shadow" (default) — log each verdict, drop nothing (safe rollout).
       * "enforce"          — drop pairs the AI judges to settle DIFFERENTLY.
     Fail-open: a None verdict (API error / no key) keeps the pair. Every verdict is
-    appended to ai_verify.jsonl for auditing.
+    appended to ai_verify.jsonl for auditing. SAFETY: in enforce mode, if the AI
+    would drop more than AI_MAX_DROP_FRACTION of the cycle's pairs, treat it as an
+    anomaly (API/prompt regression) and keep ALL — never send a near-empty email
+    because the verifier misbehaved (issue #1).
     """
     # Key lives ONLY in the DEEPSEEK_API_KEY env var (never in the repo/config).
     api_key = os.environ.get("DEEPSEEK_API_KEY")
@@ -352,11 +355,12 @@ def _ai_verify_gate(to_email: list[dict], cfg: dict) -> list[dict]:
         from ai_verify import verify_signal
     except Exception:
         return to_email
-    kept = []
+
+    AI_MAX_DROP_FRACTION = 0.60
+    drop_ids: set[int] = set()
     for s in to_email:
         v = verify_signal(s, api_key)
         if v is None:                       # API error/timeout → fail-open, keep
-            kept.append(s)
             continue
         try:
             with (BASE / "ai_verify.jsonl").open("a", encoding="utf-8") as f:
@@ -372,13 +376,18 @@ def _ai_verify_gate(to_email: list[dict], cfg: dict) -> list[dict]:
                 s["ai_poly_close"] = v["poly_settlement"]
             if v.get("kalshi_settlement"):
                 s["ai_kalshi_close"] = v["kalshi_settlement"]
-            kept.append(s)
         else:
+            drop_ids.add(id(s))
             tag = "AI-DROP" if mode == "enforce" else "AI-FLAG(shadow)"
             print(f"[alerter] {tag}: {s['poly_title'][:36]!r} <-> {s['kalshi_title'][:36]!r} — {v['reason']}", flush=True)
-            if mode != "enforce":
-                kept.append(s)            # shadow: keep, just logged/flagged
-    return kept
+
+    if mode != "enforce" or not drop_ids:
+        return to_email                      # shadow (or nothing flagged) → keep all
+    if len(drop_ids) > AI_MAX_DROP_FRACTION * len(to_email):
+        print(f"[alerter] AI enforce ANOMALY: would drop {len(drop_ids)}/{len(to_email)} "
+              f"(> {AI_MAX_DROP_FRACTION:.0%}) — keeping all this cycle", flush=True)
+        return to_email                      # anomalous mass-drop → fail-open, keep all
+    return [s for s in to_email if id(s) not in drop_ids]
 
 
 def _exec_block(s: dict) -> tuple[str, bytes | None, str | None]:

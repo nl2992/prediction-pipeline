@@ -82,6 +82,18 @@ class Gate(unittest.TestCase):
         self.assertEqual([s["poly_title"] for s in enforced], ["REAL"])     # phantom dropped
         self.assertEqual(len(shadow), 2)                                     # shadow keeps both
 
+    def test_enforce_mass_drop_keeps_all(self):
+        # If the AI would drop > 60% of the cycle (API/prompt anomaly), enforce
+        # must fail-open and keep ALL rather than send a near-empty email (issue #1).
+        from alerter import _ai_verify_gate
+        sigs = [self._sig(x) for x in ("A", "B", "C", "D")]  # all judged different
+        with patch.dict("os.environ", {"DEEPSEEK_API_KEY": "k"}), \
+             patch("ai_verify.verify_signal",
+                   return_value={"same": False, "poly_settlement": None,
+                                 "kalshi_settlement": None, "reason": "glitch"}):
+            kept = _ai_verify_gate(sigs, {"ai_verify_mode": "enforce"})
+        self.assertEqual(len(kept), 4)  # 100% drop -> anomaly -> keep all
+
     def test_failopen_keeps_on_none(self):
         from alerter import _ai_verify_gate
         sigs = [self._sig("A")]
