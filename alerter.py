@@ -241,6 +241,10 @@ def compute_signals(pairs: list[dict], min_edge: float,
             "poly_bid": pb, "poly_ask": pa, "kalshi_bid": kb, "kalshi_ask": ka,
             "confidence": p.get("confidence"),
             "v2_match": p.get("v2_match"),
+            # Settlement (close) dates for annualised-return ranking. Capital is
+            # locked until BOTH legs resolve, so the later date drives the horizon.
+            "poly_close": p.get("poly_close"),
+            "kalshi_close": p.get("kalshi_close"),
             # Full ladders for the executable-depth charts (top-30/side from
             # discover); stripped before persisting to the signal log.
             "poly_book": p.get("poly_book"),
@@ -276,8 +280,11 @@ def signals_to_send(signals: list[dict], state: dict, realert_hours: float,
     Returns ``(to_email, fresh)`` — the richest top_n when something changed in
     that set, else empty (no trigger → no email).
     """
+    # Keep only pairs with a real net edge above the threshold, then rank RICHEST
+    # FIRST BY ANNUALISED RETURN (a 5% edge settling next month beats a 23% edge
+    # settling in 18 months) — capital is locked until the later leg resolves.
     positive = sorted((s for s in signals if s["net_accurate"] > min_net),
-                      key=lambda s: -s["net_accurate"])
+                      key=lambda s: -_settle_horizon(s)[0])
     if top_n:
         positive = positive[:top_n]
     fresh = filter_new(positive, state, realert_hours)
@@ -289,6 +296,30 @@ def signals_to_send(signals: list[dict], state: dict, realert_hours: float,
 # ---------------------------------------------------------------------------
 # Email
 # ---------------------------------------------------------------------------
+
+def _settle_horizon(s: dict) -> tuple[float, int | None, str | None]:
+    """Return (annualised_return, days_to_settle, settle_date_iso) for a signal.
+
+    Capital is locked until BOTH legs resolve, so the horizon is the LATER of the
+    two close dates. Annualised = net edge × 365 / days (simple). When close dates
+    are missing, assume a 1-year horizon so ranking still works (returns days=None
+    so the display can omit it).
+    """
+    closes = []
+    for k in ("poly_close", "kalshi_close"):
+        v = s.get(k)
+        if v:
+            try:
+                closes.append(datetime.fromisoformat(str(v)[:10]).replace(tzinfo=timezone.utc))
+            except ValueError:
+                pass
+    net = s.get("net_accurate", 0.0)
+    if closes:
+        settle = max(closes)
+        days = max((settle - datetime.now(timezone.utc)).days, 1)
+        return net * 365.0 / days, days, settle.date().isoformat()
+    return net, None, None  # unknown horizon -> rank as if ~1 year, hide the field
+
 
 def _exec_block(s: dict) -> tuple[str, bytes | None, str | None]:
     """Return (html_fragment, png_bytes_or_None, cid_or_None) for one signal's
@@ -320,10 +351,15 @@ def _exec_block(s: dict) -> tuple[str, bytes | None, str | None]:
     deploy = cap.cost_a + cap.cost_b
     budget_cells = " &nbsp;·&nbsp; ".join(
         f"${b/1000:g}k&rarr;<b>${by[b].profit:,.0f}</b>" for b in BUDGETS)
+    ann, days, settle = _settle_horizon(s)
+    settle_row = (
+        f"""<tr><td>Settles / annualised</td><td>~{settle} ({days}d to resolve) &rarr; """
+        f"""<b>~{ann*100:.0f}% annualised</b> on this edge</td></tr>"""
+        if settle else "")
     text = (f"""
         <tr><td>Execute now</td><td>up to <b>{cap.contracts:,.0f}</b> contract-pairs (~${deploy:,.0f} total to enter), capped by available book depth</td></tr>
         <tr><td>Net profit by stake / market</td><td>{budget_cells} &nbsp;<span style="color:#888">(after fees)</span></td></tr>
-        <tr><td>Avg fill price (VWAP)</td><td>PM {pm_vwap:.2f} &nbsp;·&nbsp; Kalshi {k_vwap:.2f}</td></tr>""")
+        <tr><td>Avg fill price (VWAP)</td><td>PM {pm_vwap:.2f} &nbsp;·&nbsp; Kalshi {k_vwap:.2f}</td></tr>{settle_row}""")
     png = make_arb_chart(s)
     if not png:
         return text, None, None
@@ -336,8 +372,11 @@ def _exec_block(s: dict) -> tuple[str, bytes | None, str | None]:
 def build_email(signals: list[dict]) -> tuple[str, str, list[tuple[str, bytes]]]:
     n = len(signals)
     top = signals[0]
-    subject = (f"[Pred-Arb] {n} arb{'s' if n != 1 else ''} >3% net — "
-               f"best {top['net_accurate']*100:.1f}%")
+    # Signals are ranked by annualised return, so the subject leads with the
+    # top-ranked pair's annualised figure (falls back to net edge if no horizon).
+    _ann, _d, _settle = _settle_horizon(top)
+    _best = f"{_ann*100:.0f}% annualised" if _settle else f"{top['net_accurate']*100:.1f}% net"
+    subject = f"[Pred-Arb] {n} arb{'s' if n != 1 else ''} >3% net — best {_best}"
     rows = []
     images: list[tuple[str, bytes]] = []
     for i, s in enumerate(signals):
@@ -345,15 +384,18 @@ def build_email(signals: list[dict]) -> tuple[str, str, list[tuple[str, bytes]]]
         if png and cid:
             images.append((cid, png))
         edge = s["net_accurate"] * 100
+        ann, _days, _settle = _settle_horizon(s)
+        ann_html = f' <span style="color:#888;font-size:13px">· ~{ann*100:.0f}% annualised</span>' if _settle else ""
         rows.append(f"""
         <tr><td colspan="2" style="padding-top:20px;border-top:2px solid #e5e7eb">
-            <span style="font-size:16px;color:#16a34a"><b>{edge:.1f}% net edge</b></span>
+            <span style="font-size:16px;color:#16a34a"><b>{edge:.1f}% net edge</b></span>{ann_html}
             &nbsp;&nbsp;<b>{s['poly_title']}</b> &harr; <b>{s['kalshi_title']}</b></td></tr>
         <tr><td style="white-space:nowrap">The trade</td><td>{s['legs']} &nbsp;<span style="color:#888">— exactly one side pays $1 at settlement; you keep ~{edge:.1f}c per $1 after fees</span></td></tr>{exec_html}
         <tr><td>Open</td><td><a href="{s['poly_url']}">Polymarket</a> &nbsp;·&nbsp; <a href="{s['kalshi_url']}">Kalshi</a> &nbsp;<span style="color:#aaa;font-size:12px">(match confidence {s['confidence']}{', independently confirmed' if s['v2_match'] else ''})</span></td></tr>""")
     html = f"""<html><body style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#111">
     <p><b>{n}</b> cross-platform arbitrage{'s' if n != 1 else ''} with a net edge above 3% (after fees),
-    {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}, richest first.</p>
+    {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}, ranked by <b>annualised return</b>
+    (a smaller edge that settles soon can beat a bigger one that settles years out).</p>
     <p style="color:#555;font-size:12px">For each pair: buy YES on one venue and NO on the other so exactly one
     side pays $1 — the <b>net edge</b> is what you keep per $1 after Kalshi's fee. Numbers below are walked
     against the <b>live order book</b>, so "execute now" and the per-stake profits already account for paying

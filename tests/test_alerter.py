@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 import unittest
 
-from alerter import build_email, compute_signals, filter_new, signals_to_send, _exec_block
+from alerter import build_email, compute_signals, filter_new, signals_to_send, _exec_block, _settle_horizon
 
 
 def pair(pb, pa, kb, ka, **extra):
@@ -189,6 +189,39 @@ class AdaptiveScan(unittest.TestCase):
         self.assertEqual(cap, 1500)
         self.assertEqual(calls, [1000, 1500])    # escalated to last rung
         self.assertEqual(len(sigs), 6)
+
+
+class AnnualisedRanking(unittest.TestCase):
+    def test_annualised_uses_later_close_and_net_edge(self) -> None:
+        from datetime import datetime, timezone
+        yr = datetime.now(timezone.utc).year + 1
+        s = {"net_accurate": 0.06, "poly_close": f"{yr}-01-01",
+             "kalshi_close": f"{yr}-07-01"}  # later leg = July
+        ann, days, settle = _settle_horizon(s)
+        self.assertTrue(settle.endswith("-07-01"))     # later of the two dates
+        self.assertAlmostEqual(ann, 0.06 * 365.0 / days, places=6)
+
+    def test_near_dated_smaller_edge_outranks_far_dated_bigger(self) -> None:
+        from datetime import datetime, timedelta, timezone
+        soon = (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()
+        far = (datetime.now(timezone.utc) + timedelta(days=540)).date().isoformat()
+        near = {"net_accurate": 0.05, "poly_close": soon, "kalshi_close": soon}
+        big = {"net_accurate": 0.20, "poly_close": far, "kalshi_close": far}
+        self.assertGreater(_settle_horizon(near)[0], _settle_horizon(big)[0])
+
+    def test_signals_to_send_ranks_by_annualised(self) -> None:
+        from datetime import datetime, timedelta, timezone
+        soon = (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat()
+        far = (datetime.now(timezone.utc) + timedelta(days=540)).date().isoformat()
+        near = {"net_accurate": 0.05, "key": "a", "poly_close": soon, "kalshi_close": soon}
+        big = {"net_accurate": 0.20, "key": "b", "poly_close": far, "kalshi_close": far}
+        out, _ = signals_to_send([big, near], state={}, realert_hours=6.0, min_net=0.03)
+        self.assertEqual(out[0]["key"], "a")  # near-dated 5% ranks above far-dated 20%
+
+    def test_missing_close_falls_back_without_crash(self) -> None:
+        ann, days, settle = _settle_horizon({"net_accurate": 0.07})
+        self.assertEqual((days, settle), (None, None))
+        self.assertAlmostEqual(ann, 0.07)
 
 
 class EmailBody(unittest.TestCase):
