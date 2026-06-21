@@ -56,15 +56,19 @@ def summarize_log(lines: list[str]) -> dict:
         1 for ln in lines[last_email_idx + 1:] if "scan done" in ln) if last_email_idx >= 0 else None
     # "recent" error = within the last 200 lines of the window
     error_is_recent = error_idx >= 0 and error_idx >= len(lines) - 200
-    # silent-no-op smell: an email went out but no verifier heartbeat anywhere after it
-    heartbeat_after_email = any(
-        "AI verify:" in ln for ln in lines[last_email_idx + 1:]) if last_email_idx >= 0 else False
+    # Real silent-no-op signals (the heartbeat prints BEFORE the email in a cycle,
+    # so "heartbeat after the email" is the wrong test — it false-WARNs, #10):
+    #   * the latest heartbeat reports an absent key (verification skipped), or
+    #   * emails went out but NO heartbeat appears anywhere in the window.
+    key_absent = bool(last_heartbeat) and "ABSENT" in last_heartbeat
+    emails_without_heartbeat = last_email_subject is not None and last_heartbeat is None
     return {
         "last_scan": last_scan,
         "last_email_subject": last_email_subject,
         "scans_since_email": scans_since_email,
         "last_heartbeat": last_heartbeat,
-        "heartbeat_after_email": heartbeat_after_email,
+        "key_absent": key_absent,
+        "emails_without_heartbeat": emails_without_heartbeat,
         "recent_cycle_error": recent_cycle_error if error_is_recent else None,
     }
 
@@ -81,13 +85,14 @@ def format_health(s: dict, verdicts_count: int, verdicts_mtime: str | None) -> s
                      f"(quiet is normal within the 6h realert window)")
     else:
         lines.append("[WARN] no email seen in the recent window")
-    if s["last_heartbeat"]:
+    if s["key_absent"]:
+        lines.append(f"[WARN] verifier: {s['last_heartbeat']} — key not resolving (see #8)")
+    elif s["emails_without_heartbeat"]:
+        lines.append("[WARN] emails went out but no verifier heartbeat in window — is the AI gate running? (see #8)")
+    elif s["last_heartbeat"]:
         lines.append(f"[OK  ] verifier: {s['last_heartbeat']}")
     else:
-        lines.append("[WARN] no verifier heartbeat seen — is the AI gate running? (see #8)")
-    # The #8 class: emails went out but the verifier never ran after them.
-    if s["last_email_subject"] and not s["heartbeat_after_email"] and s["last_heartbeat"]:
-        lines.append("[WARN] verifier heartbeat predates the last email run — possible silent no-op")
+        lines.append("[OK  ] verifier idle (no email-worthy cycle in window)")
     lines.append(f"[{mark(s['recent_cycle_error'] is None)}] "
                  f"cycle errors: {s['recent_cycle_error'] or 'none recent'}")
     fresh = f"{verdicts_count} rows, last write {verdicts_mtime}" if verdicts_mtime else f"{verdicts_count} rows"
