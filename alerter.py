@@ -260,6 +260,22 @@ def compute_signals(pairs: list[dict], min_edge: float,
     return signals
 
 
+def _freshness_labels(signals: list[dict], state: dict, improve_step: float = 0.005) -> dict[str, str]:
+    """Classify each signal vs its last alert: 'new' (never alerted before) or
+    'improved' (net edge up by >= improve_step). Persistent pairs re-sent only
+    because the realert window elapsed get NO label — so the email badges genuinely
+    fresh opportunities, not the same arbs the operator has seen for hours (#17).
+    Must be called BEFORE state is updated with this cycle's values."""
+    labels: dict[str, str] = {}
+    for s in signals:
+        prev = state.get(s["key"])
+        if prev is None:
+            labels[s["key"]] = "new"
+        elif s["net_accurate"] >= prev.get("net", -1.0) + improve_step:
+            labels[s["key"]] = "improved"
+    return labels
+
+
 def filter_new(signals: list[dict], state: dict, realert_hours: float, improve_step: float = 0.005) -> list[dict]:
     now = time.time()
     fresh = []
@@ -470,7 +486,17 @@ def _exec_block(s: dict) -> tuple[str, bytes | None, str | None]:
     return text, png, cid
 
 
-def build_email(signals: list[dict]) -> tuple[str, str, list[tuple[str, bytes]]]:
+_BADGE = {
+    "new": '<span style="background:#16a34a;color:#fff;font-size:11px;padding:1px 6px;'
+           'border-radius:8px;margin-right:6px">NEW</span>',
+    "improved": '<span style="background:#2563eb;color:#fff;font-size:11px;padding:1px 6px;'
+                'border-radius:8px;margin-right:6px">&uarr; IMPROVED</span>',
+}
+
+
+def build_email(signals: list[dict],
+                labels: dict[str, str] | None = None) -> tuple[str, str, list[tuple[str, bytes]]]:
+    labels = labels or {}
     n = len(signals)
     top = signals[0]
     # Signals are ranked by annualised return, so the subject leads with the
@@ -487,9 +513,10 @@ def build_email(signals: list[dict]) -> tuple[str, str, list[tuple[str, bytes]]]
         edge = s["net_accurate"] * 100
         ann, _days, _settle = _settle_horizon(s)
         ann_html = f' <span style="color:#888;font-size:13px">· ~{ann*100:.0f}% annualised</span>' if _settle else ""
+        badge = _BADGE.get(labels.get(s.get("key", "")), "")
         rows.append(f"""
         <tr><td colspan="2" style="padding-top:20px;border-top:2px solid #e5e7eb">
-            <span style="font-size:16px;color:#16a34a"><b>{edge:.1f}% net edge</b></span>{ann_html}
+            {badge}<span style="font-size:16px;color:#16a34a"><b>{edge:.1f}% net edge</b></span>{ann_html}
             &nbsp;&nbsp;<b>{s['poly_title']}</b> &harr; <b>{s['kalshi_title']}</b></td></tr>
         <tr><td style="white-space:nowrap">The trade</td><td>{s['legs']} &nbsp;<span style="color:#888">— exactly one side pays $1 at settlement; you keep ~{edge:.1f}c per $1 after fees</span></td></tr>{exec_html}
         <tr><td>Open</td><td><a href="{s['poly_url']}">Polymarket</a> &nbsp;·&nbsp; <a href="{s['kalshi_url']}">Kalshi</a> &nbsp;<span style="color:#aaa;font-size:12px">(match confidence {s['confidence']}{', independently confirmed' if s['v2_match'] else ''})</span></td></tr>""")
@@ -619,6 +646,8 @@ def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False,
         return 0
     # Re-rank by annualised return now that the AI may have refined settlement dates.
     to_email.sort(key=lambda s: -_settle_horizon(s)[0])
+    # Classify new/improved vs persistent BEFORE state is updated below (#17).
+    labels = _freshness_labels(to_email, state)
 
     # Persist a lean record — the full order-book ladders are large and only
     # needed in-memory for the charts.
@@ -630,7 +659,7 @@ def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False,
         flag = " (new/changed)" if s in fresh else ""
         print(f"[alerter] SIGNAL net={s['net_accurate']*100:.2f}c  {s['poly_title'][:40]!r} <-> {s['kalshi_title'][:40]!r}{flag}")
 
-    subject, html, images = build_email(to_email)
+    subject, html, images = build_email(to_email, labels)
     if dry_run:
         print(f"[alerter] DRY RUN — would email {cfg['recipients']}: {subject} "
               f"({len(to_email)} pairs, {len(images)} charts)")

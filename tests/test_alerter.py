@@ -242,6 +242,29 @@ class AnnualisedRanking(unittest.TestCase):
         self.assertTrue(settle.endswith("-09-01"))  # fell back to contractual
 
 
+class FreshnessLabels(unittest.TestCase):
+    def test_classifies_new_improved_persistent(self):
+        from alerter import _freshness_labels
+        sigs = [
+            {"key": "new1", "net_accurate": 0.05},
+            {"key": "imp1", "net_accurate": 0.08},      # was 0.05 -> +3c improved
+            {"key": "same1", "net_accurate": 0.0505},   # was 0.05 -> within step
+        ]
+        state = {"imp1": {"net": 0.05}, "same1": {"net": 0.05}}
+        labels = _freshness_labels(sigs, state)
+        self.assertEqual(labels.get("new1"), "new")
+        self.assertEqual(labels.get("imp1"), "improved")
+        self.assertNotIn("same1", labels)               # persistent -> no badge
+
+    def test_badge_rendered_in_email(self):
+        sigs = compute_signals([pair(0.38, 0.40, 0.65, 0.68)], min_edge=0.005)
+        key = sigs[0]["key"]
+        _, html, _ = build_email(sigs, {key: "new"})
+        self.assertIn(">NEW<", html)
+        _, html2, _ = build_email(sigs, {})              # no label -> no badge
+        self.assertNotIn(">NEW<", html2)
+
+
 class DegradationAlert(unittest.TestCase):
     _cfg = {"recipients": ["a@b.com"], "from_addr": "x@y.com", "smtp_host": "h",
             "smtp_port": 1, "smtp_user": "u", "smtp_pass": "p"}
