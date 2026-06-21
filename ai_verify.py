@@ -29,7 +29,7 @@ import urllib.request
 _ENDPOINT = "https://api.deepseek.com/chat/completions"
 _MODEL = "deepseek-chat"
 # Bump when _SYSTEM changes so cached verdicts from the old prompt are invalidated.
-_PROMPT_VERSION = "v2-2026-06-22"
+_PROMPT_VERSION = "v3-2026-06-22"
 _CACHE_FILE = pathlib.Path(__file__).resolve().parent / "ai_verify_cache.json"
 _CACHE_TTL_S = 14 * 24 * 3600  # backstop refresh; verdicts are otherwise stable
 _disk: dict | None = None  # lazy-loaded persistent verdict cache
@@ -48,10 +48,17 @@ _SYSTEM = (
     "DIFFERENT contractual expiry/close dates for the SAME event (one uses the "
     "event date, the other a far-future placeholder, or they differ by a day) — "
     "that alone does NOT make them different, so settlement_same must still be "
-    "true. Only set settlement_same=false when the RULES specify genuinely "
-    "different resolution windows or deadlines (e.g. 'by June 30' vs 'by Dec 31', "
-    "or a 2026 cycle vs a 2028 cycle). Give the realistic resolution date — when "
-    "the outcome is actually decided — not the contractual placeholder.\n"
+    "true. A gap of roughly a year between the two contractual expiry dates is "
+    "almost always this placeholder pattern (e.g. one lists 2026-11-03 and the "
+    "other 2027-11-03 for the SAME election/race) — do NOT treat that as a "
+    "different window. Base settlement_same on what the QUESTION TEXT actually "
+    "describes (same named race/contest/threshold/occurrence = same settlement), "
+    "NOT on the expiry dates. Only set settlement_same=false when the RULES or "
+    "question text describe genuinely different occurrences — a different deadline "
+    "stated in the rules ('by June 30' vs 'by Dec 31'), or an explicitly different "
+    "cycle/year in the question itself (e.g. a 2026 race vs a 2028 race). Give the "
+    "realistic resolution date — when the outcome is actually decided — not the "
+    "contractual placeholder.\n"
     "'same' (safe to arbitrage as identical) is true ONLY when same_event AND "
     "settlement_same are both true. Respond with ONLY a JSON object: "
     '{"same_event": bool, "poly_settlement": "YYYY-MM-DD"|null, '
