@@ -35,10 +35,15 @@ _SYSTEM = (
     "Anything that shifts what makes it resolve YES (a sub-event vs the whole, an "
     "emergency/qualified variant, a different person/team/company, a different "
     "threshold or scope) means same_event=false.\n"
-    "2. settlement dates: give each market's implied settlement (resolution) date "
-    "(YYYY-MM-DD, or null if undeterminable), and settlement_same = whether they "
-    "settle by the SAME date / window. A 'by June 30' market and a 'by Dec 31' "
-    "market are NOT the same even if the event matches.\n"
+    "2. settlement: do they resolve on the SAME real-world occurrence / deadline "
+    "AS STATED IN THE MARKET RULES? IMPORTANT: the two exchanges often list "
+    "DIFFERENT contractual expiry/close dates for the SAME event (one uses the "
+    "event date, the other a far-future placeholder, or they differ by a day) — "
+    "that alone does NOT make them different, so settlement_same must still be "
+    "true. Only set settlement_same=false when the RULES specify genuinely "
+    "different resolution windows or deadlines (e.g. 'by June 30' vs 'by Dec 31', "
+    "or a 2026 cycle vs a 2028 cycle). Give the realistic resolution date — when "
+    "the outcome is actually decided — not the contractual placeholder.\n"
     "'same' (safe to arbitrage as identical) is true ONLY when same_event AND "
     "settlement_same are both true. Respond with ONLY a JSON object: "
     '{"same_event": bool, "poly_settlement": "YYYY-MM-DD"|null, '
@@ -100,7 +105,7 @@ def verify_signal(signal: dict, api_key: str | None, **kw) -> dict | None:
         t = signal.get(title_key) or ""
         base = f"{ev} — {t}".strip(" —") if ev and ev != t else t
         c = signal.get(close_key)
-        return f"{base} (market closes no later than {c})" if c else base
+        return f"{base} (contractual expiry, may be a far-future placeholder: {c})" if c else base
     return verify(_txt("poly_title", "poly_event_title", "poly_close"),
                   _txt("kalshi_title", "kalshi_event_title", "kalshi_close"), api_key, **kw)
 
