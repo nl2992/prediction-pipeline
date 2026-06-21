@@ -533,6 +533,36 @@ def send_email(cfg: dict, subject: str, html: str,
         srv.sendmail(cfg["from_addr"], cfg["recipients"], root.as_string())
 
 
+_ALERT_COOLDOWN_S = 3600  # at most one degradation alert per hour (no spam)
+
+
+def _alert_operator(cfg: dict, reason: str, state: dict | None = None) -> None:
+    """Email the operator that the pipeline degraded (e.g. a cycle crash) so silent
+    failures surface. Cooldown via ``_last_alert_ts`` in alert_state.json prevents
+    spam. Best-effort: never raises (an alert failure must not compound the fault)."""
+    try:
+        if not email_configured(cfg):
+            return
+        owns_state = state is None
+        st = load_state() if owns_state else state
+        now = time.time()
+        if now - st.get("_last_alert_ts", 0) < _ALERT_COOLDOWN_S:
+            return
+        subject = f"[Pred-Arb] ALERT — pipeline degraded: {reason[:80]}"
+        html = (f"<p>The arb alerter reported a degradation at "
+                f"{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}:</p>"
+                f"<pre>{reason}</pre>"
+                f"<p>Run <code>python health.py</code> for status. Further alerts are "
+                f"suppressed for {_ALERT_COOLDOWN_S // 60} min.</p>")
+        send_email(cfg, subject, html)
+        st["_last_alert_ts"] = now
+        if owns_state:
+            save_state(st)
+        print(f"[alerter] DEGRADATION ALERT sent: {reason[:80]}", flush=True)
+    except Exception as exc:
+        print(f"[alerter] alert send failed: {exc}", flush=True)
+
+
 # ---------------------------------------------------------------------------
 # Scan cycle
 # ---------------------------------------------------------------------------
@@ -646,6 +676,7 @@ def main() -> None:
                       min_size=args.min_size)
         except Exception as exc:
             print(f"[alerter] CYCLE ERROR: {exc}", flush=True)
+            _alert_operator(cfg, f"CYCLE ERROR: {exc}")
         if args.once:
             break
         time.sleep(args.interval)

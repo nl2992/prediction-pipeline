@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 import unittest
+from unittest.mock import patch
 
 from alerter import build_email, compute_signals, filter_new, signals_to_send, _exec_block, _settle_horizon
 
@@ -239,6 +240,39 @@ class AnnualisedRanking(unittest.TestCase):
              "ai_poly_close": "not-a-date", "ai_kalshi_close": "1999-01-01"}  # unparseable / past
         _ann, _days, settle = _settle_horizon(s)
         self.assertTrue(settle.endswith("-09-01"))  # fell back to contractual
+
+
+class DegradationAlert(unittest.TestCase):
+    _cfg = {"recipients": ["a@b.com"], "from_addr": "x@y.com", "smtp_host": "h",
+            "smtp_port": 1, "smtp_user": "u", "smtp_pass": "p"}
+
+    def test_sends_then_suppressed_within_cooldown(self):
+        from alerter import _alert_operator
+        st = {}
+        with patch("alerter.send_email") as send:
+            _alert_operator(self._cfg, "CYCLE ERROR: boom", state=st)
+            _alert_operator(self._cfg, "CYCLE ERROR: boom again", state=st)  # within cooldown
+        self.assertEqual(send.call_count, 1)               # second suppressed
+        self.assertIn("_last_alert_ts", st)
+
+    def test_resends_after_cooldown(self):
+        from alerter import _alert_operator, _ALERT_COOLDOWN_S
+        st = {"_last_alert_ts": time.time() - _ALERT_COOLDOWN_S - 1}
+        with patch("alerter.send_email") as send:
+            _alert_operator(self._cfg, "CYCLE ERROR: boom", state=st)
+        self.assertEqual(send.call_count, 1)
+
+    def test_noop_when_email_not_configured(self):
+        from alerter import _alert_operator
+        with patch("alerter.email_configured", return_value=False), \
+             patch("alerter.send_email") as send:
+            _alert_operator(self._cfg, "boom", state={})
+        send.assert_not_called()
+
+    def test_never_raises_on_send_failure(self):
+        from alerter import _alert_operator
+        with patch("alerter.send_email", side_effect=OSError("smtp down")):
+            _alert_operator(self._cfg, "boom", state={})    # must not raise
 
 
 class EmailBody(unittest.TestCase):
