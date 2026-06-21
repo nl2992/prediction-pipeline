@@ -30,6 +30,7 @@ alert_config.json
 alert_state.json
 alert_signals.jsonl
 ai_verify.jsonl
+ai_verify_cache.json
 alerter_cron.log
 
 # Catalog cache (runtime, never commit)

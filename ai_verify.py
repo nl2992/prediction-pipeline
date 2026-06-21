@@ -19,12 +19,20 @@ Config (alert_config.json): "deepseek_api_key". CLI: python ai_verify.py "A" "B"
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import pathlib
 import sys
+import time
 import urllib.request
 
 _ENDPOINT = "https://api.deepseek.com/chat/completions"
 _MODEL = "deepseek-chat"
+# Bump when _SYSTEM changes so cached verdicts from the old prompt are invalidated.
+_PROMPT_VERSION = "v2-2026-06-22"
+_CACHE_FILE = pathlib.Path(__file__).resolve().parent / "ai_verify_cache.json"
+_CACHE_TTL_S = 14 * 24 * 3600  # backstop refresh; verdicts are otherwise stable
+_disk: dict | None = None  # lazy-loaded persistent verdict cache
 _SYSTEM = (
     "You are a meticulous prediction-market analyst. You are given two markets "
     "from different exchanges that an automated system believes are the same "
@@ -54,14 +62,51 @@ _SYSTEM = (
 _cache: dict[tuple[str, str], dict] = {}
 
 
+def _disk_key(text_a: str, text_b: str) -> str:
+    return hashlib.sha256(f"{_PROMPT_VERSION}|{text_a}|{text_b}".encode("utf-8")).hexdigest()[:24]
+
+
+def _disk_load() -> dict:
+    global _disk
+    if _disk is None:
+        try:
+            _disk = json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            _disk = {}
+    return _disk
+
+
+def _disk_get(dk: str) -> dict | None:
+    e = _disk_load().get(dk)
+    if e and (time.time() - e.get("ts", 0)) < _CACHE_TTL_S:
+        return e.get("v")
+    return None
+
+
+def _disk_put(dk: str, verdict: dict) -> None:
+    try:
+        d = _disk_load()
+        d[dk] = {"v": verdict, "ts": time.time()}
+        _CACHE_FILE.write_text(json.dumps(d), encoding="utf-8")
+    except Exception:
+        pass  # cache is best-effort; never break verification
+
+
 def verify(text_a: str, text_b: str, api_key: str | None,
            model: str = _MODEL, timeout: float = 20.0) -> dict | None:
-    """Return {"same","settlement_date","reason"} or None on any failure / no key."""
+    """Return the verdict dict or None on any failure / no key. Verdicts are cached
+    in-process AND on disk (keyed on prompt-version + the two market texts) so the
+    every-20-min scan does not re-call DeepSeek for unchanged pairs."""
     if not api_key:
         return None
     ck = (text_a, text_b)
     if ck in _cache:
         return _cache[ck]
+    dk = _disk_key(text_a, text_b)
+    cached = _disk_get(dk)
+    if cached is not None:
+        _cache[ck] = cached
+        return cached
     body = json.dumps({
         "model": model,
         "temperature": 0,
@@ -91,6 +136,7 @@ def verify(text_a: str, text_b: str, api_key: str | None,
             "reason": str(v.get("reason", ""))[:240],
         }
         _cache[ck] = out
+        _disk_put(dk, out)
         return out
     except Exception:
         return None  # fail-open

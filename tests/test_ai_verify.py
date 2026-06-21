@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import io
 import json
+import os
+import pathlib
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -23,6 +26,34 @@ def _fake_resp(content: dict):
 class Verify(unittest.TestCase):
     def setUp(self):
         ai_verify._cache.clear()
+        # Isolate the disk cache: empty in-memory map + a throwaway file path.
+        ai_verify._disk = {}
+        self._orig_cache_file = ai_verify._CACHE_FILE
+        fd, path = tempfile.mkstemp(suffix=".json"); os.close(fd); os.unlink(path)
+        ai_verify._CACHE_FILE = pathlib.Path(path)
+
+    def tearDown(self):
+        ai_verify._CACHE_FILE = self._orig_cache_file
+        ai_verify._disk = None
+
+    def test_disk_cache_avoids_second_api_call(self):
+        resp = {"same_event": True, "settlement_same": True, "poly_settlement": None,
+                "kalshi_settlement": None, "same": True, "reason": "x"}
+        with patch("urllib.request.urlopen", return_value=_fake_resp(resp)) as m:
+            ai_verify.verify("a", "b", api_key="k")
+            ai_verify._cache.clear()              # drop in-process cache; force disk path
+            ai_verify.verify("a", "b", api_key="k")
+        self.assertEqual(m.call_count, 1)         # 2nd call served from disk, no API
+
+    def test_prompt_version_change_invalidates(self):
+        resp = {"same_event": True, "settlement_same": True, "poly_settlement": None,
+                "kalshi_settlement": None, "same": True, "reason": "x"}
+        with patch("urllib.request.urlopen", return_value=_fake_resp(resp)) as m:
+            ai_verify.verify("a", "b", api_key="k")
+            ai_verify._cache.clear()
+            with patch.object(ai_verify, "_PROMPT_VERSION", "different"):
+                ai_verify.verify("a", "b", api_key="k")  # new key -> miss -> API again
+        self.assertEqual(m.call_count, 2)
 
     def test_no_key_returns_none(self):
         self.assertIsNone(ai_verify.verify("a", "b", api_key=None))
