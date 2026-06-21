@@ -41,34 +41,51 @@ def _pair(v: dict) -> tuple[str, str]:
     return (v.get("poly") or "", v.get("kalshi") or "")
 
 
-def summarize(verdicts: list[dict]) -> dict:
-    """Aggregate the verdict rows into totals + recurring flagged pairs.
+# Known test sentinels written before the test-isolation fix (#5) — never real pairs.
+_TEST_SENTINELS = frozenset({"PHANTOM", "REAL", "A", "B", "C", "D"})
 
-    Returns: total, unique_pairs, n_confirmed, n_flagged, pct_confirmed,
-    flagged_pairs (list of {poly, kalshi, count, reason(latest), last_ts} sorted
-    by count desc then most recent), recent_flags (latest flags, newest first)."""
+
+def _is_test(key: tuple[str, str]) -> bool:
+    return key[0] in _TEST_SENTINELS
+
+
+def summarize(verdicts: list[dict]) -> dict:
+    """Aggregate the verdict rows into totals + CURRENTLY flagged pairs.
+
+    A pair whose LATEST verdict is same=True is resolved and must not be reported as
+    a current matcher false-positive — counting all-time flags let fixed pairs (e.g.
+    House races resolved by the v3 prompt) dominate (#12). So we key off each pair's
+    latest verdict by ts and only list pairs still flagged, with their historical
+    flag count for context. Returns: total, unique_pairs, n_confirmed, n_flagged,
+    pct_confirmed, flagged_pairs ({poly, kalshi, count, reason, last_ts}, currently
+    flagged only), recent_flags (latest flagged verdicts, newest first)."""
     total = len(verdicts)
     pairs: dict[tuple[str, str], dict] = {}
     n_confirmed = 0
-    flagged_latest: dict[tuple[str, str], dict] = {}
     for v in verdicts:
         key = _pair(v)
-        pairs.setdefault(key, {})
-        if v.get("same"):
+        e = pairs.setdefault(key, {"poly": key[0], "kalshi": key[1], "count": 0,
+                                   "latest_ts": "", "latest_same": None, "reason": ""})
+        same = bool(v.get("same"))
+        if same:
             n_confirmed += 1
         else:
-            e = flagged_latest.get(key, {"poly": key[0], "kalshi": key[1], "count": 0})
             e["count"] += 1
-            # rows are appended chronologically, so the last seen is the latest
-            e["reason"] = v.get("reason", "")
-            e["last_ts"] = v.get("ts", "")
-            flagged_latest[key] = e
+        ts = v.get("ts", "")
+        if ts >= e["latest_ts"]:          # rows are ~chronological; track the latest
+            e["latest_ts"] = ts
+            e["latest_same"] = same
+            e["last_ts"] = ts
+            if not same:
+                e["reason"] = v.get("reason", "")
     n_flagged = total - n_confirmed
-    # most-frequently-flagged first; break ties newest-first
-    flagged_pairs = sorted(flagged_latest.values(),
-                           key=lambda e: (e["count"], e.get("last_ts", "")), reverse=True)
-    recent_flags = sorted((v for v in verdicts if not v.get("same")),
-                          key=lambda v: v.get("ts", ""), reverse=True)
+    # Currently flagged = latest verdict is different, excluding test sentinels.
+    flagged_pairs = sorted(
+        (e for k, e in pairs.items() if e["latest_same"] is False and not _is_test(k)),
+        key=lambda e: (e["count"], e.get("last_ts", "")), reverse=True)
+    recent_flags = sorted(
+        (v for v in verdicts if not v.get("same") and not _is_test(_pair(v))),
+        key=lambda v: v.get("ts", ""), reverse=True)
     return {
         "total": total,
         "unique_pairs": len(pairs),
@@ -91,7 +108,7 @@ def format_report(s: dict, recent_n: int = 8) -> str:
     fp = s["flagged_pairs"]
     if fp:
         lines.append("")
-        lines.append("Recurring flagged pairs (likely matcher false-positives):")
+        lines.append("Currently flagged pairs (latest verdict differs — likely matcher false-positives):")
         for e in fp:
             lines.append(f"  [{e['count']}x] {e['poly'][:40]} <-> {e['kalshi'][:40]}")
             if e.get("reason"):
