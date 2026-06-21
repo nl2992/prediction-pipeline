@@ -29,11 +29,23 @@ class Verify(unittest.TestCase):
 
     def test_parses_verdict(self):
         with patch("urllib.request.urlopen",
-                   return_value=_fake_resp({"same": True, "settlement_date": "2026-11-03",
-                                            "reason": "same race"})):
+                   return_value=_fake_resp({"same_event": True, "settlement_same": True,
+                                            "poly_settlement": "2026-11-03",
+                                            "kalshi_settlement": "2026-11-03",
+                                            "same": True, "reason": "same race"})):
             v = ai_verify.verify("Dem KS-03", "Will Democratic win KS-03?", api_key="k")
         self.assertEqual(v["same"], True)
-        self.assertEqual(v["settlement_date"], "2026-11-03")
+        self.assertEqual(v["poly_settlement"], "2026-11-03")
+        self.assertTrue(v["same_event"] and v["settlement_same"])
+
+    def test_different_settlement_date_not_same(self):
+        with patch("urllib.request.urlopen",
+                   return_value=_fake_resp({"same_event": True, "settlement_same": False,
+                                            "poly_settlement": "2026-06-30",
+                                            "kalshi_settlement": "2026-12-31",
+                                            "same": False, "reason": "different windows"})):
+            v = ai_verify.verify("X by Jun 30", "X by Dec 31", api_key="k")
+        self.assertFalse(v["same"])  # same event, different settlement -> not arbable as identical
 
     def test_api_error_fails_open_none(self):
         with patch("urllib.request.urlopen", side_effect=OSError("boom")):

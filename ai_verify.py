@@ -28,16 +28,22 @@ _MODEL = "deepseek-chat"
 _SYSTEM = (
     "You are a meticulous prediction-market analyst. You are given two markets "
     "from different exchanges that an automated system believes are the same "
-    "contract for a cross-exchange arbitrage. Decide whether they resolve on the "
-    "EXACTLY SAME underlying outcome: same event, same numeric threshold/strike, "
-    "same resolution source/criteria, and the SAME settlement timing/window. "
-    "Markets that look similar but differ in any of these (different date or "
-    "window, different threshold, narrower/broader scope, a sub-event vs the "
-    "whole, an emergency/qualified variant, a different person/team/company) are "
-    "NOT the same — answer false. Also give the realistic settlement (resolution) "
-    "date if determinable. Respond with ONLY a JSON object: "
-    '{"same": true|false, "settlement_date": "YYYY-MM-DD" or null, '
-    '"reason": "<one concise sentence>"}.'
+    "contract for a cross-exchange arbitrage. Judge strictly from each market's "
+    "rules/description. Determine TWO things:\n"
+    "1. same_event: do they resolve YES/NO on the EXACTLY SAME underlying event — "
+    "same resolution criteria/source, same numeric threshold/strike, same scope? "
+    "Anything that shifts what makes it resolve YES (a sub-event vs the whole, an "
+    "emergency/qualified variant, a different person/team/company, a different "
+    "threshold or scope) means same_event=false.\n"
+    "2. settlement dates: give each market's implied settlement (resolution) date "
+    "(YYYY-MM-DD, or null if undeterminable), and settlement_same = whether they "
+    "settle by the SAME date / window. A 'by June 30' market and a 'by Dec 31' "
+    "market are NOT the same even if the event matches.\n"
+    "'same' (safe to arbitrage as identical) is true ONLY when same_event AND "
+    "settlement_same are both true. Respond with ONLY a JSON object: "
+    '{"same_event": bool, "poly_settlement": "YYYY-MM-DD"|null, '
+    '"kalshi_settlement": "YYYY-MM-DD"|null, "settlement_same": bool, '
+    '"same": bool, "reason": "<one concise sentence>"}.'
 )
 
 _cache: dict[tuple[str, str], dict] = {}
@@ -73,7 +79,10 @@ def verify(text_a: str, text_b: str, api_key: str | None,
         v = json.loads(content)
         out = {
             "same": bool(v.get("same")),
-            "settlement_date": (v.get("settlement_date") or None),
+            "same_event": bool(v.get("same_event")),
+            "settlement_same": bool(v.get("settlement_same")),
+            "poly_settlement": (v.get("poly_settlement") or None),
+            "kalshi_settlement": (v.get("kalshi_settlement") or None),
             "reason": str(v.get("reason", ""))[:240],
         }
         _cache[ck] = out
