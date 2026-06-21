@@ -252,6 +252,23 @@ class EmailBody(unittest.TestCase):
         self.assertIn("https://kalshi.com/markets/kxser/", html)
         self.assertIn("net edge", html)
 
+    def test_one_bad_book_does_not_crash_whole_email(self) -> None:
+        # A signal whose book makes exec rendering raise must degrade to text-only
+        # (no exec block) WITHOUT crashing build_email and losing every alert (#7).
+        good = pair(0.38, 0.40, 0.65, 0.68)
+        good["poly_book"] = {"bids": [[0.30, 100]], "asks": [[0.40, 100]]}
+        good["kalshi_book"] = {"bids": [[0.65, 200]], "asks": [[0.95, 100]]}
+        bad = pair(0.30, 0.45, 0.60, 0.58, poly_id="bad", kalshi_ticker="bad",
+                   poly_title="BAD pair?", poly_slug="bad-market")
+        bad["poly_book"] = {"bids": [None], "asks": [None]}  # raises inside _ob
+        bad["kalshi_book"] = {"bids": [[0.60, 100]], "asks": [[0.95, 100]]}
+        sigs = compute_signals([good, bad], min_edge=0.005)
+        self.assertEqual(len(sigs), 2)
+        subject, html, images = build_email(sigs)        # must not raise
+        self.assertIn("[Pred-Arb]", subject)
+        for s in sigs:                                    # both pairs still present
+            self.assertIn(s["poly_title"], html)
+
     def test_books_produce_exec_block_and_inline_chart(self) -> None:
         p = pair(0.38, 0.40, 0.65, 0.68)
         p["poly_book"] = {"bids": [[0.30, 100]], "asks": [[0.40, 100], [0.45, 100]]}

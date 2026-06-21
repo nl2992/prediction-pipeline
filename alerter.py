@@ -405,7 +405,13 @@ def _exec_block(s: dict) -> tuple[str, bytes | None, str | None]:
         from arb_charts import executable_summary, make_arb_chart, BUDGETS
     except Exception:
         return "", None, None
-    summ = executable_summary(s)
+    # Never let one signal's book/exec quirk crash build_email and lose the WHOLE
+    # email — degrade this pair to text-only (no exec block) on any failure (#7).
+    try:
+        summ = executable_summary(s)
+    except Exception as exc:
+        print(f"[alerter] exec-block skipped for {s.get('poly_title','?')[:30]!r}: {exc}", flush=True)
+        return "", None, None
     if not summ:
         return "", None, None
     direction, res = summ

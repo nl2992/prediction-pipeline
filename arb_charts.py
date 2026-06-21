@@ -26,11 +26,17 @@ _DIR_FROM_TEXT = {
 }
 
 
+def _level(lvl) -> PriceLevel:
+    # Tolerate book levels that carry extra fields beyond [price, size] (some
+    # multi-outcome markets append e.g. an order count) — take the first two.
+    return PriceLevel(lvl[0], lvl[1])
+
+
 def _ob(d: dict | None) -> OrderBook:
     d = d or {}
     return OrderBook(
-        bids=[PriceLevel(p, s) for p, s in d.get("bids", [])],
-        asks=[PriceLevel(p, s) for p, s in d.get("asks", [])],
+        bids=[_level(l) for l in d.get("bids", [])],
+        asks=[_level(l) for l in d.get("asks", [])],
     )
 
 

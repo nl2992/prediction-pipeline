@@ -39,6 +39,18 @@ class ExecutableSummary(unittest.TestCase):
         self.assertIsNone(executable_summary(
             {"direction": "buy YES on Polymarket + buy NO on Kalshi"}))
 
+    def test_tolerates_book_levels_with_extra_fields(self):
+        # Book rows that carry a 3rd field (e.g. order count) must not crash with
+        # "too many values to unpack (expected 2)" — issue #7.
+        s = {
+            "direction": "buy YES on Polymarket + buy NO on Kalshi",
+            "poly_book": {"bids": [[0.30, 100, 5]], "asks": [[0.40, 100, 3]]},
+            "kalshi_book": {"bids": [[0.50, 150, 9]], "asks": [[0.95, 100, 1]]},
+        }
+        direction, res = executable_summary(s)
+        self.assertEqual(direction, "poly_yes__kalshi_no")
+        self.assertGreater(res["max"].contracts, 0)
+
     def test_budget_tier_far_below_unbounded_max(self):
         # The deep-book longshot: unbounded max is huge; the $5k/market tier is a
         # small, realistic fraction. The email headline must use the latter.
