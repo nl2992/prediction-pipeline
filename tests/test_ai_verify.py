@@ -91,6 +91,20 @@ class Verify(unittest.TestCase):
 
 
 class Gate(unittest.TestCase):
+    def setUp(self):
+        # _ai_verify_gate appends verdicts to BASE/ai_verify.jsonl — redirect BASE
+        # to a temp dir so the test suite never pollutes the real verdict log (#5).
+        import alerter
+        self._alerter = alerter
+        self._orig_base = alerter.BASE
+        self._tmp = tempfile.mkdtemp()
+        alerter.BASE = pathlib.Path(self._tmp)
+
+    def tearDown(self):
+        self._alerter.BASE = self._orig_base
+        import shutil
+        shutil.rmtree(self._tmp, ignore_errors=True)
+
     def _sig(self, t):
         return {"poly_title": t, "kalshi_title": t + " K", "net_accurate": 0.05}
 
