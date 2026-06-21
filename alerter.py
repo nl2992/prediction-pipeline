@@ -245,6 +245,10 @@ def compute_signals(pairs: list[dict], min_edge: float,
             # locked until BOTH legs resolve, so the later date drives the horizon.
             "poly_close": p.get("poly_close"),
             "kalshi_close": p.get("kalshi_close"),
+            # Event-level titles give the AI verifier full context (PM market
+            # titles are often terse, e.g. just "Freeport-McMoRan").
+            "poly_event_title": p.get("poly_event_title"),
+            "kalshi_event_title": p.get("kalshi_event_title"),
             # Full ladders for the executable-depth charts (top-30/side from
             # discover); stripped before persisting to the signal log.
             "poly_book": p.get("poly_book"),
@@ -319,6 +323,46 @@ def _settle_horizon(s: dict) -> tuple[float, int | None, str | None]:
         days = max((settle - datetime.now(timezone.utc)).days, 1)
         return net * 365.0 / days, days, settle.date().isoformat()
     return net, None, None  # unknown horizon -> rank as if ~1 year, hide the field
+
+
+def _ai_verify_gate(to_email: list[dict], cfg: dict) -> list[dict]:
+    """Optional DeepSeek settlement-equivalence check on the about-to-email pairs.
+
+    No-op unless ``deepseek_api_key`` is configured. ``ai_verify_mode``:
+      * "shadow" (default) — log each verdict, drop nothing (safe rollout).
+      * "enforce"          — drop pairs the AI judges to settle DIFFERENTLY.
+    Fail-open: a None verdict (API error / no key) keeps the pair. Every verdict is
+    appended to ai_verify.jsonl for auditing.
+    """
+    api_key = cfg.get("deepseek_api_key")
+    if not api_key:
+        return to_email
+    mode = cfg.get("ai_verify_mode", "shadow")
+    try:
+        from ai_verify import verify_signal
+    except Exception:
+        return to_email
+    kept = []
+    for s in to_email:
+        v = verify_signal(s, api_key)
+        if v is None:                       # API error/timeout → fail-open, keep
+            kept.append(s)
+            continue
+        try:
+            with (BASE / "ai_verify.jsonl").open("a", encoding="utf-8") as f:
+                f.write(json.dumps({"ts": datetime.now(timezone.utc).isoformat(),
+                                    "poly": s.get("poly_title"), "kalshi": s.get("kalshi_title"),
+                                    "net": s.get("net_accurate"), **v}) + "\n")
+        except Exception:
+            pass
+        if v["same"]:
+            kept.append(s)
+        else:
+            tag = "AI-DROP" if mode == "enforce" else "AI-FLAG(shadow)"
+            print(f"[alerter] {tag}: {s['poly_title'][:36]!r} <-> {s['kalshi_title'][:36]!r} — {v['reason']}", flush=True)
+            if mode != "enforce":
+                kept.append(s)            # shadow: keep, just logged/flagged
+    return kept
 
 
 def _exec_block(s: dict) -> tuple[str, bytes | None, str | None]:
@@ -477,6 +521,13 @@ def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False,
     # Trigger on change; email the richest pairs with a real net edge ABOVE
     # MIN_NET_EMAIL (>3%). `fresh` is only used to decide whether to send this cycle.
     to_email, fresh = signals_to_send(signals, state, realert_hours, min_net=MIN_NET_EMAIL)
+    if not to_email:
+        return 0
+
+    # AI settlement-equivalence gate (DeepSeek). Off unless deepseek_api_key is set.
+    # mode "shadow" (default) = log the verdict only; "enforce" = drop pairs the AI
+    # judges to settle differently. Fail-open: an API error returns None → keep.
+    to_email = _ai_verify_gate(to_email, cfg)
     if not to_email:
         return 0
 
