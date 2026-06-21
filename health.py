@@ -73,10 +73,22 @@ def summarize_log(lines: list[str]) -> dict:
     }
 
 
+def overall_ok(s: dict) -> bool:
+    """True unless there's a real problem. DEGRADED on: verifier key absent, emails
+    with no heartbeat (#8 class), a recent cycle error, or NO scan seen at all
+    (pipeline not running). Normal quiet (idle verifier / no recent email within the
+    realert window) stays OK — those aren't faults."""
+    return not (s.get("key_absent")
+                or s.get("emails_without_heartbeat")
+                or s.get("recent_cycle_error") is not None
+                or s.get("last_scan") is None)
+
+
 def format_health(s: dict, verdicts_count: int, verdicts_mtime: str | None) -> str:
     def mark(ok: bool) -> str:
         return "OK  " if ok else "WARN"
-    lines = ["Arb alerter - health", "=" * 40]
+    status = "OK" if overall_ok(s) else "DEGRADED"
+    lines = ["Arb alerter - health", "=" * 40, f"STATUS: {status}", "-" * 40]
     lines.append(f"[{mark(bool(s['last_scan']))}] last scan: {s['last_scan'] or 'none seen'}")
     if s["last_email_subject"]:
         since = s["scans_since_email"]
@@ -115,3 +127,4 @@ if __name__ == "__main__":
     summary = summarize_log(_tail(log_path, _TAIL_LINES))
     n, mtime = _verdicts_info()
     print(format_health(summary, n, mtime))
+    sys.exit(0 if overall_ok(summary) else 1)  # scriptable: 0 OK, 1 DEGRADED

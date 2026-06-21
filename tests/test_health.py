@@ -79,6 +79,33 @@ class FormatHealth(unittest.TestCase):
         self.assertIn("verifier:", out)
         self.assertIn("ai_verify.jsonl: 194 rows", out)
 
+    def test_overall_ok_on_healthy(self):
+        s = health.summarize_log([
+            "[alerter] scan done in 800s — 100 survivable arb(s)",
+            "[alerter] AI verify: mode=enforce, key=present, 9 checked, 9 confirmed, 0 flagged",
+            "[alerter] EMAILED ['a@b.com']: [Pred-Arb] 9 arbs (9 pairs)",
+        ])
+        self.assertTrue(health.overall_ok(s))
+        self.assertIn("STATUS: OK", health.format_health(s, 1, "t"))
+
+    def test_overall_ok_on_normal_quiet(self):
+        # A scan but no email/heartbeat in window (quiet realert period) is NOT degraded.
+        s = health.summarize_log(["[alerter] scan done in 800s — 100 survivable arb(s)"])
+        self.assertTrue(health.overall_ok(s))
+
+    def test_degraded_on_key_absent(self):
+        s = health.summarize_log([
+            "[alerter] scan done in 800s — 100 survivable arb(s)",
+            "[alerter] AI verify: mode=enforce, key=ABSENT — verification SKIPPED",
+            "[alerter] EMAILED ['a@b.com']: [Pred-Arb] 9 arbs (9 pairs)",
+        ])
+        self.assertFalse(health.overall_ok(s))
+        self.assertIn("STATUS: DEGRADED", health.format_health(s, 1, "t"))
+
+    def test_degraded_on_recent_cycle_error_and_no_scan(self):
+        self.assertFalse(health.overall_ok(health.summarize_log(["[alerter] CYCLE ERROR: boom"])))
+        self.assertFalse(health.overall_ok(health.summarize_log([])))  # no scan at all
+
     def test_idle_when_no_heartbeat_and_no_email(self):
         # No email-worthy cycle in the window -> verifier idle, NOT a warning.
         s = health.summarize_log(["[alerter] scan done in 800s — 100 survivable arb(s)"])
