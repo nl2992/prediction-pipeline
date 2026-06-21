@@ -65,7 +65,8 @@ def summarize(verdicts: list[dict]) -> dict:
     for v in verdicts:
         key = _pair(v)
         e = pairs.setdefault(key, {"poly": key[0], "kalshi": key[1], "count": 0,
-                                   "latest_ts": "", "latest_same": None, "reason": ""})
+                                   "latest_ts": "", "latest_same": None,
+                                   "latest_same_event": None, "reason": ""})
         same = bool(v.get("same"))
         if same:
             n_confirmed += 1
@@ -75,6 +76,7 @@ def summarize(verdicts: list[dict]) -> dict:
         if ts >= e["latest_ts"]:          # rows are ~chronological; track the latest
             e["latest_ts"] = ts
             e["latest_same"] = same
+            e["latest_same_event"] = v.get("same_event")
             e["last_ts"] = ts
             if not same:
                 e["reason"] = v.get("reason", "")
@@ -83,6 +85,11 @@ def summarize(verdicts: list[dict]) -> dict:
     flagged_pairs = sorted(
         (e for k, e in pairs.items() if e["latest_same"] is False and not _is_test(k)),
         key=lambda e: (e["count"], e.get("last_ts", "")), reverse=True)
+    # Partition by failure mode (both fields are in the verdict log): a different
+    # underlying event is a MATCHER false-positive; same event but different
+    # settlement is a CORRECT enforce drop, not a matcher bug (#14).
+    matcher_false_positives = [e for e in flagged_pairs if e["latest_same_event"] is False]
+    settlement_mismatches = [e for e in flagged_pairs if e["latest_same_event"] is not False]
     recent_flags = sorted(
         (v for v in verdicts if not v.get("same") and not _is_test(_pair(v))),
         key=lambda v: v.get("ts", ""), reverse=True)
@@ -93,6 +100,8 @@ def summarize(verdicts: list[dict]) -> dict:
         "n_flagged": n_flagged,
         "pct_confirmed": (100.0 * n_confirmed / total) if total else 0.0,
         "flagged_pairs": flagged_pairs,
+        "matcher_false_positives": matcher_false_positives,
+        "settlement_mismatches": settlement_mismatches,
         "recent_flags": recent_flags,
     }
 
@@ -105,14 +114,19 @@ def format_report(s: dict, recent_n: int = 8) -> str:
         f"confirmed same  : {s['n_confirmed']}  ({s['pct_confirmed']:.0f}%)",
         f"flagged different: {s['n_flagged']}",
     ]
-    fp = s["flagged_pairs"]
-    if fp:
+    def _group(title: str, pairs: list[dict]) -> None:
+        if not pairs:
+            return
         lines.append("")
-        lines.append("Currently flagged pairs (latest verdict differs — likely matcher false-positives):")
-        for e in fp:
+        lines.append(title)
+        for e in pairs:
             lines.append(f"  [{e['count']}x] {e['poly'][:40]} <-> {e['kalshi'][:40]}")
             if e.get("reason"):
                 lines.append(f"        reason: {e['reason'][:90]}")
+    _group("Different-event pairs (MATCHER false-positives — fix upstream):",
+           s["matcher_false_positives"])
+    _group("Same-event, different-settlement (correct enforce drops, not matcher bugs):",
+           s["settlement_mismatches"])
     rf = s["recent_flags"][:recent_n]
     if rf:
         lines.append("")

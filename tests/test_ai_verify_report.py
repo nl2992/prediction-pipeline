@@ -53,6 +53,20 @@ class Summarize(unittest.TestCase):
         self.assertEqual([e["poly"] for e in fp], ["Race2"])   # Race1 resolved -> dropped
         self.assertEqual(fp[0]["reason"], "once")
 
+    def test_partition_by_failure_mode(self):
+        rows = [
+            {"ts": "2026-06-02T00:00:00", "poly": "BRICS q", "kalshi": "OPEC q",
+             "same": False, "same_event": False, "settlement_same": True, "reason": "diff orgs"},
+            {"ts": "2026-06-02T00:00:00", "poly": "Bill X", "kalshi": "Bill X k",
+             "same": False, "same_event": True, "settlement_same": False, "reason": "diff dates"},
+        ]
+        s = r.summarize(rows)
+        self.assertEqual([e["poly"] for e in s["matcher_false_positives"]], ["BRICS q"])
+        self.assertEqual([e["poly"] for e in s["settlement_mismatches"]], ["Bill X"])
+        out = r.format_report(s)
+        self.assertIn("MATCHER false-positives", out)
+        self.assertIn("correct enforce drops", out)
+
     def test_test_sentinels_excluded(self):
         rows = [
             {"ts": "2026-06-02T00:00:00", "poly": "PHANTOM", "kalshi": "PHANTOM K", "same": False, "reason": "r"},
@@ -79,10 +93,11 @@ class Summarize(unittest.TestCase):
 
 class FormatReport(unittest.TestCase):
     def test_renders_without_error(self):
-        s = r.summarize([{"poly": "Real Race", "kalshi": "RRk", "same": False, "reason": "diff windows", "ts": "2026-06-02T00:00:00"}])
+        s = r.summarize([{"poly": "Real Race", "kalshi": "RRk", "same": False,
+                          "same_event": False, "reason": "diff windows", "ts": "2026-06-02T00:00:00"}])
         out = r.format_report(s)
         self.assertIn("verdict-log digest", out)
-        self.assertIn("Currently flagged pairs", out)
+        self.assertIn("MATCHER false-positives", out)
         self.assertIn("diff windows", out)
 
 
