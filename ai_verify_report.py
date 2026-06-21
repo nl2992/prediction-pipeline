@@ -11,9 +11,26 @@ CLI: python ai_verify_report.py [path-to-ai_verify.jsonl]
 """
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import pathlib
 import sys
+
+_STALE_HOURS_DEFAULT = 12.0  # ~two 6h realert cycles without a re-flag => inactive
+
+
+def _hours_since(ts: str, now: _dt.datetime) -> float | None:
+    """Hours between an ISO ts and ``now`` (UTC). None if ts is missing/unparseable
+    so callers can fail safe (never hide a possibly-active flag)."""
+    if not ts:
+        return None
+    try:
+        d = _dt.datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=_dt.timezone.utc)
+        return (now - d).total_seconds() / 3600.0
+    except ValueError:
+        return None
 
 _LOG = pathlib.Path(__file__).resolve().parent / "ai_verify.jsonl"
 
@@ -49,7 +66,8 @@ def _is_test(key: tuple[str, str]) -> bool:
     return key[0] in _TEST_SENTINELS
 
 
-def summarize(verdicts: list[dict]) -> dict:
+def summarize(verdicts: list[dict], now: _dt.datetime | None = None,
+              stale_hours: float = _STALE_HOURS_DEFAULT) -> dict:
     """Aggregate the verdict rows into totals + CURRENTLY flagged pairs.
 
     A pair whose LATEST verdict is same=True is resolved and must not be reported as
@@ -81,10 +99,20 @@ def summarize(verdicts: list[dict]) -> dict:
             if not same:
                 e["reason"] = v.get("reason", "")
     n_flagged = total - n_confirmed
-    # Currently flagged = latest verdict is different, excluding test sentinels.
-    flagged_pairs = sorted(
-        (e for k, e in pairs.items() if e["latest_same"] is False and not _is_test(k)),
-        key=lambda e: (e["count"], e.get("last_ts", "")), reverse=True)
+    now = now or _dt.datetime.now(_dt.timezone.utc)
+    # Currently flagged = latest verdict is different, excluding test sentinels AND
+    # stale ghosts: a pair fixed upstream (e.g. by the matcher, #13) stops being
+    # re-verified, so its last flag recedes; once older than stale_hours treat it as
+    # inactive and drop it (#15). Unparseable ts -> kept (fail safe).
+    flagged_pairs = []
+    for k, e in pairs.items():
+        if e["latest_same"] is not False or _is_test(k):
+            continue
+        e["hours_ago"] = _hours_since(e.get("last_ts", ""), now)
+        if e["hours_ago"] is not None and e["hours_ago"] > stale_hours:
+            continue
+        flagged_pairs.append(e)
+    flagged_pairs.sort(key=lambda e: (e["count"], e.get("last_ts", "")), reverse=True)
     # Partition by failure mode (both fields are in the verdict log): a different
     # underlying event is a MATCHER false-positive; same event but different
     # settlement is a CORRECT enforce drop, not a matcher bug (#14).
@@ -120,7 +148,9 @@ def format_report(s: dict, recent_n: int = 8) -> str:
         lines.append("")
         lines.append(title)
         for e in pairs:
-            lines.append(f"  [{e['count']}x] {e['poly'][:40]} <-> {e['kalshi'][:40]}")
+            ago = e.get("hours_ago")
+            seen = f", last {ago:.0f}h ago" if isinstance(ago, (int, float)) else ""
+            lines.append(f"  [{e['count']}x{seen}] {e['poly'][:40]} <-> {e['kalshi'][:40]}")
             if e.get("reason"):
                 lines.append(f"        reason: {e['reason'][:90]}")
     _group("Different-event pairs (MATCHER false-positives — fix upstream):",
