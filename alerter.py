@@ -347,17 +347,23 @@ def _ai_verify_gate(to_email: list[dict], cfg: dict) -> list[dict]:
     because the verifier misbehaved (issue #1).
     """
     # Key lives ONLY in the DEEPSEEK_API_KEY env var (never in the repo/config).
-    api_key = os.environ.get("DEEPSEEK_API_KEY")
-    if not api_key:
-        return to_email
+    # resolve_api_key adds a Windows registry fallback because the scheduled task's
+    # fresh processes don't inherit a setx'd User env var into os.environ (#8).
     mode = cfg.get("ai_verify_mode", "shadow")
     try:
-        from ai_verify import verify_signal
+        from ai_verify import verify_signal, resolve_api_key
     except Exception:
+        return to_email
+    api_key = resolve_api_key()
+    if not api_key:
+        # Heartbeat: make the silent no-op visible — enforce degrades to keep-all.
+        print(f"[alerter] AI verify: mode={mode}, key=ABSENT — verification SKIPPED "
+              f"({len(to_email)} pairs kept as-is)", flush=True)
         return to_email
 
     AI_MAX_DROP_FRACTION = 0.60
     drop_ids: set[int] = set()
+    n_confirmed = 0
     for s in to_email:
         v = verify_signal(s, api_key)
         if v is None:                       # API error/timeout → fail-open, keep
@@ -374,6 +380,7 @@ def _ai_verify_gate(to_email: list[dict], cfg: dict) -> list[dict]:
         s["ai_same"] = bool(v["same"])
         s["ai_reason"] = v.get("reason", "")
         if v["same"]:
+            n_confirmed += 1
             # Attach the AI's implied settlement dates so _settle_horizon can use
             # them for a more accurate annualised return than the contractual close.
             if v.get("poly_settlement"):
@@ -385,6 +392,9 @@ def _ai_verify_gate(to_email: list[dict], cfg: dict) -> list[dict]:
             tag = "AI-DROP" if mode == "enforce" else "AI-FLAG(shadow)"
             print(f"[alerter] {tag}: {s['poly_title'][:36]!r} <-> {s['kalshi_title'][:36]!r} — {v['reason']}", flush=True)
 
+    # Per-cycle heartbeat so the verifier's activity is always visible in the log.
+    print(f"[alerter] AI verify: mode={mode}, key=present, {len(to_email)} checked, "
+          f"{n_confirmed} confirmed, {len(drop_ids)} flagged", flush=True)
     if mode != "enforce" or not drop_ids:
         return to_email                      # shadow (or nothing flagged) → keep all
     if len(drop_ids) > AI_MAX_DROP_FRACTION * len(to_email):

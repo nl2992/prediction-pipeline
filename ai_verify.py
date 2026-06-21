@@ -21,10 +21,34 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import pathlib
 import sys
 import time
 import urllib.request
+
+
+def resolve_api_key() -> str | None:
+    """Return the DeepSeek key from the env, with a Windows User-registry fallback.
+
+    A freshly spawned process (e.g. each Task Scheduler run of the alerter) does
+    NOT inherit a setx'd User env var into os.environ, so reading os.environ alone
+    left the verifier silently inert in production (#8). setx persists the var to
+    HKCU\\Environment, so fall back to reading it there. This is still just the env
+    var — nothing is written to the repo.
+    """
+    key = os.environ.get("DEEPSEEK_API_KEY")
+    if key:
+        return key
+    if sys.platform == "win32":
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as k:
+                val, _ = winreg.QueryValueEx(k, "DEEPSEEK_API_KEY")
+            return val or None
+        except Exception:
+            return None
+    return None
 
 _ENDPOINT = "https://api.deepseek.com/chat/completions"
 _MODEL = "deepseek-chat"
@@ -167,8 +191,7 @@ if __name__ == "__main__":
     if len(sys.argv) < 3:
         print('usage: python ai_verify.py "market A text" "market B text"')
         raise SystemExit(2)
-    import os
-    _key = os.environ.get("DEEPSEEK_API_KEY")
+    _key = resolve_api_key()
     if not _key:
         print("Set the DEEPSEEK_API_KEY environment variable to use the verifier.")
         raise SystemExit(1)

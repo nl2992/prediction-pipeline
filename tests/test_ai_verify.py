@@ -90,6 +90,18 @@ class Verify(unittest.TestCase):
         self.assertEqual(m.call_count, 1)
 
 
+class ResolveApiKey(unittest.TestCase):
+    def test_env_takes_precedence(self):
+        with patch.dict("os.environ", {"DEEPSEEK_API_KEY": "from-env"}):
+            self.assertEqual(ai_verify.resolve_api_key(), "from-env")
+
+    def test_none_when_absent_everywhere(self):
+        # No env var and (mock) no registry value -> None.
+        with patch.dict("os.environ", {}, clear=True), \
+             patch.object(ai_verify.sys, "platform", "linux"):
+            self.assertIsNone(ai_verify.resolve_api_key())
+
+
 class Gate(unittest.TestCase):
     def setUp(self):
         # _ai_verify_gate appends verdicts to BASE/ai_verify.jsonl — redirect BASE
@@ -109,9 +121,10 @@ class Gate(unittest.TestCase):
         return {"poly_title": t, "kalshi_title": t + " K", "net_accurate": 0.05}
 
     def test_no_key_is_noop(self):
+        # resolve_api_key returns None (no env, no registry) -> gate keeps all.
         from alerter import _ai_verify_gate
         sigs = [self._sig("A"), self._sig("B")]
-        with patch.dict("os.environ", {}, clear=True):  # no DEEPSEEK_API_KEY
+        with patch("ai_verify.resolve_api_key", return_value=None):
             self.assertEqual(_ai_verify_gate(sigs, {}), sigs)
 
     def test_enforce_drops_different_shadow_keeps(self):
@@ -120,7 +133,7 @@ class Gate(unittest.TestCase):
         def fake_verify(s, key, **kw):
             return {"same": s["poly_title"] == "REAL", "poly_settlement": None,
                     "kalshi_settlement": None, "reason": "r"}
-        with patch.dict("os.environ", {"DEEPSEEK_API_KEY": "k"}), \
+        with patch("ai_verify.resolve_api_key", return_value="k"), \
              patch("ai_verify.verify_signal", side_effect=fake_verify):
             enforced = _ai_verify_gate(sigs, {"ai_verify_mode": "enforce"})
             shadow = _ai_verify_gate(sigs, {"ai_verify_mode": "shadow"})
@@ -132,7 +145,7 @@ class Gate(unittest.TestCase):
         # must fail-open and keep ALL rather than send a near-empty email (issue #1).
         from alerter import _ai_verify_gate
         sigs = [self._sig(x) for x in ("A", "B", "C", "D")]  # all judged different
-        with patch.dict("os.environ", {"DEEPSEEK_API_KEY": "k"}), \
+        with patch("ai_verify.resolve_api_key", return_value="k"), \
              patch("ai_verify.verify_signal",
                    return_value={"same": False, "poly_settlement": None,
                                  "kalshi_settlement": None, "reason": "glitch"}):
@@ -142,7 +155,7 @@ class Gate(unittest.TestCase):
     def test_failopen_keeps_on_none(self):
         from alerter import _ai_verify_gate
         sigs = [self._sig("A")]
-        with patch.dict("os.environ", {"DEEPSEEK_API_KEY": "k"}), \
+        with patch("ai_verify.resolve_api_key", return_value="k"), \
              patch("ai_verify.verify_signal", return_value=None):
             self.assertEqual(_ai_verify_gate(sigs, {"ai_verify_mode": "enforce"}), sigs)
 
