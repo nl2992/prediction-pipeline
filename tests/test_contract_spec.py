@@ -63,6 +63,19 @@ class ContractSpecDecisions(unittest.TestCase):
         d = decide("Will Brazil beat Argentina?", "Brazil to beat Argentina?")
         self.assertTrue(d.match)
 
+    def test_different_international_orgs_rejected(self) -> None:
+        # BRICS vs OPEC: textually near-identical but different organizations —
+        # must be rejected at the org-mismatch gate (#13).
+        d = decide("Will a country leave BRICS in 2026?",
+                   "Will another country leave OPEC in 2026?")
+        self.assertFalse(d.match)
+        self.assertTrue(any("org mismatch" in r for r in d.reasons))
+
+    def test_same_international_org_still_matches(self) -> None:
+        d = decide("Will a country leave OPEC in 2026?",
+                   "Will another country leave OPEC in 2026?")
+        self.assertTrue(d.match)
+
     def test_inverted_polarity_flagged(self) -> None:
         d = decide(
             "Will TikTok be banned in the US on Dec 31, 2026?",

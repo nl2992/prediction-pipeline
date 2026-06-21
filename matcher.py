@@ -630,6 +630,11 @@ def _settlement_type(text: str) -> str | None:
 _KNOWN_ORGS = (
     "anthropic", "openai", "deepmind", "meta", "microsoft", "apple",
     "amazon", "nvidia", "tesla", "spacex", "xai", "mistral", "waymo",
+    # International organizations — distinct, multi-letter tokens that won't
+    # collide with common words (deliberately skip who/un/eu/g7). Without these,
+    # e.g. BRICS and OPEC both extract empty org sets and the org-mismatch gate is
+    # skipped, so the matcher pairs "leave BRICS" with "leave OPEC" (#13).
+    "brics", "opec", "nato", "asean", "unesco", "nafta", "mercosur",
 )
 _KNOWN_AI_PRODUCTS = ("claude", "gpt", "gemini", "llama", "grok")
 
