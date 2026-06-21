@@ -369,6 +369,10 @@ def _ai_verify_gate(to_email: list[dict], cfg: dict) -> list[dict]:
                                     "net": s.get("net_accurate"), **v}) + "\n")
         except Exception:
             pass
+        # Record the verdict on the signal so the email can surface that this pair
+        # was independently AI-checked (and its outcome), not just silently gated.
+        s["ai_same"] = bool(v["same"])
+        s["ai_reason"] = v.get("reason", "")
         if v["same"]:
             # Attach the AI's implied settlement dates so _settle_horizon can use
             # them for a more accurate annualised return than the contractual close.
@@ -425,10 +429,22 @@ def _exec_block(s: dict) -> tuple[str, bytes | None, str | None]:
         f"""<tr><td>Settles / annualised</td><td>~{settle} ({days}d to resolve) &rarr; """
         f"""<b>~{ann*100:.0f}% annualised</b> on this edge</td></tr>"""
         if settle else "")
+    # Surface the DeepSeek verdict when this pair was AI-checked: confirmed pairs
+    # get a green tick (these are the only ones that survive enforce mode); a
+    # shadow-flagged pair shows the AI's caveat. "ai_same" is absent if no key.
+    ai_row = ""
+    if "ai_same" in s:
+        if s["ai_same"]:
+            ai_row = ('<tr><td>AI check</td><td><span style="color:#16a34a">&#10003; '
+                      'verified identical event &amp; settlement</span></td></tr>')
+        else:
+            reason = (s.get("ai_reason") or "").strip()
+            ai_row = ('<tr><td>AI check</td><td><span style="color:#b45309">&#9888; '
+                      f'flagged: {reason}</span></td></tr>')
     text = (f"""
         <tr><td>Execute now</td><td>up to <b>{cap.contracts:,.0f}</b> contract-pairs (~${deploy:,.0f} total to enter), capped by available book depth</td></tr>
         <tr><td>Net profit by stake / market</td><td>{budget_cells} &nbsp;<span style="color:#888">(after fees)</span></td></tr>
-        <tr><td>Avg fill price (VWAP)</td><td>PM {pm_vwap:.2f} &nbsp;·&nbsp; Kalshi {k_vwap:.2f}</td></tr>{settle_row}""")
+        <tr><td>Avg fill price (VWAP)</td><td>PM {pm_vwap:.2f} &nbsp;·&nbsp; Kalshi {k_vwap:.2f}</td></tr>{settle_row}{ai_row}""")
     png = make_arb_chart(s)
     if not png:
         return text, None, None

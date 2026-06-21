@@ -302,6 +302,29 @@ class EmailBody(unittest.TestCase):
         self.assertIn(f"Kalshi {cap.vwap_a:.2f}", html)
         self.assertNotEqual(round(cap.vwap_a, 2), round(cap.vwap_b, 2))  # distinct, so the test is meaningful
 
+    def _book_sig(self) -> dict:
+        return {
+            "key": "k|x|buy YES on Kalshi + buy NO on Polymarket",
+            "direction": "buy YES on Kalshi + buy NO on Polymarket",
+            "poly_book": {"bids": [[0.37, 5000]], "asks": [[0.40, 5000]]},
+            "kalshi_book": {"bids": [[0.25, 100]], "asks": [[0.30, 5000]]},
+        }
+
+    def test_exec_block_shows_ai_verified_tick_when_confirmed(self) -> None:
+        s = self._book_sig(); s["ai_same"] = True; s["ai_reason"] = "same race"
+        html, _p, _c = _exec_block(s)
+        self.assertIn("AI check", html)
+        self.assertIn("verified identical", html)
+
+    def test_exec_block_shows_ai_flag_when_not_same(self) -> None:
+        s = self._book_sig(); s["ai_same"] = False; s["ai_reason"] = "different windows"
+        html, _p, _c = _exec_block(s)
+        self.assertIn("flagged: different windows", html)
+
+    def test_exec_block_omits_ai_row_when_unchecked(self) -> None:
+        html, _p, _c = _exec_block(self._book_sig())  # no ai_same -> no key, graceful
+        self.assertNotIn("AI check", html)
+
 
 if __name__ == "__main__":
     unittest.main()
