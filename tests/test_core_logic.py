@@ -1498,6 +1498,27 @@ class InvertedPairArbRegressions(unittest.TestCase):
         k = self._snap("kalshi", "BTC above $150k at year-end 2026?", 0.28, 0.30)
         self.assertFalse(is_inverted_pair(p, k))
 
+    def test_find_arb_prices_inverted_pair_without_phantom_edge(self) -> None:
+        # PM "dip below $80k" YES (~0.29) == Kalshi "stay above $80k" NO -> inverted.
+        # True P(dip) ~0.30 on both sides, so the market-neutral combined cost is ~1.0
+        # and there is NO arb. find_arb must flip the Kalshi book (_complement_book)
+        # and report ~0 edge — not the catastrophic phantom ~(1-2p) it would show if it
+        # treated the pair as YES==YES (#40).
+        p = self._snap("polymarket", "Will Bitcoin dip below $80,000 in 2026?", 0.28, 0.30)
+        k = self._snap("kalshi", "BTC to stay above $80k for all of 2026?", 0.68, 0.70)
+        inv = MatchedPair(poly=p, kalshi=k, title_similarity=1.0, close_delta_hours=0,
+                          confidence=1.0, inverted=True)
+        opps = find_arb([inv], fee_poly=0.0, fee_kalshi=0.0, min_net_profit_pct=-100)
+        self.assertTrue(opps)
+        self.assertLess(max(o.net_profit for o in opps), 0.05)   # no phantom edge
+
+        # Sanity: the SAME books treated as NON-inverted DO show a large phantom edge,
+        # proving the complement handling is what prevents it (test is meaningful).
+        naive = MatchedPair(poly=p, kalshi=k, title_similarity=1.0, close_delta_hours=0,
+                            confidence=1.0, inverted=False)
+        naive_opps = find_arb([naive], fee_poly=0.0, fee_kalshi=0.0, min_net_profit_pct=-100)
+        self.assertGreater(max(o.net_profit for o in naive_opps), 0.30)  # catastrophic phantom
+
     def test_arb_engine_prices_inverted_pair_without_phantom_edge(self) -> None:
         # The crux: an inverted pair must hedge SAME-side (YES+YES / NO+NO).
         # PAIR-017 quotes: PM yes 0.285/0.295, Kalshi yes 0.65/0.68.
