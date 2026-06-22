@@ -103,12 +103,24 @@ class Summarize(unittest.TestCase):
         self.assertEqual([e["poly"] for e in s["flagged_pairs"]], ["Real Race"])
         self.assertEqual([v["poly"] for v in s["recent_flags"]], ["Real Race"])
 
+    def test_recent_flags_respects_stale_window(self):
+        rows = [
+            {"ts": _ago(2), "poly": "Fresh", "kalshi": "Fk", "same": False, "same_event": False},
+            {"ts": _ago(40), "poly": "Old", "kalshi": "Ok", "same": False, "same_event": False},
+            {"ts": "", "poly": "NoTs", "kalshi": "Nk", "same": False, "same_event": False},
+        ]
+        s = r.summarize(rows, now=_NOW, stale_hours=12)
+        polys = [v["poly"] for v in s["recent_flags"]]
+        self.assertIn("Fresh", polys)            # within window
+        self.assertNotIn("Old", polys)           # 40h ago -> excluded
+        self.assertIn("NoTs", polys)             # unparseable ts -> kept fail-safe
+
     def test_recent_flags_newest_first(self):
         rows = [
-            {"ts": "2026-06-01T00:00:00", "poly": "Race1", "kalshi": "R1k", "same": False},
-            {"ts": "2026-06-05T00:00:00", "poly": "Race2", "kalshi": "R2k", "same": False},
+            {"ts": _ago(5), "poly": "Race1", "kalshi": "R1k", "same": False},
+            {"ts": _ago(1), "poly": "Race2", "kalshi": "R2k", "same": False},
         ]
-        s = r.summarize(rows)
+        s = r.summarize(rows, now=_NOW)
         self.assertEqual(s["recent_flags"][0]["poly"], "Race2")
 
     def test_empty_is_safe(self):

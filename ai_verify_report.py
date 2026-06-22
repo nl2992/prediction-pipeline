@@ -118,8 +118,12 @@ def summarize(verdicts: list[dict], now: _dt.datetime | None = None,
     # settlement is a CORRECT enforce drop, not a matcher bug (#14).
     matcher_false_positives = [e for e in flagged_pairs if e["latest_same_event"] is False]
     settlement_mismatches = [e for e in flagged_pairs if e["latest_same_event"] is not False]
+    def _within_window(v: dict) -> bool:
+        h = _hours_since(v.get("ts", ""), now)
+        return h is None or h <= stale_hours      # unparseable ts -> keep (fail safe)
     recent_flags = sorted(
-        (v for v in verdicts if not v.get("same") and not _is_test(_pair(v))),
+        (v for v in verdicts
+         if not v.get("same") and not _is_test(_pair(v)) and _within_window(v)),
         key=lambda v: v.get("ts", ""), reverse=True)
     return {
         "total": total,
