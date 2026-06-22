@@ -129,6 +129,35 @@ class FormatHealth(unittest.TestCase):
         self.assertFalse(health.overall_ok(s))
         self.assertIn("STATUS: DEGRADED", health.format_health(s, 1, "t"))
 
+    def test_scan_pairs_collapse_flagged(self):
+        normal = [f"[alerter] scan done in 800s — cap=1500, 790 pairs, 200 survivable arb(s)"] * 4
+        collapsed = ["[alerter] scan done in 800s — cap=1500, 30 pairs, 2 survivable arb(s)"]
+        s = health.summarize_log(normal + collapsed)
+        self.assertEqual(s["last_scan_pairs"], 30)
+        self.assertTrue(s["scan_pairs_low"])
+        self.assertFalse(health.overall_ok(s))
+        self.assertIn("COLLAPSED", health.format_health(s, 1, "t"))
+
+    def test_normal_scan_variation_ok(self):
+        lines = [f"[alerter] scan done in 800s — cap=1500, {n} pairs, 50 survivable arb(s)"
+                 for n in (790, 800, 770, 810)]
+        s = health.summarize_log(lines)
+        self.assertFalse(s["scan_pairs_low"])
+        self.assertTrue(health.overall_ok(s))
+
+    def test_scan_pairs_not_confused_with_v1_pairs_shadow_line(self):
+        # 'v2 shadow: agrees on 771/795 v1 pairs, 24 ...' must NOT be parsed as a count.
+        lines = [
+            "[alerter] scan done in 800s — cap=1500, 790 pairs, 200 survivable arb(s)",
+            "      v2 shadow: agrees on 771/795 v1 pairs, 24 disagreement(s):",
+        ]
+        s = health.summarize_log(lines)
+        self.assertEqual(s["last_scan_pairs"], 790)   # only the scan-done line counted
+
+    def test_too_few_scans_not_flagged(self):
+        s = health.summarize_log(["[alerter] scan done in 800s — cap=1500, 5 pairs, 0 survivable arb(s)"])
+        self.assertFalse(s["scan_pairs_low"])         # 1 sample -> no baseline, no alarm
+
     def test_degraded_on_recent_email_failure(self):
         s = health.summarize_log([
             "[alerter] scan done in 800s — 100 survivable arb(s)",

@@ -13,7 +13,11 @@ CLI: python health.py
 from __future__ import annotations
 
 import pathlib
+import re
+import statistics
 import sys
+
+_SCAN_PAIRS_RE = re.compile(r"scan done.*?,\s*(\d+)\s+pairs,")  # only the scan-done line
 
 BASE = pathlib.Path(__file__).resolve().parent
 _LOG = BASE / "alerter_cron.log"
@@ -53,9 +57,13 @@ def summarize_log(lines: list[str]) -> dict:
     error_idx = -1
     email_fail = None
     email_fail_idx = -1
+    scan_pair_counts: list[int] = []
     for i, ln in enumerate(lines):
         if "scan done" in ln:
             last_scan = ln.strip()
+            m = _SCAN_PAIRS_RE.search(ln)
+            if m:
+                scan_pair_counts.append(int(m.group(1)))
         elif "EMAIL FAILED" in ln:          # delivery failure (SMTP/auth) — checked
             email_fail = ln.split("EMAIL FAILED:", 1)[-1].strip()  # before EMAILED
             email_fail_idx = i
@@ -80,8 +88,18 @@ def summarize_log(lines: list[str]) -> dict:
     #   * emails went out but NO heartbeat appears anywhere in the window.
     key_absent = bool(last_heartbeat) and "ABSENT" in last_heartbeat
     emails_without_heartbeat = last_email_subject is not None and last_heartbeat is None
+    # Partial-data scan detection (adaptive): the latest scan's matched-pair count
+    # collapsing far below the recent median signals a degraded catalog fetch (#29).
+    last_scan_pairs = scan_pair_counts[-1] if scan_pair_counts else None
+    scan_pairs_median = statistics.median(scan_pair_counts) if scan_pair_counts else None
+    scan_pairs_low = (
+        len(scan_pair_counts) >= 3 and scan_pairs_median >= 100
+        and last_scan_pairs < 0.5 * scan_pairs_median)
     return {
         "last_scan": last_scan,
+        "last_scan_pairs": last_scan_pairs,
+        "scan_pairs_median": scan_pairs_median,
+        "scan_pairs_low": scan_pairs_low,
         "last_email_subject": last_email_subject,
         "scans_since_email": scans_since_email,
         "last_heartbeat": last_heartbeat,
@@ -101,6 +119,7 @@ def overall_ok(s: dict) -> bool:
                 or s.get("emails_without_heartbeat")
                 or s.get("recent_cycle_error") is not None
                 or s.get("recent_email_failure") is not None
+                or s.get("scan_pairs_low")
                 or s.get("last_scan") is None)
 
 
@@ -110,6 +129,11 @@ def format_health(s: dict, verdicts_count: int, verdicts_mtime: str | None) -> s
     status = "OK" if overall_ok(s) else "DEGRADED"
     lines = ["Arb alerter - health", "=" * 40, f"STATUS: {status}", "-" * 40]
     lines.append(f"[{mark(bool(s['last_scan']))}] last scan: {s['last_scan'] or 'none seen'}")
+    if s.get("last_scan_pairs") is not None:
+        med = s.get("scan_pairs_median")
+        lines.append(f"[{mark(not s.get('scan_pairs_low'))}] scan size: "
+                     f"{s['last_scan_pairs']} pairs (recent median {med:.0f})"
+                     + (" — COLLAPSED, partial-data scan?" if s.get("scan_pairs_low") else ""))
     if s["last_email_subject"]:
         since = s["scans_since_email"]
         lines.append(f"[OK  ] last email: {s['last_email_subject']}")
