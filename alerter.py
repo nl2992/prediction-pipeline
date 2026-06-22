@@ -411,6 +411,9 @@ def _ai_verify_gate(to_email: list[dict], cfg: dict) -> list[dict]:
     # Per-cycle heartbeat so the verifier's activity is always visible in the log.
     print(f"[alerter] AI verify: mode={mode}, key=present, {len(to_email)} checked, "
           f"{n_confirmed} confirmed, {len(drop_ids)} flagged", flush=True)
+    # Bound the verdict audit log like the signals log (#26); 20k rows keeps ample
+    # history for the digest's recent-window analysis.
+    _cap_jsonl(BASE / "ai_verify.jsonl", max_bytes=8_000_000, keep_rows=20_000)
     if mode != "enforce" or not drop_ids:
         return to_email                      # shadow (or nothing flagged) → keep all
     if len(drop_ids) > AI_MAX_DROP_FRACTION * len(to_email):
