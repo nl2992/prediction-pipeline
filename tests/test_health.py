@@ -129,6 +129,29 @@ class FormatHealth(unittest.TestCase):
         self.assertFalse(health.overall_ok(s))
         self.assertIn("STATUS: DEGRADED", health.format_health(s, 1, "t"))
 
+    def test_degraded_on_recent_email_failure(self):
+        s = health.summarize_log([
+            "[alerter] scan done in 800s — 100 survivable arb(s)",
+            "[alerter] AI verify: mode=enforce, key=present, 9 checked, 9 confirmed, 0 flagged",
+            "[alerter] EMAIL FAILED: (535, b'auth failed') — signal logged to alert_signals.jsonl",
+        ])
+        self.assertIsNotNone(s["recent_email_failure"])
+        self.assertFalse(health.overall_ok(s))
+        out = health.format_health(s, 1, "t")
+        self.assertIn("STATUS: DEGRADED", out)
+        self.assertIn("email delivery: FAILED", out)
+
+    def test_old_email_failure_not_flagged(self):
+        lines = ["[alerter] EMAIL FAILED: boom"] + ["filler"] * 250
+        s = health.summarize_log(lines)
+        self.assertIsNone(s["recent_email_failure"])
+
+    def test_email_failed_not_confused_with_emailed(self):
+        # "EMAIL FAILED" must not be parsed as a successful "EMAILED".
+        s = health.summarize_log(["[alerter] EMAIL FAILED: smtp down"])
+        self.assertIsNone(s["last_email_subject"])
+        self.assertIsNotNone(s["recent_email_failure"])
+
     def test_degraded_on_recent_cycle_error_and_no_scan(self):
         self.assertFalse(health.overall_ok(health.summarize_log(["[alerter] CYCLE ERROR: boom"])))
         self.assertFalse(health.overall_ok(health.summarize_log([])))  # no scan at all

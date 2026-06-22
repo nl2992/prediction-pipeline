@@ -51,9 +51,14 @@ def summarize_log(lines: list[str]) -> dict:
     last_heartbeat = None
     recent_cycle_error = None
     error_idx = -1
+    email_fail = None
+    email_fail_idx = -1
     for i, ln in enumerate(lines):
         if "scan done" in ln:
             last_scan = ln.strip()
+        elif "EMAIL FAILED" in ln:          # delivery failure (SMTP/auth) — checked
+            email_fail = ln.split("EMAIL FAILED:", 1)[-1].strip()  # before EMAILED
+            email_fail_idx = i
         elif "EMAILED" in ln:
             last_email_idx = i
             # subject is the bracketed "[Pred-Arb] ..." portion
@@ -66,8 +71,9 @@ def summarize_log(lines: list[str]) -> dict:
             error_idx = i
     scans_since_email = sum(
         1 for ln in lines[last_email_idx + 1:] if "scan done" in ln) if last_email_idx >= 0 else None
-    # "recent" error = within the last 200 lines of the window
+    # "recent" = within the last 200 lines of the window
     error_is_recent = error_idx >= 0 and error_idx >= len(lines) - 200
+    email_fail_recent = email_fail_idx >= 0 and email_fail_idx >= len(lines) - 200
     # Real silent-no-op signals (the heartbeat prints BEFORE the email in a cycle,
     # so "heartbeat after the email" is the wrong test — it false-WARNs, #10):
     #   * the latest heartbeat reports an absent key (verification skipped), or
@@ -82,6 +88,7 @@ def summarize_log(lines: list[str]) -> dict:
         "key_absent": key_absent,
         "emails_without_heartbeat": emails_without_heartbeat,
         "recent_cycle_error": recent_cycle_error if error_is_recent else None,
+        "recent_email_failure": email_fail if email_fail_recent else None,
     }
 
 
@@ -93,6 +100,7 @@ def overall_ok(s: dict) -> bool:
     return not (s.get("key_absent")
                 or s.get("emails_without_heartbeat")
                 or s.get("recent_cycle_error") is not None
+                or s.get("recent_email_failure") is not None
                 or s.get("last_scan") is None)
 
 
@@ -119,6 +127,8 @@ def format_health(s: dict, verdicts_count: int, verdicts_mtime: str | None) -> s
         lines.append("[OK  ] verifier idle (no email-worthy cycle in window)")
     lines.append(f"[{mark(s['recent_cycle_error'] is None)}] "
                  f"cycle errors: {s['recent_cycle_error'] or 'none recent'}")
+    lines.append(f"[{mark(s.get('recent_email_failure') is None)}] "
+                 f"email delivery: {'FAILED — ' + s['recent_email_failure'] if s.get('recent_email_failure') else 'ok (no recent failures)'}")
     fresh = f"{verdicts_count} rows, last write {verdicts_mtime}" if verdicts_mtime else f"{verdicts_count} rows"
     lines.append(f"[OK  ] ai_verify.jsonl: {fresh}")
     return "\n".join(lines)
