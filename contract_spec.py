@@ -101,17 +101,20 @@ class ContractSpec:
 _IPO_RE = re.compile(r"\b(ipo|go(?:es)? public|public offering|direct listing)\b")
 _ACQUISITION_RE = re.compile(
     r"\b(acquir\w*|acquisition|bought by|buyout|taken private|merger|merges?|merged)\b")
+_BANKRUPTCY_RE = re.compile(r"\b(bankruptcy|bankrupt|chapter 11|chapter 7|insolvenc\w+|insolvent)\b")
 
 
 def _corporate_event(text: str) -> str | None:
-    """'ipo' or 'acquisition' for corporate-event markets, else None. IPO and
-    acquisition are mutually exclusive outcomes for a company, so a market about one
-    is a different contract from a market about the other (#28)."""
+    """'ipo' | 'acquisition' | 'bankruptcy' for corporate-event markets, else None.
+    These are mutually exclusive terminal states for a company, so a market about
+    one is a different contract from a market about another (#28, #30)."""
     low = _ascii_lower(text)
     if _IPO_RE.search(low):
         return "ipo"
     if _ACQUISITION_RE.search(low):
         return "acquisition"
+    if _BANKRUPTCY_RE.search(low):
+        return "bankruptcy"
     return None
 
 

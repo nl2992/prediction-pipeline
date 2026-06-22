@@ -77,6 +77,17 @@ class ContractSpecDecisions(unittest.TestCase):
         d = decide("Will Mistral AI IPO before 2027?", "Who will IPO before 2027? Mistral AI")
         self.assertTrue(d.match)
 
+    def test_bankruptcy_vs_other_corporate_events_rejected(self) -> None:
+        d1 = decide("Will Acme file for bankruptcy before 2027?", "Will Acme IPO before 2027?")
+        self.assertFalse(d1.match)
+        self.assertTrue(any("corporate-event mismatch" in r for r in d1.reasons))
+        d2 = decide("Will Acme go bankrupt before 2027?", "Will Acme be acquired before 2027?")
+        self.assertFalse(d2.match)
+
+    def test_same_bankruptcy_event_still_matches(self) -> None:
+        d = decide("Will Acme file Chapter 11 before 2027?", "Acme bankruptcy before 2027?")
+        self.assertTrue(d.match)
+
     def test_different_international_orgs_rejected(self) -> None:
         # BRICS vs OPEC: textually near-identical but different organizations —
         # must be rejected at the org-mismatch gate (#13).
