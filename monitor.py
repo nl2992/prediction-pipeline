@@ -776,10 +776,14 @@ def run_discover_scan(
 
 def append_signals(signals: list[ArbSignal], signals_file: str) -> None:
     """Append verified ArbSignal objects to signals.jsonl (one JSON per line)."""
+    from jsonl_utils import cap_jsonl
     path = Path(signals_file)
     with path.open("a", encoding="utf-8") as f:
         for sig in signals:
             f.write(json.dumps(sig.to_dict(), default=str) + "\n")
+    # Bound the append-only signal log so a long-running monitor can't grow it
+    # without limit (#32; same treatment as the alerter's audit logs).
+    cap_jsonl(path, max_bytes=8_000_000, keep_rows=50_000, tag="monitor")
 
 
 # ---------------------------------------------------------------------------
