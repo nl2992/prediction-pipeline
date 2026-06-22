@@ -80,6 +80,40 @@ def _legs():
     return a, b
 
 
+def _live_poly_executor():
+    ex = Executor(dry_run=True)
+    ex.dry_run = False
+    ex._poly_client = MagicMock()
+    return ex
+
+
+class PolymarketFokFill(unittest.TestCase):
+    def _intent(self):
+        return TradeIntent("polymarket", "YES", 0.45, 10, "PM", "tok123", "Buy YES")
+
+    def test_filled_when_matched(self):
+        ex = _live_poly_executor()
+        ex._poly_client.place_order.return_value = {"orderID": "x", "success": True, "status": "matched"}
+        self.assertTrue(ex._place_polymarket(self._intent()).success)
+
+    def test_not_filled_when_unmatched(self):
+        ex = _live_poly_executor()
+        ex._poly_client.place_order.return_value = {"orderID": "x", "success": True, "status": "unmatched"}
+        self.assertFalse(ex._place_polymarket(self._intent()).success)
+
+    def test_not_filled_when_rejected(self):
+        ex = _live_poly_executor()
+        ex._poly_client.place_order.return_value = {"success": False, "errorMsg": "insufficient balance"}
+        r = ex._place_polymarket(self._intent())
+        self.assertFalse(r.success)
+        self.assertIn("insufficient balance", (r.error or ""))
+
+    def test_resting_order_not_treated_as_fill(self):
+        ex = _live_poly_executor()
+        ex._poly_client.place_order.return_value = {"orderID": "x", "success": True, "status": "live"}
+        self.assertFalse(ex._place_polymarket(self._intent()).success)
+
+
 class PreflightHedgeStructure(unittest.TestCase):
     def test_same_exchange_aborts(self):
         a = TradeIntent("kalshi", "YES", 0.40, 5, "KX1", None, "a")

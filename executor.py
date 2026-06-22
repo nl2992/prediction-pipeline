@@ -446,8 +446,22 @@ class Executor:
                 order_type="FOK",
             )
             order_id = resp.get("orderID") or resp.get("id")
-            status = resp.get("status", "submitted")
-            logger.info("Polymarket order placed: %s  status=%s", order_id, status)
+            status = resp.get("status", "")
+            # FOK: success only on a confirmed full match. The CLOB returns
+            # success=False on rejection and status="matched" when filled; anything
+            # else (unmatched / live / empty) means it did not fill — don't report a
+            # phantom leg that would leave the other side naked (#37, follows #36).
+            accepted = resp.get("success")
+            filled = accepted is not False and str(status).lower() == "matched"
+            if not filled:
+                logger.warning("Polymarket FOK not filled: success=%s status=%s err=%s",
+                               accepted, status, resp.get("errorMsg"))
+                return TradeResult(
+                    intent=intent, success=False, order_id=order_id,
+                    status=status or "unmatched",
+                    error=resp.get("errorMsg") or f"FOK not filled (status={status})",
+                    dry_run=False)
+            logger.info("Polymarket order filled: %s  status=%s", order_id, status)
             return TradeResult(
                 intent=intent, success=True,
                 order_id=order_id, status=status, dry_run=False,
