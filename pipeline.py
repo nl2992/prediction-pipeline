@@ -107,6 +107,13 @@ class MarketSnapshot:
 # ---------------------------------------------------------------------------
 
 
+def _is_valid_level(price: float, size: float) -> bool:
+    """A tradeable book level has price strictly within (0,1) and positive size.
+    Degenerate/crossed ticks (price 0/1/out-of-range, size <= 0) are filtered at
+    ingest so they never distort the book, VWAP/depth, or the arb math (#42)."""
+    return 0.0 < price < 1.0 and size > 0.0
+
+
 def _parse_polymarket_book(raw_book: dict | None) -> OrderBook:
     """
     Convert a raw CLOB /book response into an OrderBook.
@@ -122,11 +129,11 @@ def _parse_polymarket_book(raw_book: dict | None) -> OrderBook:
         levels = []
         for item in lst or []:
             try:
-                levels.append(
-                    PriceLevel(price=float(item["price"]), size=float(item["size"]))
-                )
+                price, size = float(item["price"]), float(item["size"])
             except (KeyError, ValueError, TypeError):
-                pass
+                continue
+            if _is_valid_level(price, size):
+                levels.append(PriceLevel(price=price, size=size))
         return levels
 
     return OrderBook(
@@ -304,9 +311,10 @@ def _parse_kalshi_full_book(raw: dict) -> OrderBook:
         for item in lst or []:
             try:
                 price, size = float(item[0]), float(item[1])
-                levels.append(PriceLevel(price=price, size=size))
             except (IndexError, ValueError, TypeError):
-                pass
+                continue
+            if _is_valid_level(price, size):
+                levels.append(PriceLevel(price=price, size=size))
         return levels
 
     yes_bids_raw = _parse_levels(ob_fp.get("yes_dollars", []))
