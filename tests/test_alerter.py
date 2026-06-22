@@ -242,6 +242,40 @@ class AnnualisedRanking(unittest.TestCase):
         self.assertTrue(settle.endswith("-09-01"))  # fell back to contractual
 
 
+class CapJsonl(unittest.TestCase):
+    def _file(self, n):
+        import tempfile, pathlib
+        fd, p = tempfile.mkstemp(suffix=".jsonl"); import os; os.close(fd)
+        p = pathlib.Path(p)
+        p.write_text("".join(f'{{"i":{i}}}\n' for i in range(n)), encoding="utf-8")
+        return p
+
+    def test_noop_when_under_byte_threshold(self):
+        from alerter import _cap_jsonl
+        p = self._file(100)
+        try:
+            _cap_jsonl(p, max_bytes=10_000_000, keep_rows=10)   # big threshold -> no trim
+            self.assertEqual(len(p.read_text().splitlines()), 100)
+        finally:
+            p.unlink()
+
+    def test_trims_to_keep_rows_when_over_threshold(self):
+        from alerter import _cap_jsonl
+        p = self._file(5000)
+        try:
+            _cap_jsonl(p, max_bytes=1, keep_rows=50)            # tiny threshold -> trim
+            lines = p.read_text().splitlines()
+            self.assertEqual(len(lines), 50)
+            self.assertEqual(lines[-1], '{"i":4999}')           # keeps the most recent
+        finally:
+            p.unlink()
+
+    def test_missing_file_is_noop(self):
+        from alerter import _cap_jsonl
+        import pathlib
+        _cap_jsonl(pathlib.Path("does-not-exist.jsonl"), max_bytes=1, keep_rows=10)  # no raise
+
+
 class FreshnessLabels(unittest.TestCase):
     def test_classifies_new_improved_persistent(self):
         from alerter import _freshness_labels

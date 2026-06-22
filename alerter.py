@@ -560,6 +560,22 @@ def send_email(cfg: dict, subject: str, html: str,
         srv.sendmail(cfg["from_addr"], cfg["recipients"], root.as_string())
 
 
+def _cap_jsonl(path, max_bytes: int, keep_rows: int) -> None:
+    """Bound an append-only JSONL audit log: once it exceeds ``max_bytes``, rewrite
+    keeping only the last ``keep_rows`` lines. Best-effort — never raises, so log
+    maintenance can't break a scan cycle (#24)."""
+    try:
+        if not path.exists() or path.stat().st_size <= max_bytes:
+            return
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        if len(lines) <= keep_rows:
+            return
+        path.write_text("\n".join(lines[-keep_rows:]) + "\n", encoding="utf-8")
+        print(f"[alerter] trimmed {path.name} to last {keep_rows} rows", flush=True)
+    except Exception:
+        pass
+
+
 _ALERT_COOLDOWN_S = 3600  # at most one degradation alert per hour (no spam)
 
 
@@ -655,6 +671,7 @@ def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False,
         for s in to_email:
             lean = {k: v for k, v in s.items() if k not in ("poly_book", "kalshi_book")}
             f.write(json.dumps(lean) + "\n")
+    _cap_jsonl(SIGNALS_FILE, max_bytes=8_000_000, keep_rows=10_000)
     for s in to_email:
         flag = " (new/changed)" if s in fresh else ""
         print(f"[alerter] SIGNAL net={s['net_accurate']*100:.2f}c  {s['poly_title'][:40]!r} <-> {s['kalshi_title'][:40]!r}{flag}")
