@@ -98,6 +98,23 @@ class ContractSpec:
     raw: str = field(repr=False, default="")
 
 
+_IPO_RE = re.compile(r"\b(ipo|go(?:es)? public|public offering|direct listing)\b")
+_ACQUISITION_RE = re.compile(
+    r"\b(acquir\w*|acquisition|bought by|buyout|taken private|merger|merges?|merged)\b")
+
+
+def _corporate_event(text: str) -> str | None:
+    """'ipo' or 'acquisition' for corporate-event markets, else None. IPO and
+    acquisition are mutually exclusive outcomes for a company, so a market about one
+    is a different contract from a market about the other (#28)."""
+    low = _ascii_lower(text)
+    if _IPO_RE.search(low):
+        return "ipo"
+    if _ACQUISITION_RE.search(low):
+        return "acquisition"
+    return None
+
+
 def _bet_type(text: str) -> str | None:
     """Sports bet type: a moneyline (win), a totals/spread line, or a player
     stat-prop are different CONTRACTS even on the same team/player. Used by the
@@ -324,6 +341,11 @@ def match_spec(
     # Sweden win the 1st Half?", "Cody Gakpo" vs "Cody Gakpo: 2+ assists").
     if a.bet_type and b.bet_type and a.bet_type != b.bet_type:
         return _reject(f"bet-type mismatch: {a.bet_type} vs {b.bet_type}")
+    # Corporate event-type gate: an IPO market and an acquisition/merger market on
+    # the same company are mutually exclusive outcomes, not the same contract (#28).
+    ca, cb = _corporate_event(a.raw), _corporate_event(b.raw)
+    if ca and cb and ca != cb:
+        return _reject(f"corporate-event mismatch: {ca} vs {cb}")
     # A player prop on one side and a non-prop market on the same subject
     # (the other side has no bet_type) is still a different contract.
     if (a.bet_type == "prop") != (b.bet_type == "prop") and (

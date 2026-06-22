@@ -66,6 +66,17 @@ class ContractSpecDecisions(unittest.TestCase):
         d = decide("Will Brazil beat Argentina?", "Brazil to beat Argentina?")
         self.assertTrue(d.match)
 
+    def test_acquisition_vs_ipo_rejected(self) -> None:
+        # Mutually exclusive corporate events on the same company (#28).
+        d = decide("Anthropic acquired before 2027?", "Will Anthropic IPO before 2027?")
+        self.assertFalse(d.match)
+        self.assertTrue(any("corporate-event mismatch" in r for r in d.reasons))
+
+    def test_same_corporate_event_still_matches(self) -> None:
+        # Both IPO -> the guard must not fire.
+        d = decide("Will Mistral AI IPO before 2027?", "Who will IPO before 2027? Mistral AI")
+        self.assertTrue(d.match)
+
     def test_different_international_orgs_rejected(self) -> None:
         # BRICS vs OPEC: textually near-identical but different organizations —
         # must be rejected at the org-mismatch gate (#13).
