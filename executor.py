@@ -110,10 +110,14 @@ class ArbExecution:
 def check_price_still_valid(
     intent: TradeIntent,
     price_tolerance: float = 0.02,
-) -> tuple[bool, str]:
+) -> tuple[bool, str, float | None]:
     """
     Re-fetch the live CLOB price for the given leg and confirm it hasn't
     moved beyond price_tolerance since the signal was detected.
+
+    Returns ``(ok, message, live_price)`` — ``live_price`` is the leg's current
+    executable price (or None if unavailable) so the caller can recheck the
+    COMBINED live edge across both legs (#33).
     """
     try:
         if intent.exchange == "polymarket" and intent.token_id:
@@ -122,11 +126,11 @@ def check_price_still_valid(
             liq = client.verify_clob_liquidity(intent.token_id, min_depth_usd=0)
             live_ask = liq.get("best_ask")
             if live_ask is None:
-                return False, "no live ask available"
+                return False, "no live ask available", None
             drift = abs(live_ask - intent.limit_price)
             if drift > price_tolerance:
-                return False, f"price drifted {drift:.4f} > tolerance {price_tolerance}"
-            return True, f"price OK (live_ask={live_ask:.4f} vs intended={intent.limit_price:.4f})"
+                return False, f"price drifted {drift:.4f} > tolerance {price_tolerance}", live_ask
+            return True, f"price OK (live_ask={live_ask:.4f} vs intended={intent.limit_price:.4f})", live_ask
 
         elif intent.exchange == "kalshi":
             from kalshi.client import KalshiClient
@@ -137,26 +141,26 @@ def check_price_still_valid(
                 no_bids = ob_fp.get("no_dollars", [])
                 live_ask = round(1.0 - float(no_bids[-1][0]), 6) if no_bids else None
                 if live_ask is None:
-                    return False, "no live YES ask available"
+                    return False, "no live YES ask available", None
                 drift = abs(live_ask - intent.limit_price)
                 if drift > price_tolerance:
-                    return False, f"YES ask drifted {drift:.4f} > tolerance {price_tolerance}"
-                return True, f"YES ask OK (live={live_ask:.4f} vs intended={intent.limit_price:.4f})"
+                    return False, f"YES ask drifted {drift:.4f} > tolerance {price_tolerance}", live_ask
+                return True, f"YES ask OK (live={live_ask:.4f} vs intended={intent.limit_price:.4f})", live_ask
             else:
                 yes_bids = ob_fp.get("yes_dollars", [])
                 live_yes_bid = float(yes_bids[-1][0]) if yes_bids else None
                 live_no_ask = round(1.0 - live_yes_bid, 6) if live_yes_bid is not None else None
                 if live_no_ask is None:
-                    return False, "no live NO ask available"
+                    return False, "no live NO ask available", None
                 drift = abs(live_no_ask - intent.limit_price)
                 if drift > price_tolerance:
-                    return False, f"NO ask drifted {drift:.4f} > tolerance {price_tolerance}"
-                return True, f"NO ask OK (live={live_no_ask:.4f} vs intended={intent.limit_price:.4f})"
+                    return False, f"NO ask drifted {drift:.4f} > tolerance {price_tolerance}", live_no_ask
+                return True, f"NO ask OK (live={live_no_ask:.4f} vs intended={intent.limit_price:.4f})", live_no_ask
 
-        return True, "no live price check implemented for this exchange"
+        return True, "no live price check implemented for this exchange", None
 
     except Exception as exc:
-        return False, f"price check failed: {exc}"
+        return False, f"price check failed: {exc}", None
 
 
 def pre_flight_checks(
@@ -203,16 +207,30 @@ def pre_flight_checks(
             f"(gross_cost={gross_cost:.4f} fee={worst_fee:.4f})"
         )
 
-    # 3. Live price recheck
-    ok_a, msg_a = check_price_still_valid(leg_a)
+    # 3. Live price recheck (per leg)
+    ok_a, msg_a, live_a = check_price_still_valid(leg_a)
     messages.append(f"{'OK' if ok_a else 'FAIL'}: leg_a price — {msg_a}")
     if not ok_a:
         go = False
 
-    ok_b, msg_b = check_price_still_valid(leg_b)
+    ok_b, msg_b, live_b = check_price_still_valid(leg_b)
     messages.append(f"{'OK' if ok_b else 'FAIL'}: leg_b price — {msg_b}")
     if not ok_b:
         go = False
+
+    # 3b. COMBINED live-edge recheck — per-leg tolerance alone can't catch both
+    # legs drifting adversely (e.g. 2c each = 4c combined erasing a 3c edge); the
+    # net check above uses STALE limit prices. Recompute from the LIVE prices (#33).
+    if live_a is not None and live_b is not None:
+        live_gross = live_a + live_b
+        live_net = 1.0 - live_gross - worst_fee
+        if live_net <= 0:
+            messages.append(
+                f"FAIL: live combined edge {live_net:.4f} ≤ 0 "
+                f"(live_gross={live_gross:.4f} fee={worst_fee:.4f})")
+            go = False
+        else:
+            messages.append(f"OK:   live combined edge {live_net:.4f} (live_gross={live_gross:.4f})")
 
     # 4. Balance check (only if clients provided)
     if kalshi_client and leg_a.exchange == "kalshi":

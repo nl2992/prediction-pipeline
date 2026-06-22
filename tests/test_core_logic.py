@@ -1262,7 +1262,7 @@ class CoreLogicTests(unittest.TestCase):
             description="Buy NO",
         )
 
-        ok, msg = check_price_still_valid(intent, price_tolerance=0.001)
+        ok, msg, live = check_price_still_valid(intent, price_tolerance=0.001)
 
         self.assertTrue(ok, msg)
         self.assertEqual(intent.venue_limit_price, 0.73)
