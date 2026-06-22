@@ -37,6 +37,32 @@ def _legs():
     return a, b
 
 
+class PreflightHedgeStructure(unittest.TestCase):
+    def test_same_exchange_aborts(self):
+        a = TradeIntent("kalshi", "YES", 0.40, 5, "KX1", None, "a")
+        b = TradeIntent("kalshi", "NO", 0.50, 5, "KX2", None, "b")
+        with patch("executor.check_price_still_valid", return_value=(True, "ok", 0.4)):
+            go, msgs = pre_flight_checks(a, b, max_position_usd=500, fee_a=0.0, fee_b=0.0)
+        self.assertFalse(go)
+        self.assertTrue(any("same exchange" in m for m in msgs))
+
+    def test_same_side_aborts(self):
+        a = TradeIntent("polymarket", "YES", 0.40, 5, "PM", "tok", "a")
+        b = TradeIntent("kalshi", "YES", 0.50, 5, "KX", None, "b")
+        with patch("executor.check_price_still_valid", return_value=(True, "ok", 0.4)):
+            go, msgs = pre_flight_checks(a, b, max_position_usd=500, fee_a=0.0, fee_b=0.0)
+        self.assertFalse(go)
+        self.assertTrue(any("same side" in m for m in msgs))
+
+    def test_valid_hedge_passes_structure(self):
+        a = TradeIntent("polymarket", "YES", 0.45, 5, "PM", "tok", "a")
+        b = TradeIntent("kalshi", "NO", 0.45, 5, "KX", None, "b")
+        with patch("executor.check_price_still_valid", return_value=(True, "ok", 0.45)):
+            go, msgs = pre_flight_checks(a, b, max_position_usd=500, fee_a=0.0, fee_b=0.0)
+        self.assertTrue(go, msgs)
+        self.assertFalse(any("same exchange" in m or "same side" in m for m in msgs))
+
+
 class PreflightCombinedEdge(unittest.TestCase):
     def test_combined_live_edge_negative_aborts(self):
         a, b = _legs()

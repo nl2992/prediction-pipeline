@@ -186,6 +186,16 @@ def pre_flight_checks(
     messages: list[str] = []
     go = True
 
+    # 0. Hedge structure: a valid two-leg arb is YES on one venue + NO on the
+    # other. Same exchange or same side is not a hedge — placing it would be pure
+    # directional risk, and the net-profit math below assumes complementary sides (#35).
+    if leg_a.exchange == leg_b.exchange:
+        messages.append(f"FAIL: both legs on same exchange ({leg_a.exchange}) — not a cross-exchange hedge")
+        go = False
+    if leg_a.contract_side == leg_b.contract_side:
+        messages.append(f"FAIL: both legs same side ({leg_a.contract_side}) — not a YES/NO hedge")
+        go = False
+
     # 1. Size sanity
     total_risk = leg_a.max_cost_usd + leg_b.max_cost_usd
     if total_risk > max_position_usd:
