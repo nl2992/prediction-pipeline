@@ -40,10 +40,21 @@ STATIC_DIR.mkdir(exist_ok=True)
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _load_signals(n: int = 200) -> list[dict]:
-    if not SIGNALS_FILE.exists():
+def _load_signals(n: int = 200, _block: int = 1_000_000) -> list[dict]:
+    """Last ``n`` signals, newest first. Reads only the final ``_block`` bytes —
+    signals.jsonl is monitor-written append-only with no cap, so reading the whole
+    file each request scales badly (same fix as health.py #23, issue #31)."""
+    try:
+        with open(SIGNALS_FILE, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - _block))
+            data = f.read()
+    except Exception:
         return []
-    lines = SIGNALS_FILE.read_text().strip().splitlines()
+    lines = data.decode("utf-8", errors="replace").splitlines()
+    if size > _block and lines:
+        lines = lines[1:]                 # first line likely partial — drop it
     out = []
     for line in reversed(lines[-n:]):
         try:
