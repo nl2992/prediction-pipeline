@@ -23,11 +23,23 @@ _VERDICTS = BASE / "ai_verify.jsonl"
 _TAIL_LINES = 2600
 
 
-def _tail(path: pathlib.Path, n: int) -> list[str]:
+def _tail(path: pathlib.Path, n: int, block: int = 1_200_000) -> list[str]:
+    """Return the last ``n`` lines, reading only the final ``block`` bytes instead
+    of the whole file — alerter_cron.log is unbounded (no rotation) and health.py
+    runs often, so loading it all each time scales badly (#23). ``block`` (~1.2MB)
+    comfortably holds far more than n short log lines."""
     try:
-        return path.read_text(encoding="utf-8", errors="replace").splitlines()[-n:]
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - block))
+            data = f.read()
     except Exception:
         return []
+    lines = data.decode("utf-8", errors="replace").splitlines()
+    if size > block and lines:
+        lines = lines[1:]          # first line is likely partial — drop it
+    return lines[-n:]
 
 
 def summarize_log(lines: list[str]) -> dict:

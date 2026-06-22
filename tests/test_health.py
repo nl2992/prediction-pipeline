@@ -6,6 +6,33 @@ import unittest
 import health
 
 
+class Tail(unittest.TestCase):
+    def _write(self, lines):
+        import os, tempfile
+        fd, p = tempfile.mkstemp(suffix=".log")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        return p
+
+    def test_small_file_returns_all_lines(self):
+        import os
+        p = self._write([f"line{i}" for i in range(10)])
+        try:
+            self.assertEqual(health._tail(p, 100), [f"line{i}" for i in range(10)])
+            self.assertEqual(health._tail(p, 3), ["line7", "line8", "line9"])
+        finally:
+            os.unlink(p)
+
+    def test_large_file_reads_only_tail_block(self):
+        import os
+        p = self._write([f"line{i}" for i in range(5000)])
+        try:
+            out = health._tail(p, 5, block=2000)  # tiny block forces partial-first-line path
+            self.assertEqual(out, [f"line{i}" for i in range(4995, 5000)])
+        finally:
+            os.unlink(p)
+
+
 class SummarizeLog(unittest.TestCase):
     def test_extracts_lifecycle_markers(self):
         lines = [
