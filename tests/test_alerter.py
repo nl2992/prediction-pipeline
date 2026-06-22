@@ -267,6 +267,7 @@ class CapJsonl(unittest.TestCase):
             lines = p.read_text().splitlines()
             self.assertEqual(len(lines), 50)
             self.assertEqual(lines[-1], '{"i":4999}')           # keeps the most recent
+            self.assertFalse(p.with_suffix(p.suffix + ".tmp").exists())  # atomic, no leftover
         finally:
             p.unlink()
 

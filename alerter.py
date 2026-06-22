@@ -565,18 +565,27 @@ def send_email(cfg: dict, subject: str, html: str,
 
 def _cap_jsonl(path, max_bytes: int, keep_rows: int) -> None:
     """Bound an append-only JSONL audit log: once it exceeds ``max_bytes``, rewrite
-    keeping only the last ``keep_rows`` lines. Best-effort — never raises, so log
-    maintenance can't break a scan cycle (#24)."""
+    keeping only the last ``keep_rows`` lines. The rewrite is ATOMIC (temp file +
+    os.replace) so a crash or the task's 30-min ExecutionTimeLimit kill landing
+    mid-write can't corrupt/truncate the log (#27). Best-effort — never raises, so
+    log maintenance can't break a scan cycle (#24)."""
+    tmp = None
     try:
         if not path.exists() or path.stat().st_size <= max_bytes:
             return
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
         if len(lines) <= keep_rows:
             return
-        path.write_text("\n".join(lines[-keep_rows:]) + "\n", encoding="utf-8")
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text("\n".join(lines[-keep_rows:]) + "\n", encoding="utf-8")
+        os.replace(tmp, path)            # atomic swap; leaves no partial file
         print(f"[alerter] trimmed {path.name} to last {keep_rows} rows", flush=True)
     except Exception:
-        pass
+        try:
+            if tmp is not None and tmp.exists():
+                tmp.unlink()             # don't leave a stray .tmp behind
+        except Exception:
+            pass
 
 
 _ALERT_COOLDOWN_S = 3600  # at most one degradation alert per hour (no spam)
