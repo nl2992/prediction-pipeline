@@ -173,6 +173,32 @@ class PreflightHedgeStructure(unittest.TestCase):
         self.assertFalse(any("same exchange" in m or "same side" in m for m in msgs))
 
 
+class PreflightLegSanity(unittest.TestCase):
+    def test_missing_quote_price_zero_aborts(self):
+        a = TradeIntent("polymarket", "YES", 0.0, 5, "PM", "tok", "a")  # missing quote -> 0.0
+        b = TradeIntent("kalshi", "NO", 0.50, 5, "KX", None, "b")
+        with patch("executor.check_price_still_valid", return_value=(True, "ok", 0.5)):
+            go, msgs = pre_flight_checks(a, b, max_position_usd=500, fee_a=0.0, fee_b=0.0)
+        self.assertFalse(go)
+        self.assertTrue(any("not in (0,1)" in m for m in msgs))
+
+    def test_nonpositive_size_aborts(self):
+        a = TradeIntent("polymarket", "YES", 0.45, 0, "PM", "tok", "a")
+        b = TradeIntent("kalshi", "NO", 0.45, 5, "KX", None, "b")
+        with patch("executor.check_price_still_valid", return_value=(True, "ok", 0.45)):
+            go, msgs = pre_flight_checks(a, b, max_position_usd=500, fee_a=0.0, fee_b=0.0)
+        self.assertFalse(go)
+        self.assertTrue(any("size" in m and "0" in m for m in msgs))
+
+    def test_valid_legs_pass_sanity(self):
+        a = TradeIntent("polymarket", "YES", 0.45, 5, "PM", "tok", "a")
+        b = TradeIntent("kalshi", "NO", 0.45, 5, "KX", None, "b")
+        with patch("executor.check_price_still_valid", return_value=(True, "ok", 0.45)):
+            go, msgs = pre_flight_checks(a, b, max_position_usd=500, fee_a=0.0, fee_b=0.0)
+        self.assertTrue(go, msgs)
+        self.assertFalse(any("not in (0,1)" in m for m in msgs))
+
+
 class PreflightCombinedEdge(unittest.TestCase):
     def test_combined_live_edge_negative_aborts(self):
         a, b = _legs()

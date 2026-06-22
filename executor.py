@@ -196,6 +196,17 @@ def pre_flight_checks(
         messages.append(f"FAIL: both legs same side ({leg_a.contract_side}) — not a YES/NO hedge")
         go = False
 
+    # 0b. Per-leg price/size sanity. A missing quote becomes limit_price 0.0
+    # upstream (e.g. `signal.poly_yes_ask or 0.0`), which would otherwise sail
+    # through the net-profit check as a phantom free leg and place a bad order (#39).
+    for tag, leg in (("leg_a", leg_a), ("leg_b", leg_b)):
+        if not (0.0 < leg.limit_price < 1.0):
+            messages.append(f"FAIL: {tag} price {leg.limit_price} not in (0,1) — bad/missing quote")
+            go = False
+        if leg.size_contracts <= 0:
+            messages.append(f"FAIL: {tag} size {leg.size_contracts} ≤ 0")
+            go = False
+
     # 1. Size sanity
     total_risk = leg_a.max_cost_usd + leg_b.max_cost_usd
     if total_risk > max_position_usd:
