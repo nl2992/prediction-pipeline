@@ -2,9 +2,52 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from executor import TradeIntent, TradeResult, ArbExecution, pre_flight_checks
+from executor import TradeIntent, TradeResult, ArbExecution, Executor, pre_flight_checks
+
+
+def _live_executor():
+    """An Executor on the live path with a mocked Kalshi client (bypasses creds)."""
+    ex = Executor(dry_run=True)
+    ex.dry_run = False
+    ex._kalshi_client = MagicMock()
+    return ex
+
+
+class KalshiFokFill(unittest.TestCase):
+    def _intent(self):
+        return TradeIntent("kalshi", "YES", 0.40, 10, "KX", None, "Buy YES")
+
+    def test_filled_when_remaining_zero(self):
+        ex = _live_executor()
+        ex._kalshi_client.place_order.return_value = {
+            "order_id": "o1", "status": "executed", "remaining_count": 0}
+        r = ex._place_kalshi(self._intent())
+        self.assertTrue(r.success)
+
+    def test_not_filled_when_killed(self):
+        ex = _live_executor()
+        ex._kalshi_client.place_order.return_value = {
+            "order_id": "o2", "status": "canceled", "remaining_count": 10}
+        r = ex._place_kalshi(self._intent())
+        self.assertFalse(r.success)
+        self.assertIn("not filled", (r.error or ""))
+
+    def test_falls_back_to_get_order_when_remaining_absent(self):
+        ex = _live_executor()
+        ex._kalshi_client.place_order.return_value = {"order_id": "o3", "status": "executed"}
+        ex._kalshi_client.get_order.return_value = {"remaining_count": 0}
+        r = ex._place_kalshi(self._intent())
+        self.assertTrue(r.success)
+        ex._kalshi_client.get_order.assert_called_once()
+
+    def test_unconfirmable_treated_as_not_filled(self):
+        ex = _live_executor()
+        ex._kalshi_client.place_order.return_value = {"order_id": "o4", "status": "unknown"}
+        ex._kalshi_client.get_order.return_value = {}        # still no remaining_count
+        r = ex._place_kalshi(self._intent())
+        self.assertFalse(r.success)
 
 
 def _tr(success: bool):

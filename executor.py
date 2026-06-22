@@ -341,6 +341,18 @@ class Executor:
     # Single-leg placement
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _kalshi_remaining(resp: dict) -> float | None:
+        """Parse remaining_count (unfilled contracts) from a Kalshi order response;
+        handles the top-level and nested-'order' shapes. None if absent/unparseable."""
+        rc = resp.get("remaining_count")
+        if rc is None:
+            rc = resp.get("order", {}).get("remaining_count")
+        try:
+            return float(rc) if rc is not None else None
+        except (TypeError, ValueError):
+            return None
+
     def _place_kalshi(self, intent: TradeIntent) -> TradeResult:
         """Place one leg on Kalshi."""
         # Map YES/NO contract side → Kalshi bid/ask side
@@ -376,7 +388,21 @@ class Executor:
             )
             order_id = resp.get("order_id") or resp.get("order", {}).get("order_id")
             status = resp.get("status") or resp.get("order", {}).get("status", "unknown")
-            logger.info("Kalshi order placed: %s  status=%s", order_id, status)
+            # fill_or_kill either fully executes or is canceled. Success = fully
+            # filled (remaining_count == 0), NOT merely a non-error response — a
+            # killed FOK reported as success would leave the other leg naked (#36).
+            remaining = self._kalshi_remaining(resp)
+            if remaining is None and order_id:        # response lacked it — ask directly
+                try:
+                    remaining = self._kalshi_remaining(self._kalshi_client.get_order(order_id))
+                except Exception as exc:
+                    logger.warning("Kalshi get_order(%s) failed: %s", order_id, exc)
+            if remaining != 0:                        # killed / unconfirmable -> not filled
+                logger.warning("Kalshi FOK not filled: status=%s remaining=%s", status, remaining)
+                return TradeResult(
+                    intent=intent, success=False, order_id=order_id, status=status,
+                    error=f"FOK not filled (remaining={remaining}, status={status})", dry_run=False)
+            logger.info("Kalshi order filled: %s  status=%s", order_id, status)
             return TradeResult(
                 intent=intent, success=True,
                 order_id=order_id, status=status, dry_run=False,
