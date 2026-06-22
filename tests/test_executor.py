@@ -55,6 +55,39 @@ def _tr(success: bool):
     return TradeResult(intent=intent, success=success, dry_run=False)
 
 
+class CancelConfirmed(unittest.TestCase):
+    def test_kalshi_confirmed_only_when_reduced(self):
+        ex = _live_executor()
+        ex._kalshi_client.cancel_order.return_value = {"reduced_by": 5}
+        self.assertTrue(ex._cancel_confirmed("kalshi", "o1"))
+        ex._kalshi_client.cancel_order.return_value = {"reduced_by": 0}  # filled -> nothing cancelled
+        self.assertFalse(ex._cancel_confirmed("kalshi", "o1"))
+
+    def test_poly_confirmed_only_when_in_canceled_list(self):
+        ex = Executor(dry_run=True); ex.dry_run = False; ex._poly_client = MagicMock()
+        ex._poly_client.cancel_order.return_value = {"canceled": ["o2"]}
+        self.assertTrue(ex._cancel_confirmed("polymarket", "o2"))
+        ex._poly_client.cancel_order.return_value = {"canceled": [], "not_canceled": {"o2": "filled"}}
+        self.assertFalse(ex._cancel_confirmed("polymarket", "o2"))
+
+
+class ExecuteNakedPath(unittest.TestCase):
+    def test_filled_legA_unfillable_legB_flags_naked(self):
+        ex = Executor(dry_run=True); ex.dry_run = False
+        ex._kalshi_client = MagicMock(); ex._poly_client = MagicMock()
+        # leg A (kalshi) fills; leg B (poly) does not match; cancel of filled leg A reduces nothing.
+        ex._kalshi_client.place_order.return_value = {"order_id": "a", "status": "executed", "remaining_count": 0}
+        ex._poly_client.place_order.return_value = {"orderID": "b", "success": True, "status": "unmatched"}
+        ex._kalshi_client.cancel_order.return_value = {"order_id": "a", "reduced_by": 0}
+        leg_a = TradeIntent("kalshi", "YES", 0.40, 10, "KX", None, "A")
+        leg_b = TradeIntent("polymarket", "NO", 0.55, 10, "PM", "tok", "B")
+        res = ex.execute(leg_a, leg_b, skip_preflight=True)
+        self.assertTrue(res.leg_a.success)
+        self.assertFalse(res.leg_b.success)
+        self.assertFalse(res.cancelled_leg_a)     # filled -> nothing cancelled
+        self.assertTrue(res.naked_exposure)        # correctly surfaced, not masked
+
+
 class NakedExposure(unittest.TestCase):
     def _exec(self, a_ok, b_ok, cancelled):
         return ArbExecution(leg_a=_tr(a_ok), leg_b=_tr(b_ok), dry_run=False,

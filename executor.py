@@ -470,6 +470,22 @@ class Executor:
             logger.error("Polymarket placement failed: %s", exc)
             return TradeResult(intent=intent, success=False, error=str(exc), dry_run=False)
 
+    def _cancel_confirmed(self, exchange: str, order_id: str) -> bool:
+        """Cancel an order and return True only if contracts were ACTUALLY cancelled.
+        A fully-filled fill_or_kill order cancels nothing, so this returns False and
+        the caller treats the leg as naked (Kalshi: reduced_by>0; Poly: id in
+        'canceled')."""
+        if exchange == "kalshi":
+            resp = self._kalshi_client.cancel_order(order_id)
+            try:
+                return float(resp.get("reduced_by", 0) or 0) > 0
+            except (TypeError, ValueError):
+                return False
+        if exchange == "polymarket":
+            resp = self._poly_client.cancel_order(order_id)
+            return order_id in (resp.get("canceled") or [])
+        return False
+
     def _place(self, intent: TradeIntent) -> TradeResult:
         if intent.exchange == "kalshi":
             return self._place_kalshi(intent)
@@ -544,17 +560,27 @@ class Executor:
             result.notes.append("leg B failed — attempting to cancel leg A")
             if not self.dry_run and result.leg_a.order_id:
                 try:
-                    if leg_a.exchange == "kalshi":
-                        self._kalshi_client.cancel_order(result.leg_a.order_id)
-                    elif leg_a.exchange == "polymarket":
-                        self._poly_client.cancel_order(result.leg_a.order_id)
-                    result.cancelled_leg_a = True
-                    result.notes.append(f"leg A cancelled: {result.leg_a.order_id}")
+                    # Leg A is fill_or_kill, so a successful leg A is FULLY FILLED —
+                    # there is nothing to cancel. Only claim cancellation if the venue
+                    # actually reduced the position; otherwise it's a NAKED leg that
+                    # needs manual unwinding, not a cancel (#38, exposed by #36/#37).
+                    if self._cancel_confirmed(leg_a.exchange, result.leg_a.order_id):
+                        result.cancelled_leg_a = True
+                        result.notes.append(f"leg A cancelled: {result.leg_a.order_id}")
+                    else:
+                        result.notes.append(
+                            f"leg A ({result.leg_a.order_id}) already filled — nothing to cancel; "
+                            "NAKED position, manual unwind required")
+                        logger.error(
+                            "NAKED EXPOSURE: leg A (%s, order %s) filled but leg B failed and "
+                            "could not be cancelled (already filled) — manual unwind required",
+                            leg_a.exchange, result.leg_a.order_id,
+                        )
                 except Exception as exc:
                     result.notes.append(f"leg A cancel FAILED: {exc} — manual intervention required")
                     logger.error(
                         "NAKED EXPOSURE: leg A (%s, order %s) filled but leg B failed and "
-                        "could not be cancelled (%s) — manual intervention required",
+                        "the cancel call errored (%s) — manual intervention required",
                         leg_a.exchange, result.leg_a.order_id, exc,
                     )
             return result
