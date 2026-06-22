@@ -4,7 +4,30 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from executor import TradeIntent, pre_flight_checks
+from executor import TradeIntent, TradeResult, ArbExecution, pre_flight_checks
+
+
+def _tr(success: bool):
+    intent = TradeIntent("kalshi", "YES", 0.5, 1, "KX", None, "x")
+    return TradeResult(intent=intent, success=success, dry_run=False)
+
+
+class NakedExposure(unittest.TestCase):
+    def _exec(self, a_ok, b_ok, cancelled):
+        return ArbExecution(leg_a=_tr(a_ok), leg_b=_tr(b_ok), dry_run=False,
+                            cancelled_leg_a=cancelled)
+
+    def test_true_when_legA_filled_legB_failed_not_cancelled(self):
+        self.assertTrue(self._exec(True, False, False).naked_exposure)
+
+    def test_false_when_both_succeed(self):
+        self.assertFalse(self._exec(True, True, False).naked_exposure)
+
+    def test_false_when_legA_cancelled(self):
+        self.assertFalse(self._exec(True, False, True).naked_exposure)
+
+    def test_false_when_legA_never_filled(self):
+        self.assertFalse(self._exec(False, False, False).naked_exposure)
 
 
 def _legs():

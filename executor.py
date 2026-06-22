@@ -101,6 +101,12 @@ class ArbExecution:
     def success(self) -> bool:
         return self.leg_a.success and self.leg_b.success
 
+    @property
+    def naked_exposure(self) -> bool:
+        """True when leg A filled but leg B did NOT and leg A was not cancelled — an
+        unhedged one-sided position needing manual intervention (#34)."""
+        return self.leg_a.success and not self.leg_b.success and not self.cancelled_leg_a
+
 
 # ---------------------------------------------------------------------------
 # Pre-flight checks
@@ -496,6 +502,11 @@ class Executor:
                     result.notes.append(f"leg A cancelled: {result.leg_a.order_id}")
                 except Exception as exc:
                     result.notes.append(f"leg A cancel FAILED: {exc} — manual intervention required")
+                    logger.error(
+                        "NAKED EXPOSURE: leg A (%s, order %s) filled but leg B failed and "
+                        "could not be cancelled (%s) — manual intervention required",
+                        leg_a.exchange, result.leg_a.order_id, exc,
+                    )
             return result
 
         # Both legs placed
