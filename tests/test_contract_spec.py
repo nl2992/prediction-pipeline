@@ -13,7 +13,10 @@ import unittest
 from contract_spec import extract_spec, match_spec
 from pipeline import MarketSnapshot, OrderBook, PriceLevel
 
-FIXTURE = os.environ.get("PAIRS_FIXTURE", r"C:\Users\nigel\Downloads\pairs_fixture.json")
+# Default to the in-repo slimmed fixture so parity ALWAYS runs (never silently
+# skips off-machine, #19); PAIRS_FIXTURE overrides it with the full local file.
+_IN_REPO_FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "pairs_fixture.json")
+FIXTURE = os.environ.get("PAIRS_FIXTURE", _IN_REPO_FIXTURE)
 
 
 def snap(title: str, close: str = "2026-12-31T00:00:00Z") -> MarketSnapshot:

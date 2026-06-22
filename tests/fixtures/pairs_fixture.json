@@ -1,8 +1,7 @@
 {
   "fixture_version": "1.0",
   "generated_at": "2026-06-10T04:00:00Z",
-  "description": "50 candidate Polymarket<->Kalshi pairs for matcher + arb-engine testing. ground_truth.should_match is the matcher label; arb block is only economically meaningful when should_match is true.",
-  "price_units": "probability (0-1); Kalshi cents also provided",
+  "description": "50 candidate Polymarket<->Kalshi pairs for matcher + arb-engine testing. ground_truth.should_match is the matcher label; arb block is only economically meaningful when should_match is true. [slimmed in-repo copy: only fields used by test_contract_spec parity]",
   "counts": {
     "total": 50,
     "should_match_true": 42,
@@ -15,4050 +14,900 @@
       "pair_id": "PAIR-001",
       "category": "politics",
       "polymarket": {
-        "market_id": "0x392456de3eb13b90",
-        "slug": "will-gavin-newsom-win-the-2028-democratic-presidential-nomin",
         "question": "Will Gavin Newsom win the 2028 Democratic presidential nomination?",
-        "outcome": "Yes",
-        "yes_bid": 0.305,
-        "yes_ask": 0.315,
-        "no_bid": 0.685,
-        "no_ask": 0.695,
-        "mid": 0.31,
-        "spread": 0.01,
-        "volume_24h_usd": 1864000,
-        "liquidity_usd": 45000,
-        "end_date_iso": "2028-06-09T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2028-06-09T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "DEMNOM28-GN",
         "title": "Newsom to win 2028 Democratic nomination?",
-        "yes_bid": 0.28,
-        "yes_ask": 0.3,
-        "no_bid": 0.7,
-        "no_ask": 0.72,
-        "yes_bid_cents": 28,
-        "yes_ask_cents": 30,
-        "no_bid_cents": 70,
-        "no_ask_cents": 72,
-        "mid": 0.29,
-        "spread": 0.02,
-        "volume_contracts": 764000,
-        "open_interest": 142000,
-        "close_time_iso": "2028-06-09T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2028-06-09T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.315
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.72,
-              "price_cents": 72
-            }
-          },
-          "edge_gross": -0.035,
-          "kalshi_fee": 0.0141,
-          "edge_net": -0.0491
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.3,
-              "price_cents": 30
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.695
-            }
-          },
-          "edge_gross": 0.005,
-          "kalshi_fee": 0.0147,
-          "edge_net": -0.0097
-        },
-        "best_edge_net": -0.0097,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-002",
       "category": "politics",
       "polymarket": {
-        "market_id": "0xe465e150bd9c66b3",
-        "slug": "will-the-republican-party-win-the-2026-us-senate-majority",
         "question": "Will the Republican Party win the 2026 US Senate majority?",
-        "outcome": "Yes",
-        "yes_bid": 0.716,
-        "yes_ask": 0.724,
-        "no_bid": 0.276,
-        "no_ask": 0.284,
-        "mid": 0.72,
-        "spread": 0.008,
-        "volume_24h_usd": 2326000,
-        "liquidity_usd": 774000,
-        "end_date_iso": "2026-11-05T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-11-05T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "SENATE26-R",
         "title": "Which party controls the Senate after the 2026 midterms? (Republican)",
-        "yes_bid": 0.67,
-        "yes_ask": 0.69,
-        "no_bid": 0.31,
-        "no_ask": 0.33,
-        "yes_bid_cents": 67,
-        "yes_ask_cents": 69,
-        "no_bid_cents": 31,
-        "no_ask_cents": 33,
-        "mid": 0.68,
-        "spread": 0.02,
-        "volume_contracts": 109000,
-        "open_interest": 348000,
-        "close_time_iso": "2026-11-05T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-11-05T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "paraphrase",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.724
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.33,
-              "price_cents": 33
-            }
-          },
-          "edge_gross": -0.054,
-          "kalshi_fee": 0.0155,
-          "edge_net": -0.0695
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.69,
-              "price_cents": 69
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.284
-            }
-          },
-          "edge_gross": 0.026,
-          "kalshi_fee": 0.015,
-          "edge_net": 0.011
-        },
-        "best_edge_net": 0.011,
-        "arb_exists": true,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-003",
       "category": "politics",
       "polymarket": {
-        "market_id": "0x07a0ca6e0822e8f3",
-        "slug": "will-democrats-win-the-house-in-the-2026-midterms",
         "question": "Will Democrats win the House in the 2026 midterms?",
-        "outcome": "Yes",
-        "yes_bid": 0.545,
-        "yes_ask": 0.555,
-        "no_bid": 0.445,
-        "no_ask": 0.455,
-        "mid": 0.55,
-        "spread": 0.01,
-        "volume_24h_usd": 8975000,
-        "liquidity_usd": 109000,
-        "end_date_iso": "2026-11-05T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-11-05T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "HOUSE26-D",
         "title": "Democrats to control the House after 2026 elections?",
-        "yes_bid": 0.57,
-        "yes_ask": 0.59,
-        "no_bid": 0.41,
-        "no_ask": 0.43,
-        "yes_bid_cents": 57,
-        "yes_ask_cents": 59,
-        "no_bid_cents": 41,
-        "no_ask_cents": 43,
-        "mid": 0.58,
-        "spread": 0.02,
-        "volume_contracts": 609000,
-        "open_interest": 218000,
-        "close_time_iso": "2026-11-05T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-11-05T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.555
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.43,
-              "price_cents": 43
-            }
-          },
-          "edge_gross": 0.015,
-          "kalshi_fee": 0.0172,
-          "edge_net": -0.0022
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.59,
-              "price_cents": 59
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.455
-            }
-          },
-          "edge_gross": -0.045,
-          "kalshi_fee": 0.0169,
-          "edge_net": -0.0619
-        },
-        "best_edge_net": -0.0022,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-004",
       "category": "politics",
       "polymarket": {
-        "market_id": "0x06cb0fb39a1de644",
-        "slug": "will-jd-vance-be-the-2028-republican-presidential-nominee",
         "question": "Will JD Vance be the 2028 Republican presidential nominee?",
-        "outcome": "Yes",
-        "yes_bid": 0.455,
-        "yes_ask": 0.465,
-        "no_bid": 0.535,
-        "no_ask": 0.545,
-        "mid": 0.46,
-        "spread": 0.01,
-        "volume_24h_usd": 1575000,
-        "liquidity_usd": 243000,
-        "end_date_iso": "2028-06-09T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2028-06-09T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "GOPNOM28-JDV",
         "title": "Vance to win the 2028 GOP nomination?",
-        "yes_bid": 0.45,
-        "yes_ask": 0.47,
-        "no_bid": 0.53,
-        "no_ask": 0.55,
-        "yes_bid_cents": 45,
-        "yes_ask_cents": 47,
-        "no_bid_cents": 53,
-        "no_ask_cents": 55,
-        "mid": 0.46,
-        "spread": 0.02,
-        "volume_contracts": 243000,
-        "open_interest": 260000,
-        "close_time_iso": "2028-06-09T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2028-06-09T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.465
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.55,
-              "price_cents": 55
-            }
-          },
-          "edge_gross": -0.015,
-          "kalshi_fee": 0.0173,
-          "edge_net": -0.0323
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.47,
-              "price_cents": 47
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.545
-            }
-          },
-          "edge_gross": -0.015,
-          "kalshi_fee": 0.0174,
-          "edge_net": -0.0324
-        },
-        "best_edge_net": -0.0323,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-005",
       "category": "politics",
       "polymarket": {
-        "market_id": "0x6b65a6a48b8148f6",
-        "slug": "will-there-be-a-us-government-shutdown-before-october-1-2026",
         "question": "Will there be a US government shutdown before October 1, 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.234,
-        "yes_ask": 0.246,
-        "no_bid": 0.754,
-        "no_ask": 0.766,
-        "mid": 0.24,
-        "spread": 0.012,
-        "volume_24h_usd": 3297000,
-        "liquidity_usd": 753000,
-        "end_date_iso": "2026-09-30T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-09-30T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "SHUTDOWN-26SEP",
         "title": "Government shutdown by Sep 30, 2026?",
-        "yes_bid": 0.26,
-        "yes_ask": 0.29,
-        "no_bid": 0.71,
-        "no_ask": 0.74,
-        "yes_bid_cents": 26,
-        "yes_ask_cents": 29,
-        "no_bid_cents": 71,
-        "no_ask_cents": 74,
-        "mid": 0.27,
-        "spread": 0.03,
-        "volume_contracts": 670000,
-        "open_interest": 361000,
-        "close_time_iso": "2026-09-30T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-09-30T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "paraphrase",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.246
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.74,
-              "price_cents": 74
-            }
-          },
-          "edge_gross": 0.014,
-          "kalshi_fee": 0.0135,
-          "edge_net": 0.0005
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.29,
-              "price_cents": 29
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.766
-            }
-          },
-          "edge_gross": -0.056,
-          "kalshi_fee": 0.0144,
-          "edge_net": -0.0704
-        },
-        "best_edge_net": 0.0005,
-        "arb_exists": true,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-006",
       "category": "politics",
       "polymarket": {
-        "market_id": "0xde8a774bcf36d58b",
-        "slug": "will-the-uk-hold-a-general-election-in-2026",
         "question": "Will the UK hold a general election in 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.113,
-        "yes_ask": 0.127,
-        "no_bid": 0.873,
-        "no_ask": 0.887,
-        "mid": 0.12,
-        "spread": 0.014,
-        "volume_24h_usd": 3651000,
-        "liquidity_usd": 479000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "UKELEC-27",
         "title": "UK general election called in 2027?",
-        "yes_bid": 0.32,
-        "yes_ask": 0.36,
-        "no_bid": 0.64,
-        "no_ask": 0.68,
-        "yes_bid_cents": 32,
-        "yes_ask_cents": 36,
-        "no_bid_cents": 64,
-        "no_ask_cents": 68,
-        "mid": 0.34,
-        "spread": 0.04,
-        "volume_contracts": 608000,
-        "open_interest": 144000,
-        "close_time_iso": "2027-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2027-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": false,
         "match_type": "date_mismatch",
         "inverted": false,
-        "note": "Same event family, different year \u2014 must NOT match"
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.127
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.68,
-              "price_cents": 68
-            }
-          },
-          "edge_gross": 0.193,
-          "kalshi_fee": 0.0152,
-          "edge_net": 0.1778
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.36,
-              "price_cents": 36
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.887
-            }
-          },
-          "edge_gross": -0.247,
-          "kalshi_fee": 0.0161,
-          "edge_net": -0.2631
-        },
-        "best_edge_net": 0.1778,
-        "arb_exists": false,
-        "valid_only_if_matched": true
+        "note": "Same event family, different year — must NOT match"
       }
     },
     {
       "pair_id": "PAIR-007",
       "category": "politics",
       "polymarket": {
-        "market_id": "0x6c307511b2b9437a",
-        "slug": "will-trumps-approval-rating-be-above-45pct-on-july-1-2026",
         "question": "Will Trump's approval rating be above 45% on July 1, 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.375,
-        "yes_ask": 0.385,
-        "no_bid": 0.615,
-        "no_ask": 0.625,
-        "mid": 0.38,
-        "spread": 0.01,
-        "volume_24h_usd": 146000,
-        "liquidity_usd": 797000,
-        "end_date_iso": "2026-07-01T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-07-01T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "APPROVAL-26JUL01-45",
         "title": "Trump approval above 45 on Jul 1?",
-        "yes_bid": 0.34,
-        "yes_ask": 0.38,
-        "no_bid": 0.62,
-        "no_ask": 0.66,
-        "yes_bid_cents": 34,
-        "yes_ask_cents": 38,
-        "no_bid_cents": 62,
-        "no_ask_cents": 66,
-        "mid": 0.36,
-        "spread": 0.03,
-        "volume_contracts": 830000,
-        "open_interest": 83000,
-        "close_time_iso": "2026-07-01T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-07-01T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.385
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.66,
-              "price_cents": 66
-            }
-          },
-          "edge_gross": -0.045,
-          "kalshi_fee": 0.0157,
-          "edge_net": -0.0607
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.38,
-              "price_cents": 38
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.625
-            }
-          },
-          "edge_gross": -0.005,
-          "kalshi_fee": 0.0165,
-          "edge_net": -0.0215
-        },
-        "best_edge_net": -0.0215,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-008",
       "category": "politics",
       "polymarket": {
-        "market_id": "0xc37459eef50bea63",
-        "slug": "will-a-us-supreme-court-justice-retire-or-die-in-2026",
         "question": "Will a US Supreme Court justice retire or die in 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.173,
-        "yes_ask": 0.187,
-        "no_bid": 0.813,
-        "no_ask": 0.827,
-        "mid": 0.18,
-        "spread": 0.014,
-        "volume_24h_usd": 5614000,
-        "liquidity_usd": 304000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "SCOTUS-VAC-26",
         "title": "SCOTUS vacancy in 2026?",
-        "yes_bid": 0.19,
-        "yes_ask": 0.23,
-        "no_bid": 0.77,
-        "no_ask": 0.81,
-        "yes_bid_cents": 19,
-        "yes_ask_cents": 23,
-        "no_bid_cents": 77,
-        "no_ask_cents": 81,
-        "mid": 0.21,
-        "spread": 0.04,
-        "volume_contracts": 164000,
-        "open_interest": 112000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "paraphrase",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.187
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.81,
-              "price_cents": 81
-            }
-          },
-          "edge_gross": 0.003,
-          "kalshi_fee": 0.0108,
-          "edge_net": -0.0078
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.23,
-              "price_cents": 23
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.827
-            }
-          },
-          "edge_gross": -0.057,
-          "kalshi_fee": 0.0124,
-          "edge_net": -0.0694
-        },
-        "best_edge_net": -0.0078,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-009",
       "category": "politics",
       "polymarket": {
-        "market_id": "0x5be6128e18c26797",
-        "slug": "will-frances-government-collapse-lose-confidence-vote-in-202",
         "question": "Will France's government collapse (lose confidence vote) in 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.402,
-        "yes_ask": 0.418,
-        "no_bid": 0.582,
-        "no_ask": 0.598,
-        "mid": 0.41,
-        "spread": 0.016,
-        "volume_24h_usd": 5554000,
-        "liquidity_usd": 124000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "FRGOV-26",
         "title": "French PM ousted by no-confidence vote in 2026?",
-        "yes_bid": 0.39,
-        "yes_ask": 0.43,
-        "no_bid": 0.57,
-        "no_ask": 0.61,
-        "yes_bid_cents": 39,
-        "yes_ask_cents": 43,
-        "no_bid_cents": 57,
-        "no_ask_cents": 61,
-        "mid": 0.41,
-        "spread": 0.04,
-        "volume_contracts": 99000,
-        "open_interest": 196000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "paraphrase",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.418
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.61,
-              "price_cents": 61
-            }
-          },
-          "edge_gross": -0.028,
-          "kalshi_fee": 0.0167,
-          "edge_net": -0.0447
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.43,
-              "price_cents": 43
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.598
-            }
-          },
-          "edge_gross": -0.028,
-          "kalshi_fee": 0.0172,
-          "edge_net": -0.0452
-        },
-        "best_edge_net": -0.0447,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-010",
       "category": "politics",
       "polymarket": {
-        "market_id": "0x759cde66bacfb3d0",
-        "slug": "will-zohran-mamdani-be-nyc-mayor-on-dec-31-2026",
         "question": "Will Zohran Mamdani be NYC mayor on Dec 31, 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.926,
-        "yes_ask": 0.934,
-        "no_bid": 0.066,
-        "no_ask": 0.074,
-        "mid": 0.93,
-        "spread": 0.008,
-        "volume_24h_usd": 5675000,
-        "liquidity_usd": 638000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "NYCMAYOR-29",
         "title": "Mamdani to win 2029 NYC mayoral election?",
-        "yes_bid": 0.53,
-        "yes_ask": 0.57,
-        "no_bid": 0.43,
-        "no_ask": 0.47,
-        "yes_bid_cents": 53,
-        "yes_ask_cents": 57,
-        "no_bid_cents": 43,
-        "no_ask_cents": 47,
-        "mid": 0.55,
-        "spread": 0.04,
-        "volume_contracts": 275000,
-        "open_interest": 24000,
-        "close_time_iso": "2029-12-01T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2029-12-01T04:00:00Z"
       },
       "ground_truth": {
         "should_match": false,
         "match_type": "event_mismatch",
         "inverted": false,
-        "note": "Incumbency vs future election \u2014 must NOT match"
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.934
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.47,
-              "price_cents": 47
-            }
-          },
-          "edge_gross": -0.404,
-          "kalshi_fee": 0.0174,
-          "edge_net": -0.4214
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.57,
-              "price_cents": 57
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.074
-            }
-          },
-          "edge_gross": 0.356,
-          "kalshi_fee": 0.0172,
-          "edge_net": 0.3388
-        },
-        "best_edge_net": 0.3388,
-        "arb_exists": false,
-        "valid_only_if_matched": true
+        "note": "Incumbency vs future election — must NOT match"
       }
     },
     {
       "pair_id": "PAIR-011",
       "category": "crypto",
       "polymarket": {
-        "market_id": "0x4b0dbb418d5288f1",
-        "slug": "will-bitcoin-be-above-150000-on-december-31-2026",
         "question": "Will Bitcoin be above $150,000 on December 31, 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.337,
-        "yes_ask": 0.343,
-        "no_bid": 0.657,
-        "no_ask": 0.663,
-        "mid": 0.34,
-        "spread": 0.006,
-        "volume_24h_usd": 8825000,
-        "liquidity_usd": 147000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "BTC-26DEC31-150",
         "title": "BTC above $150k at year-end 2026?",
-        "yes_bid": 0.3,
-        "yes_ask": 0.32,
-        "no_bid": 0.68,
-        "no_ask": 0.7,
-        "yes_bid_cents": 30,
-        "yes_ask_cents": 32,
-        "no_bid_cents": 68,
-        "no_ask_cents": 70,
-        "mid": 0.31,
-        "spread": 0.02,
-        "volume_contracts": 392000,
-        "open_interest": 42000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.343
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.7,
-              "price_cents": 70
-            }
-          },
-          "edge_gross": -0.043,
-          "kalshi_fee": 0.0147,
-          "edge_net": -0.0577
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.32,
-              "price_cents": 32
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.663
-            }
-          },
-          "edge_gross": 0.017,
-          "kalshi_fee": 0.0152,
-          "edge_net": 0.0018
-        },
-        "best_edge_net": 0.0018,
-        "arb_exists": true,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-012",
       "category": "crypto",
       "polymarket": {
-        "market_id": "0x0bbb259911ce5dd2",
-        "slug": "will-bitcoin-be-above-200000-on-december-31-2026",
         "question": "Will Bitcoin be above $200,000 on December 31, 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.126,
-        "yes_ask": 0.134,
-        "no_bid": 0.866,
-        "no_ask": 0.874,
-        "mid": 0.13,
-        "spread": 0.008,
-        "volume_24h_usd": 5965000,
-        "liquidity_usd": 611000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "BTC-26DEC31-150B",
         "title": "BTC above $150k at year-end 2026?",
-        "yes_bid": 0.3,
-        "yes_ask": 0.32,
-        "no_bid": 0.68,
-        "no_ask": 0.7,
-        "yes_bid_cents": 30,
-        "yes_ask_cents": 32,
-        "no_bid_cents": 68,
-        "no_ask_cents": 70,
-        "mid": 0.31,
-        "spread": 0.02,
-        "volume_contracts": 201000,
-        "open_interest": 362000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": false,
         "match_type": "strike_mismatch",
         "inverted": false,
-        "note": "Different strike ($200k vs $150k) \u2014 must NOT match"
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.134
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.7,
-              "price_cents": 70
-            }
-          },
-          "edge_gross": 0.166,
-          "kalshi_fee": 0.0147,
-          "edge_net": 0.1513
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.32,
-              "price_cents": 32
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.874
-            }
-          },
-          "edge_gross": -0.194,
-          "kalshi_fee": 0.0152,
-          "edge_net": -0.2092
-        },
-        "best_edge_net": 0.1513,
-        "arb_exists": false,
-        "valid_only_if_matched": true
+        "note": "Different strike ($200k vs $150k) — must NOT match"
       }
     },
     {
       "pair_id": "PAIR-013",
       "category": "crypto",
       "polymarket": {
-        "market_id": "0x19db3ad0ddd1dfb2",
-        "slug": "will-ethereum-be-above-8000-on-december-31-2026",
         "question": "Will Ethereum be above $8,000 on December 31, 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.266,
-        "yes_ask": 0.274,
-        "no_bid": 0.726,
-        "no_ask": 0.734,
-        "mid": 0.27,
-        "spread": 0.008,
-        "volume_24h_usd": 3773000,
-        "liquidity_usd": 316000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "ETH-26DEC31-8000",
         "title": "ETH above $8000 at end of 2026?",
-        "yes_bid": 0.29,
-        "yes_ask": 0.31,
-        "no_bid": 0.69,
-        "no_ask": 0.71,
-        "yes_bid_cents": 29,
-        "yes_ask_cents": 31,
-        "no_bid_cents": 69,
-        "no_ask_cents": 71,
-        "mid": 0.3,
-        "spread": 0.025,
-        "volume_contracts": 86000,
-        "open_interest": 121000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.274
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.71,
-              "price_cents": 71
-            }
-          },
-          "edge_gross": 0.016,
-          "kalshi_fee": 0.0144,
-          "edge_net": 0.0016
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.31,
-              "price_cents": 31
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.734
-            }
-          },
-          "edge_gross": -0.044,
-          "kalshi_fee": 0.015,
-          "edge_net": -0.059
-        },
-        "best_edge_net": 0.0016,
-        "arb_exists": true,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-014",
       "category": "crypto",
       "polymarket": {
-        "market_id": "0x5d65a441d58842de",
-        "slug": "will-bitcoin-hit-175000-at-any-point-in-2026",
         "question": "Will Bitcoin hit $175,000 at any point in 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.416,
-        "yes_ask": 0.424,
-        "no_bid": 0.576,
-        "no_ask": 0.584,
-        "mid": 0.42,
-        "spread": 0.008,
-        "volume_24h_usd": 6267000,
-        "liquidity_usd": 304000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "BTC-TOUCH-175",
         "title": "BTC to touch $175k in 2026?",
-        "yes_bid": 0.38,
-        "yes_ask": 0.4,
-        "no_bid": 0.6,
-        "no_ask": 0.62,
-        "yes_bid_cents": 38,
-        "yes_ask_cents": 40,
-        "no_bid_cents": 60,
-        "no_ask_cents": 62,
-        "mid": 0.39,
-        "spread": 0.025,
-        "volume_contracts": 469000,
-        "open_interest": 327000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.424
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.62,
-              "price_cents": 62
-            }
-          },
-          "edge_gross": -0.044,
-          "kalshi_fee": 0.0165,
-          "edge_net": -0.0605
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.4,
-              "price_cents": 40
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.584
-            }
-          },
-          "edge_gross": 0.016,
-          "kalshi_fee": 0.0168,
-          "edge_net": -0.0008
-        },
-        "best_edge_net": -0.0008,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-015",
       "category": "crypto",
       "polymarket": {
-        "market_id": "0x4458a885ab9099a4",
-        "slug": "will-bitcoin-be-above-175000-on-dec-31-2026",
         "question": "Will Bitcoin be above $175,000 on Dec 31, 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.216,
-        "yes_ask": 0.224,
-        "no_bid": 0.776,
-        "no_ask": 0.784,
-        "mid": 0.22,
-        "spread": 0.008,
-        "volume_24h_usd": 2704000,
-        "liquidity_usd": 399000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "BTC-TOUCH-175X",
         "title": "BTC to touch $175k in 2026?",
-        "yes_bid": 0.38,
-        "yes_ask": 0.4,
-        "no_bid": 0.6,
-        "no_ask": 0.62,
-        "yes_bid_cents": 38,
-        "yes_ask_cents": 40,
-        "no_bid_cents": 60,
-        "no_ask_cents": 62,
-        "mid": 0.39,
-        "spread": 0.025,
-        "volume_contracts": 368000,
-        "open_interest": 109000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": false,
         "match_type": "settlement_mismatch",
         "inverted": false,
-        "note": "'Close above' vs 'touch anytime' \u2014 must NOT match"
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.224
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.62,
-              "price_cents": 62
-            }
-          },
-          "edge_gross": 0.156,
-          "kalshi_fee": 0.0165,
-          "edge_net": 0.1395
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.4,
-              "price_cents": 40
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.784
-            }
-          },
-          "edge_gross": -0.184,
-          "kalshi_fee": 0.0168,
-          "edge_net": -0.2008
-        },
-        "best_edge_net": 0.1395,
-        "arb_exists": false,
-        "valid_only_if_matched": true
+        "note": "'Close above' vs 'touch anytime' — must NOT match"
       }
     },
     {
       "pair_id": "PAIR-016",
       "category": "crypto",
       "polymarket": {
-        "market_id": "0xbaa80dd488bd6407",
-        "slug": "will-a-us-spot-solana-etf-have-over-5b-aum-by-dec-31-2026",
         "question": "Will a US spot Solana ETF have over $5B AUM by Dec 31, 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.473,
-        "yes_ask": 0.487,
-        "no_bid": 0.513,
-        "no_ask": 0.527,
-        "mid": 0.48,
-        "spread": 0.014,
-        "volume_24h_usd": 1209000,
-        "liquidity_usd": 643000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "SOLETF-5B",
         "title": "SOL ETFs above $5B AUM by end of 2026?",
-        "yes_bid": 0.5,
-        "yes_ask": 0.54,
-        "no_bid": 0.46,
-        "no_ask": 0.5,
-        "yes_bid_cents": 50,
-        "yes_ask_cents": 54,
-        "no_bid_cents": 46,
-        "no_ask_cents": 50,
-        "mid": 0.52,
-        "spread": 0.04,
-        "volume_contracts": 655000,
-        "open_interest": 89000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.487
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.5,
-              "price_cents": 50
-            }
-          },
-          "edge_gross": 0.013,
-          "kalshi_fee": 0.0175,
-          "edge_net": -0.0045
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.54,
-              "price_cents": 54
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.527
-            }
-          },
-          "edge_gross": -0.067,
-          "kalshi_fee": 0.0174,
-          "edge_net": -0.0844
-        },
-        "best_edge_net": -0.0045,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-017",
       "category": "crypto",
       "polymarket": {
-        "market_id": "0xfd5166e6451b4cf3",
-        "slug": "will-bitcoin-dip-below-80000-at-any-point-in-2026",
         "question": "Will Bitcoin dip below $80,000 at any point in 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.285,
-        "yes_ask": 0.295,
-        "no_bid": 0.705,
-        "no_ask": 0.715,
-        "mid": 0.29,
-        "spread": 0.01,
-        "volume_24h_usd": 4050000,
-        "liquidity_usd": 187000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "BTC-FLOOR-80",
         "title": "BTC to stay above $80k for all of 2026?",
-        "yes_bid": 0.65,
-        "yes_ask": 0.68,
-        "no_bid": 0.32,
-        "no_ask": 0.35,
-        "yes_bid_cents": 65,
-        "yes_ask_cents": 68,
-        "no_bid_cents": 32,
-        "no_ask_cents": 35,
-        "mid": 0.66,
-        "spread": 0.03,
-        "volume_contracts": 478000,
-        "open_interest": 196000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "inverted",
         "inverted": true,
         "note": "Logical inverse: PM YES == Kalshi NO. Matcher must flag inversion."
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.295
-            },
-            "kalshi": {
-              "side": "YES",
-              "price": 0.68,
-              "price_cents": 68
-            }
-          },
-          "edge_gross": 0.025,
-          "kalshi_fee": 0.0152,
-          "edge_net": 0.0098
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "NO",
-              "price": 0.35,
-              "price_cents": 35
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.715
-            }
-          },
-          "edge_gross": -0.065,
-          "kalshi_fee": 0.0159,
-          "edge_net": -0.0809
-        },
-        "best_edge_net": 0.0098,
-        "arb_exists": true,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-018",
       "category": "crypto",
       "polymarket": {
-        "market_id": "0x0e51f30dc6a7ee39",
-        "slug": "will-coinbase-be-in-the-s&p-500-on-dec-31-2026",
         "question": "Will Coinbase be in the S&P 500 on Dec 31, 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.905,
-        "yes_ask": 0.915,
-        "no_bid": 0.085,
-        "no_ask": 0.095,
-        "mid": 0.91,
-        "spread": 0.01,
-        "volume_24h_usd": 3638000,
-        "liquidity_usd": 721000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "COIN-SP500-26",
         "title": "Coinbase in S&P 500 at year-end 2026?",
-        "yes_bid": 0.88,
-        "yes_ask": 0.91,
-        "no_bid": 0.09,
-        "no_ask": 0.12,
-        "yes_bid_cents": 88,
-        "yes_ask_cents": 91,
-        "no_bid_cents": 9,
-        "no_ask_cents": 12,
-        "mid": 0.89,
-        "spread": 0.03,
-        "volume_contracts": 337000,
-        "open_interest": 395000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.915
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.12,
-              "price_cents": 12
-            }
-          },
-          "edge_gross": -0.035,
-          "kalshi_fee": 0.0074,
-          "edge_net": -0.0424
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.91,
-              "price_cents": 91
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.095
-            }
-          },
-          "edge_gross": -0.005,
-          "kalshi_fee": 0.0057,
-          "edge_net": -0.0107
-        },
-        "best_edge_net": -0.0107,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-019",
       "category": "econ",
       "polymarket": {
-        "market_id": "0x448aaa9e66b2bc5b",
-        "slug": "will-the-fed-cut-rates-at-the-july-2026-fomc-meeting",
         "question": "Will the Fed cut rates at the July 2026 FOMC meeting?",
-        "outcome": "Yes",
-        "yes_bid": 0.617,
-        "yes_ask": 0.623,
-        "no_bid": 0.377,
-        "no_ask": 0.383,
-        "mid": 0.62,
-        "spread": 0.006,
-        "volume_24h_usd": 3792000,
-        "liquidity_usd": 52000,
-        "end_date_iso": "2026-07-29T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-07-29T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "FED-26JUL-CUT",
         "title": "Fed rate cut in July 2026?",
-        "yes_bid": 0.57,
-        "yes_ask": 0.59,
-        "no_bid": 0.41,
-        "no_ask": 0.43,
-        "yes_bid_cents": 57,
-        "yes_ask_cents": 59,
-        "no_bid_cents": 41,
-        "no_ask_cents": 43,
-        "mid": 0.58,
-        "spread": 0.015,
-        "volume_contracts": 829000,
-        "open_interest": 163000,
-        "close_time_iso": "2026-07-29T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-07-29T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.623
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.43,
-              "price_cents": 43
-            }
-          },
-          "edge_gross": -0.053,
-          "kalshi_fee": 0.0172,
-          "edge_net": -0.0702
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.59,
-              "price_cents": 59
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.383
-            }
-          },
-          "edge_gross": 0.027,
-          "kalshi_fee": 0.0169,
-          "edge_net": 0.0101
-        },
-        "best_edge_net": 0.0101,
-        "arb_exists": true,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-020",
       "category": "econ",
       "polymarket": {
-        "market_id": "0x366eb16f508ebad7",
-        "slug": "will-the-fed-cut-rates-at-the-september-2026-fomc-meeting",
         "question": "Will the Fed cut rates at the September 2026 FOMC meeting?",
-        "outcome": "Yes",
-        "yes_bid": 0.506,
-        "yes_ask": 0.514,
-        "no_bid": 0.486,
-        "no_ask": 0.494,
-        "mid": 0.51,
-        "spread": 0.008,
-        "volume_24h_usd": 1124000,
-        "liquidity_usd": 236000,
-        "end_date_iso": "2026-09-23T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-09-23T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "FED-26JUL-CUTX",
         "title": "Fed rate cut in July 2026?",
-        "yes_bid": 0.57,
-        "yes_ask": 0.59,
-        "no_bid": 0.41,
-        "no_ask": 0.43,
-        "yes_bid_cents": 57,
-        "yes_ask_cents": 59,
-        "no_bid_cents": 41,
-        "no_ask_cents": 43,
-        "mid": 0.58,
-        "spread": 0.015,
-        "volume_contracts": 585000,
-        "open_interest": 369000,
-        "close_time_iso": "2026-07-29T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-07-29T04:00:00Z"
       },
       "ground_truth": {
         "should_match": false,
         "match_type": "date_mismatch",
         "inverted": false,
-        "note": "Sept vs July meeting \u2014 must NOT match"
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.514
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.43,
-              "price_cents": 43
-            }
-          },
-          "edge_gross": 0.056,
-          "kalshi_fee": 0.0172,
-          "edge_net": 0.0388
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.59,
-              "price_cents": 59
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.494
-            }
-          },
-          "edge_gross": -0.084,
-          "kalshi_fee": 0.0169,
-          "edge_net": -0.1009
-        },
-        "best_edge_net": 0.0388,
-        "arb_exists": false,
-        "valid_only_if_matched": true
+        "note": "Sept vs July meeting — must NOT match"
       }
     },
     {
       "pair_id": "PAIR-021",
       "category": "econ",
       "polymarket": {
-        "market_id": "0x43cf2fde24933b83",
-        "slug": "will-us-cpi-yoy-for-june-2026-print-above-30pct",
         "question": "Will US CPI YoY for June 2026 print above 3.0%?",
-        "outcome": "Yes",
-        "yes_bid": 0.436,
-        "yes_ask": 0.444,
-        "no_bid": 0.556,
-        "no_ask": 0.564,
-        "mid": 0.44,
-        "spread": 0.008,
-        "volume_24h_usd": 8219000,
-        "liquidity_usd": 425000,
-        "end_date_iso": "2026-07-15T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-07-15T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "CPI-26JUN-3.0",
         "title": "June CPI above 3.0% (released July)?",
-        "yes_bid": 0.46,
-        "yes_ask": 0.48,
-        "no_bid": 0.52,
-        "no_ask": 0.54,
-        "yes_bid_cents": 46,
-        "yes_ask_cents": 48,
-        "no_bid_cents": 52,
-        "no_ask_cents": 54,
-        "mid": 0.47,
-        "spread": 0.02,
-        "volume_contracts": 663000,
-        "open_interest": 236000,
-        "close_time_iso": "2026-07-15T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-07-15T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.444
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.54,
-              "price_cents": 54
-            }
-          },
-          "edge_gross": 0.016,
-          "kalshi_fee": 0.0174,
-          "edge_net": -0.0014
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.48,
-              "price_cents": 48
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.564
-            }
-          },
-          "edge_gross": -0.044,
-          "kalshi_fee": 0.0175,
-          "edge_net": -0.0615
-        },
-        "best_edge_net": -0.0014,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-022",
       "category": "econ",
       "polymarket": {
-        "market_id": "0x434308bc89fa6a68",
-        "slug": "will-the-us-enter-a-recession-nber-declared-by-end-of-2026",
         "question": "Will the US enter a recession (NBER-declared) by end of 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.184,
-        "yes_ask": 0.196,
-        "no_bid": 0.804,
-        "no_ask": 0.816,
-        "mid": 0.19,
-        "spread": 0.012,
-        "volume_24h_usd": 2327000,
-        "liquidity_usd": 272000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "RECESSION-26",
         "title": "NBER recession declared in 2026?",
-        "yes_bid": 0.15,
-        "yes_ask": 0.17,
-        "no_bid": 0.83,
-        "no_ask": 0.85,
-        "yes_bid_cents": 15,
-        "yes_ask_cents": 17,
-        "no_bid_cents": 83,
-        "no_ask_cents": 85,
-        "mid": 0.16,
-        "spread": 0.03,
-        "volume_contracts": 767000,
-        "open_interest": 289000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "paraphrase",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.196
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.85,
-              "price_cents": 85
-            }
-          },
-          "edge_gross": -0.046,
-          "kalshi_fee": 0.0089,
-          "edge_net": -0.0549
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.17,
-              "price_cents": 17
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.816
-            }
-          },
-          "edge_gross": 0.014,
-          "kalshi_fee": 0.0099,
-          "edge_net": 0.0041
-        },
-        "best_edge_net": 0.0041,
-        "arb_exists": true,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-023",
       "category": "econ",
       "polymarket": {
-        "market_id": "0xff50bde4382567b8",
-        "slug": "will-us-unemployment-exceed-48pct-in-any-2026-report",
         "question": "Will US unemployment exceed 4.8% in any 2026 report?",
-        "outcome": "Yes",
-        "yes_bid": 0.365,
-        "yes_ask": 0.375,
-        "no_bid": 0.625,
-        "no_ask": 0.635,
-        "mid": 0.37,
-        "spread": 0.01,
-        "volume_24h_usd": 7059000,
-        "liquidity_usd": 617000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "UNRATE-26-4.8",
         "title": "Unemployment rate above 4.8% in 2026?",
-        "yes_bid": 0.39,
-        "yes_ask": 0.41,
-        "no_bid": 0.59,
-        "no_ask": 0.61,
-        "yes_bid_cents": 39,
-        "yes_ask_cents": 41,
-        "no_bid_cents": 59,
-        "no_ask_cents": 61,
-        "mid": 0.4,
-        "spread": 0.025,
-        "volume_contracts": 413000,
-        "open_interest": 187000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.375
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.61,
-              "price_cents": 61
-            }
-          },
-          "edge_gross": 0.015,
-          "kalshi_fee": 0.0167,
-          "edge_net": -0.0017
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.41,
-              "price_cents": 41
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.635
-            }
-          },
-          "edge_gross": -0.045,
-          "kalshi_fee": 0.0169,
-          "edge_net": -0.0619
-        },
-        "best_edge_net": -0.0017,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-024",
       "category": "econ",
       "polymarket": {
-        "market_id": "0x0c0fd195c17af08a",
-        "slug": "will-the-s&p-500-close-above-7000-on-dec-31-2026",
         "question": "Will the S&P 500 close above 7,000 on Dec 31, 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.556,
-        "yes_ask": 0.564,
-        "no_bid": 0.436,
-        "no_ask": 0.444,
-        "mid": 0.56,
-        "spread": 0.008,
-        "volume_24h_usd": 2306000,
-        "liquidity_usd": 541000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "SPX-26DEC-7000",
         "title": "S&P 500 above 7000 at year-end?",
-        "yes_bid": 0.51,
-        "yes_ask": 0.53,
-        "no_bid": 0.47,
-        "no_ask": 0.49,
-        "yes_bid_cents": 51,
-        "yes_ask_cents": 53,
-        "no_bid_cents": 47,
-        "no_ask_cents": 49,
-        "mid": 0.52,
-        "spread": 0.02,
-        "volume_contracts": 510000,
-        "open_interest": 48000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.564
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.49,
-              "price_cents": 49
-            }
-          },
-          "edge_gross": -0.054,
-          "kalshi_fee": 0.0175,
-          "edge_net": -0.0715
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.53,
-              "price_cents": 53
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.444
-            }
-          },
-          "edge_gross": 0.026,
-          "kalshi_fee": 0.0174,
-          "edge_net": 0.0086
-        },
-        "best_edge_net": 0.0086,
-        "arb_exists": true,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-025",
       "category": "econ",
       "polymarket": {
-        "market_id": "0xae340454cac5b68c",
-        "slug": "will-nvidia-market-cap-be-above-6t-on-dec-31-2026",
         "question": "Will NVIDIA market cap be above $6T on Dec 31, 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.325,
-        "yes_ask": 0.335,
-        "no_bid": 0.665,
-        "no_ask": 0.675,
-        "mid": 0.33,
-        "spread": 0.01,
-        "volume_24h_usd": 1836000,
-        "liquidity_usd": 176000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "NVDA-6T",
         "title": "NVDA above $6 trillion market cap at year-end 2026?",
-        "yes_bid": 0.35,
-        "yes_ask": 0.39,
-        "no_bid": 0.61,
-        "no_ask": 0.65,
-        "yes_bid_cents": 35,
-        "yes_ask_cents": 39,
-        "no_bid_cents": 61,
-        "no_ask_cents": 65,
-        "mid": 0.37,
-        "spread": 0.03,
-        "volume_contracts": 647000,
-        "open_interest": 83000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.335
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.65,
-              "price_cents": 65
-            }
-          },
-          "edge_gross": 0.015,
-          "kalshi_fee": 0.0159,
-          "edge_net": -0.0009
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.39,
-              "price_cents": 39
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.675
-            }
-          },
-          "edge_gross": -0.065,
-          "kalshi_fee": 0.0167,
-          "edge_net": -0.0817
-        },
-        "best_edge_net": -0.0009,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-026",
       "category": "econ",
       "polymarket": {
-        "market_id": "0x988c24c961b1cd22",
-        "slug": "will-the-fed-funds-target-range-be-below-325pct-on-dec-31-20",
         "question": "Will the Fed funds target range be below 3.25% on Dec 31, 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.445,
-        "yes_ask": 0.455,
-        "no_bid": 0.545,
-        "no_ask": 0.555,
-        "mid": 0.45,
-        "spread": 0.01,
-        "volume_24h_usd": 6956000,
-        "liquidity_usd": 630000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "FED-EOY-325",
         "title": "Fed funds upper bound below 3.25% end-2026?",
-        "yes_bid": 0.44,
-        "yes_ask": 0.46,
-        "no_bid": 0.54,
-        "no_ask": 0.56,
-        "yes_bid_cents": 44,
-        "yes_ask_cents": 46,
-        "no_bid_cents": 54,
-        "no_ask_cents": 56,
-        "mid": 0.45,
-        "spread": 0.025,
-        "volume_contracts": 70000,
-        "open_interest": 199000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "paraphrase",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.455
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.56,
-              "price_cents": 56
-            }
-          },
-          "edge_gross": -0.015,
-          "kalshi_fee": 0.0172,
-          "edge_net": -0.0322
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.46,
-              "price_cents": 46
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.555
-            }
-          },
-          "edge_gross": -0.015,
-          "kalshi_fee": 0.0174,
-          "edge_net": -0.0324
-        },
-        "best_edge_net": -0.0322,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-027",
       "category": "sports",
       "polymarket": {
-        "market_id": "0xf143262fdc5c0eed",
-        "slug": "will-the-oklahoma-city-thunder-win-the-2026-nba-finals",
         "question": "Will the Oklahoma City Thunder win the 2026 NBA Finals?",
-        "outcome": "Yes",
-        "yes_bid": 0.706,
-        "yes_ask": 0.714,
-        "no_bid": 0.286,
-        "no_ask": 0.294,
-        "mid": 0.71,
-        "spread": 0.008,
-        "volume_24h_usd": 7708000,
-        "liquidity_usd": 561000,
-        "end_date_iso": "2026-06-22T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-06-22T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "NBA-26-OKC",
         "title": "Thunder to win 2026 NBA Championship?",
-        "yes_bid": 0.66,
-        "yes_ask": 0.68,
-        "no_bid": 0.32,
-        "no_ask": 0.34,
-        "yes_bid_cents": 66,
-        "yes_ask_cents": 68,
-        "no_bid_cents": 32,
-        "no_ask_cents": 34,
-        "mid": 0.67,
-        "spread": 0.02,
-        "volume_contracts": 262000,
-        "open_interest": 285000,
-        "close_time_iso": "2026-06-22T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-06-22T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.714
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.34,
-              "price_cents": 34
-            }
-          },
-          "edge_gross": -0.054,
-          "kalshi_fee": 0.0157,
-          "edge_net": -0.0697
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.68,
-              "price_cents": 68
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.294
-            }
-          },
-          "edge_gross": 0.026,
-          "kalshi_fee": 0.0152,
-          "edge_net": 0.0108
-        },
-        "best_edge_net": 0.0108,
-        "arb_exists": true,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-028",
       "category": "sports",
       "polymarket": {
-        "market_id": "0xe2817efdae849217",
-        "slug": "will-the-indiana-pacers-win-the-2026-nba-finals",
         "question": "Will the Indiana Pacers win the 2026 NBA Finals?",
-        "outcome": "Yes",
-        "yes_bid": 0.286,
-        "yes_ask": 0.294,
-        "no_bid": 0.706,
-        "no_ask": 0.714,
-        "mid": 0.29,
-        "spread": 0.008,
-        "volume_24h_usd": 228000,
-        "liquidity_usd": 716000,
-        "end_date_iso": "2026-06-22T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-06-22T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "NBA-26-IND",
         "title": "Pacers to win 2026 NBA Championship?",
-        "yes_bid": 0.32,
-        "yes_ask": 0.34,
-        "no_bid": 0.66,
-        "no_ask": 0.68,
-        "yes_bid_cents": 32,
-        "yes_ask_cents": 34,
-        "no_bid_cents": 66,
-        "no_ask_cents": 68,
-        "mid": 0.33,
-        "spread": 0.02,
-        "volume_contracts": 743000,
-        "open_interest": 60000,
-        "close_time_iso": "2026-06-22T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-06-22T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.294
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.68,
-              "price_cents": 68
-            }
-          },
-          "edge_gross": 0.026,
-          "kalshi_fee": 0.0152,
-          "edge_net": 0.0108
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.34,
-              "price_cents": 34
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.714
-            }
-          },
-          "edge_gross": -0.054,
-          "kalshi_fee": 0.0157,
-          "edge_net": -0.0697
-        },
-        "best_edge_net": 0.0108,
-        "arb_exists": true,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-029",
       "category": "sports",
       "polymarket": {
-        "market_id": "0x5715bd6fa4161293",
-        "slug": "will-brazil-win-the-2026-fifa-world-cup",
         "question": "Will Brazil win the 2026 FIFA World Cup?",
-        "outcome": "Yes",
-        "yes_bid": 0.166,
-        "yes_ask": 0.174,
-        "no_bid": 0.826,
-        "no_ask": 0.834,
-        "mid": 0.17,
-        "spread": 0.008,
-        "volume_24h_usd": 8837000,
-        "liquidity_usd": 788000,
-        "end_date_iso": "2026-07-19T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-07-19T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "WC26-BRA",
         "title": "Brazil to win 2026 World Cup?",
-        "yes_bid": 0.14,
-        "yes_ask": 0.16,
-        "no_bid": 0.84,
-        "no_ask": 0.86,
-        "yes_bid_cents": 14,
-        "yes_ask_cents": 16,
-        "no_bid_cents": 84,
-        "no_ask_cents": 86,
-        "mid": 0.15,
-        "spread": 0.02,
-        "volume_contracts": 278000,
-        "open_interest": 395000,
-        "close_time_iso": "2026-07-19T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-07-19T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.174
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.86,
-              "price_cents": 86
-            }
-          },
-          "edge_gross": -0.034,
-          "kalshi_fee": 0.0084,
-          "edge_net": -0.0424
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.16,
-              "price_cents": 16
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.834
-            }
-          },
-          "edge_gross": 0.006,
-          "kalshi_fee": 0.0094,
-          "edge_net": -0.0034
-        },
-        "best_edge_net": -0.0034,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-030",
       "category": "sports",
       "polymarket": {
-        "market_id": "0x00d4af5974273ca3",
-        "slug": "will-france-reach-the-2026-world-cup-final",
         "question": "Will France reach the 2026 World Cup final?",
-        "outcome": "Yes",
-        "yes_bid": 0.255,
-        "yes_ask": 0.265,
-        "no_bid": 0.735,
-        "no_ask": 0.745,
-        "mid": 0.26,
-        "spread": 0.01,
-        "volume_24h_usd": 1867000,
-        "liquidity_usd": 320000,
-        "end_date_iso": "2026-07-19T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-07-19T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "WC26-FRA",
         "title": "France to win 2026 World Cup?",
-        "yes_bid": 0.13,
-        "yes_ask": 0.15,
-        "no_bid": 0.85,
-        "no_ask": 0.87,
-        "yes_bid_cents": 13,
-        "yes_ask_cents": 15,
-        "no_bid_cents": 85,
-        "no_ask_cents": 87,
-        "mid": 0.14,
-        "spread": 0.025,
-        "volume_contracts": 450000,
-        "open_interest": 82000,
-        "close_time_iso": "2026-07-19T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-07-19T04:00:00Z"
       },
       "ground_truth": {
         "should_match": false,
         "match_type": "outcome_mismatch",
         "inverted": false,
-        "note": "Reach final vs win \u2014 must NOT match"
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.265
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.87,
-              "price_cents": 87
-            }
-          },
-          "edge_gross": -0.135,
-          "kalshi_fee": 0.0079,
-          "edge_net": -0.1429
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.15,
-              "price_cents": 15
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.745
-            }
-          },
-          "edge_gross": 0.105,
-          "kalshi_fee": 0.0089,
-          "edge_net": 0.0961
-        },
-        "best_edge_net": 0.0961,
-        "arb_exists": false,
-        "valid_only_if_matched": true
+        "note": "Reach final vs win — must NOT match"
       }
     },
     {
       "pair_id": "PAIR-031",
       "category": "sports",
       "polymarket": {
-        "market_id": "0xe9a1fa6f81f76d1c",
-        "slug": "will-the-new-york-yankees-win-the-2026-world-series",
         "question": "Will the New York Yankees win the 2026 World Series?",
-        "outcome": "Yes",
-        "yes_bid": 0.106,
-        "yes_ask": 0.114,
-        "no_bid": 0.886,
-        "no_ask": 0.894,
-        "mid": 0.11,
-        "spread": 0.008,
-        "volume_24h_usd": 4355000,
-        "liquidity_usd": 532000,
-        "end_date_iso": "2026-10-30T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-10-30T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "MLB-26-NYY",
         "title": "Yankees to win 2026 World Series?",
-        "yes_bid": 0.12,
-        "yes_ask": 0.14,
-        "no_bid": 0.86,
-        "no_ask": 0.88,
-        "yes_bid_cents": 12,
-        "yes_ask_cents": 14,
-        "no_bid_cents": 86,
-        "no_ask_cents": 88,
-        "mid": 0.13,
-        "spread": 0.025,
-        "volume_contracts": 785000,
-        "open_interest": 93000,
-        "close_time_iso": "2026-10-30T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-10-30T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.114
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.88,
-              "price_cents": 88
-            }
-          },
-          "edge_gross": 0.006,
-          "kalshi_fee": 0.0074,
-          "edge_net": -0.0014
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.14,
-              "price_cents": 14
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.894
-            }
-          },
-          "edge_gross": -0.034,
-          "kalshi_fee": 0.0084,
-          "edge_net": -0.0424
-        },
-        "best_edge_net": -0.0014,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-032",
       "category": "sports",
       "polymarket": {
-        "market_id": "0x9be578c781f631d4",
-        "slug": "will-scottie-scheffler-win-the-2026-us-open-golf",
         "question": "Will Scottie Scheffler win the 2026 US Open (golf)?",
-        "outcome": "Yes",
-        "yes_bid": 0.195,
-        "yes_ask": 0.205,
-        "no_bid": 0.795,
-        "no_ask": 0.805,
-        "mid": 0.2,
-        "spread": 0.01,
-        "volume_24h_usd": 1783000,
-        "liquidity_usd": 660000,
-        "end_date_iso": "2026-06-21T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-06-21T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "GOLF-USOPEN26-SS",
         "title": "Scheffler to win 2026 US Open?",
-        "yes_bid": 0.16,
-        "yes_ask": 0.2,
-        "no_bid": 0.8,
-        "no_ask": 0.84,
-        "yes_bid_cents": 16,
-        "yes_ask_cents": 20,
-        "no_bid_cents": 80,
-        "no_ask_cents": 84,
-        "mid": 0.18,
-        "spread": 0.03,
-        "volume_contracts": 310000,
-        "open_interest": 329000,
-        "close_time_iso": "2026-06-21T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-06-21T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.205
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.84,
-              "price_cents": 84
-            }
-          },
-          "edge_gross": -0.045,
-          "kalshi_fee": 0.0094,
-          "edge_net": -0.0544
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.2,
-              "price_cents": 20
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.805
-            }
-          },
-          "edge_gross": -0.005,
-          "kalshi_fee": 0.0112,
-          "edge_net": -0.0162
-        },
-        "best_edge_net": -0.0162,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-033",
       "category": "sports",
       "polymarket": {
-        "market_id": "0x8a14be62295b4715",
-        "slug": "will-carlos-alcaraz-win-2026-wimbledon",
         "question": "Will Carlos Alcaraz win 2026 Wimbledon?",
-        "outcome": "Yes",
-        "yes_bid": 0.325,
-        "yes_ask": 0.335,
-        "no_bid": 0.665,
-        "no_ask": 0.675,
-        "mid": 0.33,
-        "spread": 0.01,
-        "volume_24h_usd": 3298000,
-        "liquidity_usd": 176000,
-        "end_date_iso": "2026-07-13T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-07-13T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "TENNIS-WIM26-CA",
         "title": "Alcaraz to win Wimbledon 2026?",
-        "yes_bid": 0.34,
-        "yes_ask": 0.38,
-        "no_bid": 0.62,
-        "no_ask": 0.66,
-        "yes_bid_cents": 34,
-        "yes_ask_cents": 38,
-        "no_bid_cents": 62,
-        "no_ask_cents": 66,
-        "mid": 0.36,
-        "spread": 0.03,
-        "volume_contracts": 387000,
-        "open_interest": 392000,
-        "close_time_iso": "2026-07-13T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-07-13T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.335
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.66,
-              "price_cents": 66
-            }
-          },
-          "edge_gross": 0.005,
-          "kalshi_fee": 0.0157,
-          "edge_net": -0.0107
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.38,
-              "price_cents": 38
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.675
-            }
-          },
-          "edge_gross": -0.055,
-          "kalshi_fee": 0.0165,
-          "edge_net": -0.0715
-        },
-        "best_edge_net": -0.0107,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-034",
       "category": "sports",
       "polymarket": {
-        "market_id": "0x04fc6d827d154385",
-        "slug": "will-the-total-number-of-goals-in-the-2026-wc-final-be-over-",
         "question": "Will the total number of goals in the 2026 WC final be over 2.5?",
-        "outcome": "Yes",
-        "yes_bid": 0.463,
-        "yes_ask": 0.477,
-        "no_bid": 0.523,
-        "no_ask": 0.537,
-        "mid": 0.47,
-        "spread": 0.014,
-        "volume_24h_usd": 8729000,
-        "liquidity_usd": 20000,
-        "end_date_iso": "2026-07-20T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-07-20T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "WC26-FINAL-O25",
         "title": "Over 2.5 goals in World Cup final?",
-        "yes_bid": 0.45,
-        "yes_ask": 0.49,
-        "no_bid": 0.51,
-        "no_ask": 0.55,
-        "yes_bid_cents": 45,
-        "yes_ask_cents": 49,
-        "no_bid_cents": 51,
-        "no_ask_cents": 55,
-        "mid": 0.47,
-        "spread": 0.04,
-        "volume_contracts": 618000,
-        "open_interest": 167000,
-        "close_time_iso": "2026-07-20T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-07-20T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.477
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.55,
-              "price_cents": 55
-            }
-          },
-          "edge_gross": -0.027,
-          "kalshi_fee": 0.0173,
-          "edge_net": -0.0443
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.49,
-              "price_cents": 49
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.537
-            }
-          },
-          "edge_gross": -0.027,
-          "kalshi_fee": 0.0175,
-          "edge_net": -0.0445
-        },
-        "best_edge_net": -0.0443,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-035",
       "category": "tech",
       "polymarket": {
-        "market_id": "0x0ed42f1a3d4cbf37",
-        "slug": "will-openai-release-gpt-6-before-dec-31-2026",
         "question": "Will OpenAI release GPT-6 before Dec 31, 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.574,
-        "yes_ask": 0.586,
-        "no_bid": 0.414,
-        "no_ask": 0.426,
-        "mid": 0.58,
-        "spread": 0.012,
-        "volume_24h_usd": 1872000,
-        "liquidity_usd": 391000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "GPT6-26",
         "title": "GPT-6 released in 2026?",
-        "yes_bid": 0.53,
-        "yes_ask": 0.56,
-        "no_bid": 0.44,
-        "no_ask": 0.47,
-        "yes_bid_cents": 53,
-        "yes_ask_cents": 56,
-        "no_bid_cents": 44,
-        "no_ask_cents": 47,
-        "mid": 0.54,
-        "spread": 0.03,
-        "volume_contracts": 856000,
-        "open_interest": 159000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.586
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.47,
-              "price_cents": 47
-            }
-          },
-          "edge_gross": -0.056,
-          "kalshi_fee": 0.0174,
-          "edge_net": -0.0734
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.56,
-              "price_cents": 56
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.426
-            }
-          },
-          "edge_gross": 0.014,
-          "kalshi_fee": 0.0172,
-          "edge_net": -0.0032
-        },
-        "best_edge_net": -0.0032,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-036",
       "category": "tech",
       "polymarket": {
-        "market_id": "0x7c69dee1bb5e4bcf",
-        "slug": "will-apple-announce-a-foldable-iphone-in-2026",
         "question": "Will Apple announce a foldable iPhone in 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.624,
-        "yes_ask": 0.636,
-        "no_bid": 0.364,
-        "no_ask": 0.376,
-        "mid": 0.63,
-        "spread": 0.012,
-        "volume_24h_usd": 3986000,
-        "liquidity_usd": 600000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "AAPL-FOLD-26",
         "title": "Apple foldable phone announced by end of 2026?",
-        "yes_bid": 0.65,
-        "yes_ask": 0.68,
-        "no_bid": 0.32,
-        "no_ask": 0.35,
-        "yes_bid_cents": 65,
-        "yes_ask_cents": 68,
-        "no_bid_cents": 32,
-        "no_ask_cents": 35,
-        "mid": 0.66,
-        "spread": 0.03,
-        "volume_contracts": 85000,
-        "open_interest": 45000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "paraphrase",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.636
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.35,
-              "price_cents": 35
-            }
-          },
-          "edge_gross": 0.014,
-          "kalshi_fee": 0.0159,
-          "edge_net": -0.0019
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.68,
-              "price_cents": 68
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.376
-            }
-          },
-          "edge_gross": -0.056,
-          "kalshi_fee": 0.0152,
-          "edge_net": -0.0712
-        },
-        "best_edge_net": -0.0019,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-037",
       "category": "tech",
       "polymarket": {
-        "market_id": "0x20de435d2031d750",
-        "slug": "will-spacex-starship-reach-orbit-and-land-both-stages-succes",
         "question": "Will SpaceX Starship reach orbit and land both stages successfully in 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.684,
-        "yes_ask": 0.696,
-        "no_bid": 0.304,
-        "no_ask": 0.316,
-        "mid": 0.69,
-        "spread": 0.012,
-        "volume_24h_usd": 1173000,
-        "liquidity_usd": 798000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "STARSHIP-26",
         "title": "Starship full success (orbit + dual recovery) in 2026?",
-        "yes_bid": 0.63,
-        "yes_ask": 0.67,
-        "no_bid": 0.33,
-        "no_ask": 0.37,
-        "yes_bid_cents": 63,
-        "yes_ask_cents": 67,
-        "no_bid_cents": 33,
-        "no_ask_cents": 37,
-        "mid": 0.65,
-        "spread": 0.035,
-        "volume_contracts": 550000,
-        "open_interest": 394000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "paraphrase",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.696
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.37,
-              "price_cents": 37
-            }
-          },
-          "edge_gross": -0.066,
-          "kalshi_fee": 0.0163,
-          "edge_net": -0.0823
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.67,
-              "price_cents": 67
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.316
-            }
-          },
-          "edge_gross": 0.014,
-          "kalshi_fee": 0.0155,
-          "edge_net": -0.0015
-        },
-        "best_edge_net": -0.0015,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-038",
       "category": "tech",
       "polymarket": {
-        "market_id": "0xdf57c59a8715a103",
-        "slug": "will-waymo-operate-paid-robotaxis-in-nyc-by-dec-31-2026",
         "question": "Will Waymo operate paid robotaxis in NYC by Dec 31, 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.343,
-        "yes_ask": 0.357,
-        "no_bid": 0.643,
-        "no_ask": 0.657,
-        "mid": 0.35,
-        "spread": 0.014,
-        "volume_24h_usd": 7827000,
-        "liquidity_usd": 582000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "WAYMO-NYC-26",
         "title": "Waymo paid service live in New York City in 2026?",
-        "yes_bid": 0.37,
-        "yes_ask": 0.41,
-        "no_bid": 0.59,
-        "no_ask": 0.63,
-        "yes_bid_cents": 37,
-        "yes_ask_cents": 41,
-        "no_bid_cents": 59,
-        "no_ask_cents": 63,
-        "mid": 0.39,
-        "spread": 0.04,
-        "volume_contracts": 174000,
-        "open_interest": 137000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.357
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.63,
-              "price_cents": 63
-            }
-          },
-          "edge_gross": 0.013,
-          "kalshi_fee": 0.0163,
-          "edge_net": -0.0033
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.41,
-              "price_cents": 41
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.657
-            }
-          },
-          "edge_gross": -0.067,
-          "kalshi_fee": 0.0169,
-          "edge_net": -0.0839
-        },
-        "best_edge_net": -0.0033,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-039",
       "category": "tech",
       "polymarket": {
-        "market_id": "0xb09b2a5cbadcc32a",
-        "slug": "will-tiktok-be-banned-in-the-us-on-dec-31-2026",
         "question": "Will TikTok be banned in the US on Dec 31, 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.144,
-        "yes_ask": 0.156,
-        "no_bid": 0.844,
-        "no_ask": 0.856,
-        "mid": 0.15,
-        "spread": 0.012,
-        "volume_24h_usd": 6972000,
-        "liquidity_usd": 236000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "TIKTOK-26",
         "title": "TikTok operating legally in the US at end of 2026?",
-        "yes_bid": 0.8,
-        "yes_ask": 0.83,
-        "no_bid": 0.17,
-        "no_ask": 0.2,
-        "yes_bid_cents": 80,
-        "yes_ask_cents": 83,
-        "no_bid_cents": 17,
-        "no_ask_cents": 20,
-        "mid": 0.82,
-        "spread": 0.03,
-        "volume_contracts": 557000,
-        "open_interest": 388000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "inverted",
         "inverted": true,
         "note": "Banned vs operating-legally: logical inverse (approximately). Matcher must flag inversion."
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.156
-            },
-            "kalshi": {
-              "side": "YES",
-              "price": 0.83,
-              "price_cents": 83
-            }
-          },
-          "edge_gross": 0.014,
-          "kalshi_fee": 0.0099,
-          "edge_net": 0.0041
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "NO",
-              "price": 0.2,
-              "price_cents": 20
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.856
-            }
-          },
-          "edge_gross": -0.056,
-          "kalshi_fee": 0.0112,
-          "edge_net": -0.0672
-        },
-        "best_edge_net": 0.0041,
-        "arb_exists": true,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-040",
       "category": "tech",
       "polymarket": {
-        "market_id": "0xabf3ad39fec21bbe",
-        "slug": "will-an-ai-system-win-a-gold-medal-at-imo-2026",
         "question": "Will an AI system win a gold medal at IMO 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.865,
-        "yes_ask": 0.875,
-        "no_bid": 0.125,
-        "no_ask": 0.135,
-        "mid": 0.87,
-        "spread": 0.01,
-        "volume_24h_usd": 3335000,
-        "liquidity_usd": 750000,
-        "end_date_iso": "2026-07-21T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-07-21T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "AI-IMO-26",
         "title": "AI gets IMO gold in 2026?",
-        "yes_bid": 0.82,
-        "yes_ask": 0.85,
-        "no_bid": 0.15,
-        "no_ask": 0.18,
-        "yes_bid_cents": 82,
-        "yes_ask_cents": 85,
-        "no_bid_cents": 15,
-        "no_ask_cents": 18,
-        "mid": 0.84,
-        "spread": 0.03,
-        "volume_contracts": 324000,
-        "open_interest": 206000,
-        "close_time_iso": "2026-07-21T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-07-21T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.875
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.18,
-              "price_cents": 18
-            }
-          },
-          "edge_gross": -0.055,
-          "kalshi_fee": 0.0103,
-          "edge_net": -0.0653
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.85,
-              "price_cents": 85
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.135
-            }
-          },
-          "edge_gross": 0.015,
-          "kalshi_fee": 0.0089,
-          "edge_net": 0.0061
-        },
-        "best_edge_net": 0.0061,
-        "arb_exists": true,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-041",
       "category": "tech",
       "polymarket": {
-        "market_id": "0x3f76be1d1efa2197",
-        "slug": "will-anthropic-release-a-model-called-claude-6-in-2026",
         "question": "Will Anthropic release a model called Claude 6 in 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.393,
-        "yes_ask": 0.407,
-        "no_bid": 0.593,
-        "no_ask": 0.607,
-        "mid": 0.4,
-        "spread": 0.014,
-        "volume_24h_usd": 6158000,
-        "liquidity_usd": 468000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "GPT6-26X",
         "title": "OpenAI to release GPT-6 in 2026?",
-        "yes_bid": 0.53,
-        "yes_ask": 0.56,
-        "no_bid": 0.44,
-        "no_ask": 0.47,
-        "yes_bid_cents": 53,
-        "yes_ask_cents": 56,
-        "no_bid_cents": 44,
-        "no_ask_cents": 47,
-        "mid": 0.54,
-        "spread": 0.03,
-        "volume_contracts": 534000,
-        "open_interest": 233000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": false,
         "match_type": "entity_mismatch",
         "inverted": false,
-        "note": "Different company/product \u2014 must NOT match"
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.407
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.47,
-              "price_cents": 47
-            }
-          },
-          "edge_gross": 0.123,
-          "kalshi_fee": 0.0174,
-          "edge_net": 0.1056
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.56,
-              "price_cents": 56
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.607
-            }
-          },
-          "edge_gross": -0.167,
-          "kalshi_fee": 0.0172,
-          "edge_net": -0.1842
-        },
-        "best_edge_net": 0.1056,
-        "arb_exists": false,
-        "valid_only_if_matched": true
+        "note": "Different company/product — must NOT match"
       }
     },
     {
       "pair_id": "PAIR-042",
       "category": "culture",
       "polymarket": {
-        "market_id": "0x8dcdcd03969b6662",
-        "slug": "will-avengers:-doomsday-gross-over-15b-worldwide-by-dec-31-2",
         "question": "Will 'Avengers: Doomsday' gross over $1.5B worldwide by Dec 31, 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.654,
-        "yes_ask": 0.666,
-        "no_bid": 0.334,
-        "no_ask": 0.346,
-        "mid": 0.66,
-        "spread": 0.012,
-        "volume_24h_usd": 3721000,
-        "liquidity_usd": 85000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "BOX-DOOM-15",
         "title": "Avengers Doomsday to pass $1.5B global box office in 2026?",
-        "yes_bid": 0.6,
-        "yes_ask": 0.64,
-        "no_bid": 0.36,
-        "no_ask": 0.4,
-        "yes_bid_cents": 60,
-        "yes_ask_cents": 64,
-        "no_bid_cents": 36,
-        "no_ask_cents": 40,
-        "mid": 0.62,
-        "spread": 0.035,
-        "volume_contracts": 351000,
-        "open_interest": 12000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.666
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.4,
-              "price_cents": 40
-            }
-          },
-          "edge_gross": -0.066,
-          "kalshi_fee": 0.0168,
-          "edge_net": -0.0828
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.64,
-              "price_cents": 64
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.346
-            }
-          },
-          "edge_gross": 0.014,
-          "kalshi_fee": 0.0161,
-          "edge_net": -0.0021
-        },
-        "best_edge_net": -0.0021,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-043",
       "category": "culture",
       "polymarket": {
-        "market_id": "0xb535106e122c9a56",
-        "slug": "will-taylor-swift-announce-a-2027-tour-before-the-end-of-202",
         "question": "Will Taylor Swift announce a 2027 tour before the end of 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.513,
-        "yes_ask": 0.527,
-        "no_bid": 0.473,
-        "no_ask": 0.487,
-        "mid": 0.52,
-        "spread": 0.014,
-        "volume_24h_usd": 3810000,
-        "liquidity_usd": 622000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "TSWIFT-TOUR-27",
         "title": "Taylor Swift 2027 tour announced in 2026?",
-        "yes_bid": 0.54,
-        "yes_ask": 0.58,
-        "no_bid": 0.42,
-        "no_ask": 0.46,
-        "yes_bid_cents": 54,
-        "yes_ask_cents": 58,
-        "no_bid_cents": 42,
-        "no_ask_cents": 46,
-        "mid": 0.56,
-        "spread": 0.04,
-        "volume_contracts": 230000,
-        "open_interest": 5000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.527
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.46,
-              "price_cents": 46
-            }
-          },
-          "edge_gross": 0.013,
-          "kalshi_fee": 0.0174,
-          "edge_net": -0.0044
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.58,
-              "price_cents": 58
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.487
-            }
-          },
-          "edge_gross": -0.067,
-          "kalshi_fee": 0.0171,
-          "edge_net": -0.0841
-        },
-        "best_edge_net": -0.0044,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-044",
       "category": "culture",
       "polymarket": {
-        "market_id": "0x5496f63cdc1110c1",
-        "slug": "will-gta-vi-release-before-december-31-2026",
         "question": "Will GTA VI release before December 31, 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.426,
-        "yes_ask": 0.434,
-        "no_bid": 0.566,
-        "no_ask": 0.574,
-        "mid": 0.43,
-        "spread": 0.008,
-        "volume_24h_usd": 1004000,
-        "liquidity_usd": 254000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "GTA6-26",
         "title": "GTA 6 released in calendar 2026?",
-        "yes_bid": 0.38,
-        "yes_ask": 0.4,
-        "no_bid": 0.6,
-        "no_ask": 0.62,
-        "yes_bid_cents": 38,
-        "yes_ask_cents": 40,
-        "no_bid_cents": 60,
-        "no_ask_cents": 62,
-        "mid": 0.39,
-        "spread": 0.02,
-        "volume_contracts": 74000,
-        "open_interest": 18000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.434
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.62,
-              "price_cents": 62
-            }
-          },
-          "edge_gross": -0.054,
-          "kalshi_fee": 0.0165,
-          "edge_net": -0.0705
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.4,
-              "price_cents": 40
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.574
-            }
-          },
-          "edge_gross": 0.026,
-          "kalshi_fee": 0.0168,
-          "edge_net": 0.0092
-        },
-        "best_edge_net": 0.0092,
-        "arb_exists": true,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-045",
       "category": "culture",
       "polymarket": {
-        "market_id": "0x7c441fe7ab4220a7",
-        "slug": "will-gta-vi-release-before-june-30-2026",
         "question": "Will GTA VI release before June 30, 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.036,
-        "yes_ask": 0.044,
-        "no_bid": 0.956,
-        "no_ask": 0.964,
-        "mid": 0.04,
-        "spread": 0.008,
-        "volume_24h_usd": 1200000,
-        "liquidity_usd": 546000,
-        "end_date_iso": "2026-06-30T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-06-30T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "GTA6-26X",
         "title": "GTA 6 released in calendar 2026?",
-        "yes_bid": 0.38,
-        "yes_ask": 0.4,
-        "no_bid": 0.6,
-        "no_ask": 0.62,
-        "yes_bid_cents": 38,
-        "yes_ask_cents": 40,
-        "no_bid_cents": 60,
-        "no_ask_cents": 62,
-        "mid": 0.39,
-        "spread": 0.02,
-        "volume_contracts": 248000,
-        "open_interest": 144000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": false,
         "match_type": "date_mismatch",
         "inverted": false,
-        "note": "H1-only deadline vs full-year \u2014 must NOT match"
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.044
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.62,
-              "price_cents": 62
-            }
-          },
-          "edge_gross": 0.336,
-          "kalshi_fee": 0.0165,
-          "edge_net": 0.3195
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.4,
-              "price_cents": 40
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.964
-            }
-          },
-          "edge_gross": -0.364,
-          "kalshi_fee": 0.0168,
-          "edge_net": -0.3808
-        },
-        "best_edge_net": 0.3195,
-        "arb_exists": false,
-        "valid_only_if_matched": true
+        "note": "H1-only deadline vs full-year — must NOT match"
       }
     },
     {
       "pair_id": "PAIR-046",
       "category": "culture",
       "polymarket": {
-        "market_id": "0xe1e3db63ef7ddc76",
-        "slug": "will-the-next-james-bond-actor-be-announced-in-2026",
         "question": "Will the next James Bond actor be announced in 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.483,
-        "yes_ask": 0.497,
-        "no_bid": 0.503,
-        "no_ask": 0.517,
-        "mid": 0.49,
-        "spread": 0.014,
-        "volume_24h_usd": 3550000,
-        "liquidity_usd": 572000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "BOND-26",
         "title": "New Bond actor named in 2026?",
-        "yes_bid": 0.47,
-        "yes_ask": 0.51,
-        "no_bid": 0.49,
-        "no_ask": 0.53,
-        "yes_bid_cents": 47,
-        "yes_ask_cents": 51,
-        "no_bid_cents": 49,
-        "no_ask_cents": 53,
-        "mid": 0.49,
-        "spread": 0.04,
-        "volume_contracts": 140000,
-        "open_interest": 372000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.497
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.53,
-              "price_cents": 53
-            }
-          },
-          "edge_gross": -0.027,
-          "kalshi_fee": 0.0174,
-          "edge_net": -0.0444
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.51,
-              "price_cents": 51
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.517
-            }
-          },
-          "edge_gross": -0.027,
-          "kalshi_fee": 0.0175,
-          "edge_net": -0.0445
-        },
-        "best_edge_net": -0.0444,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-047",
       "category": "misc",
       "polymarket": {
-        "market_id": "0x683514f2ceb81f9d",
-        "slug": "will-a-category-5-hurricane-make-us-landfall-in-the-2026-sea",
         "question": "Will a Category 5 hurricane make US landfall in the 2026 season?",
-        "outcome": "Yes",
-        "yes_bid": 0.085,
-        "yes_ask": 0.095,
-        "no_bid": 0.905,
-        "no_ask": 0.915,
-        "mid": 0.09,
-        "spread": 0.01,
-        "volume_24h_usd": 7784000,
-        "liquidity_usd": 268000,
-        "end_date_iso": "2026-12-02T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-02T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "CANE-26-CAT5",
         "title": "Cat 5 hurricane US landfall in 2026?",
-        "yes_bid": 0.1,
-        "yes_ask": 0.14,
-        "no_bid": 0.86,
-        "no_ask": 0.9,
-        "yes_bid_cents": 10,
-        "yes_ask_cents": 14,
-        "no_bid_cents": 86,
-        "no_ask_cents": 90,
-        "mid": 0.12,
-        "spread": 0.03,
-        "volume_contracts": 808000,
-        "open_interest": 244000,
-        "close_time_iso": "2026-12-02T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-02T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.095
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.9,
-              "price_cents": 90
-            }
-          },
-          "edge_gross": 0.005,
-          "kalshi_fee": 0.0063,
-          "edge_net": -0.0013
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.14,
-              "price_cents": 14
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.915
-            }
-          },
-          "edge_gross": -0.055,
-          "kalshi_fee": 0.0084,
-          "edge_net": -0.0634
-        },
-        "best_edge_net": -0.0013,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-048",
       "category": "misc",
       "polymarket": {
-        "market_id": "0x5ab33edf6e595ed3",
-        "slug": "will-2026-be-the-hottest-year-on-record-nasa-giss",
         "question": "Will 2026 be the hottest year on record (NASA GISS)?",
-        "outcome": "Yes",
-        "yes_bid": 0.564,
-        "yes_ask": 0.576,
-        "no_bid": 0.424,
-        "no_ask": 0.436,
-        "mid": 0.57,
-        "spread": 0.012,
-        "volume_24h_usd": 3159000,
-        "liquidity_usd": 116000,
-        "end_date_iso": "2027-01-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2027-01-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "CLIMATE-26-HOT",
         "title": "2026 hottest year on record?",
-        "yes_bid": 0.52,
-        "yes_ask": 0.55,
-        "no_bid": 0.45,
-        "no_ask": 0.48,
-        "yes_bid_cents": 52,
-        "yes_ask_cents": 55,
-        "no_bid_cents": 45,
-        "no_ask_cents": 48,
-        "mid": 0.53,
-        "spread": 0.03,
-        "volume_contracts": 104000,
-        "open_interest": 339000,
-        "close_time_iso": "2027-01-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2027-01-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.576
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.48,
-              "price_cents": 48
-            }
-          },
-          "edge_gross": -0.056,
-          "kalshi_fee": 0.0175,
-          "edge_net": -0.0735
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.55,
-              "price_cents": 55
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.436
-            }
-          },
-          "edge_gross": 0.014,
-          "kalshi_fee": 0.0173,
-          "edge_net": -0.0033
-        },
-        "best_edge_net": -0.0033,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-049",
       "category": "misc",
       "polymarket": {
-        "market_id": "0xac619e630dde29a6",
-        "slug": "will-nyc-see-20plus-inches-of-total-snowfall-in-the-2026-27-",
         "question": "Will NYC see 20+ inches of total snowfall in the 2026-27 season?",
-        "outcome": "Yes",
-        "yes_bid": 0.403,
-        "yes_ask": 0.417,
-        "no_bid": 0.583,
-        "no_ask": 0.597,
-        "mid": 0.41,
-        "spread": 0.014,
-        "volume_24h_usd": 6979000,
-        "liquidity_usd": 440000,
-        "end_date_iso": "2027-03-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2027-03-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "SNOW-NYC-2627",
         "title": "Central Park snowfall over 20 inches, 2026-27 winter?",
-        "yes_bid": 0.42,
-        "yes_ask": 0.46,
-        "no_bid": 0.54,
-        "no_ask": 0.58,
-        "yes_bid_cents": 42,
-        "yes_ask_cents": 46,
-        "no_bid_cents": 54,
-        "no_ask_cents": 58,
-        "mid": 0.44,
-        "spread": 0.045,
-        "volume_contracts": 483000,
-        "open_interest": 375000,
-        "close_time_iso": "2027-03-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2027-03-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "exact",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.417
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.58,
-              "price_cents": 58
-            }
-          },
-          "edge_gross": 0.003,
-          "kalshi_fee": 0.0171,
-          "edge_net": -0.0141
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.46,
-              "price_cents": 46
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.597
-            }
-          },
-          "edge_gross": -0.057,
-          "kalshi_fee": 0.0174,
-          "edge_net": -0.0744
-        },
-        "best_edge_net": -0.0141,
-        "arb_exists": false,
-        "valid_only_if_matched": true
       }
     },
     {
       "pair_id": "PAIR-050",
       "category": "misc",
       "polymarket": {
-        "market_id": "0xccf3a17156dc8907",
-        "slug": "will-a-human-walk-on-the-moon-before-dec-31-2026",
         "question": "Will a human walk on the Moon before Dec 31, 2026?",
-        "outcome": "Yes",
-        "yes_bid": 0.055,
-        "yes_ask": 0.065,
-        "no_bid": 0.935,
-        "no_ask": 0.945,
-        "mid": 0.06,
-        "spread": 0.01,
-        "volume_24h_usd": 1652000,
-        "liquidity_usd": 82000,
-        "end_date_iso": "2026-12-31T04:00:00Z",
-        "fee_bps": 0
+        "end_date_iso": "2026-12-31T04:00:00Z"
       },
       "kalshi": {
-        "ticker": "MOON-26",
         "title": "Crewed lunar landing in 2026?",
-        "yes_bid": 0.07,
-        "yes_ask": 0.1,
-        "no_bid": 0.9,
-        "no_ask": 0.93,
-        "yes_bid_cents": 7,
-        "yes_ask_cents": 10,
-        "no_bid_cents": 90,
-        "no_ask_cents": 93,
-        "mid": 0.09,
-        "spread": 0.03,
-        "volume_contracts": 417000,
-        "open_interest": 374000,
-        "close_time_iso": "2026-12-31T04:00:00Z",
-        "taker_fee_formula": "0.07*p*(1-p)"
+        "close_time_iso": "2026-12-31T04:00:00Z"
       },
       "ground_truth": {
         "should_match": true,
         "match_type": "paraphrase",
         "inverted": false,
         "note": ""
-      },
-      "arb": {
-        "direction_a": {
-          "legs": {
-            "polymarket": {
-              "side": "YES",
-              "price": 0.065
-            },
-            "kalshi": {
-              "side": "NO",
-              "price": 0.93,
-              "price_cents": 93
-            }
-          },
-          "edge_gross": 0.005,
-          "kalshi_fee": 0.0046,
-          "edge_net": 0.0004
-        },
-        "direction_b": {
-          "legs": {
-            "kalshi": {
-              "side": "YES",
-              "price": 0.1,
-              "price_cents": 10
-            },
-            "polymarket": {
-              "side": "NO",
-              "price": 0.945
-            }
-          },
-          "edge_gross": -0.045,
-          "kalshi_fee": 0.0063,
-          "edge_net": -0.0513
-        },
-        "best_edge_net": 0.0004,
-        "arb_exists": true,
-        "valid_only_if_matched": true
       }
     }
   ]
