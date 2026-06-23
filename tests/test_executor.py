@@ -117,6 +117,21 @@ class CancelConfirmed(unittest.TestCase):
         self.assertFalse(ex._cancel_confirmed("polymarket", "o2"))
 
 
+class ExecuteHappyPath(unittest.TestCase):
+    def test_both_legs_fill_sets_success_and_profit(self):
+        ex = Executor(dry_run=True); ex.dry_run = False
+        ex._kalshi_client = MagicMock(); ex._poly_client = MagicMock()
+        ex._kalshi_client.place_order.return_value = {"order_id": "a", "status": "executed", "remaining_count": 0}
+        ex._poly_client.place_order.return_value = {"orderID": "b", "success": True, "status": "matched"}
+        leg_a = TradeIntent("kalshi", "YES", 0.40, 10, "KX", None, "A")
+        leg_b = TradeIntent("polymarket", "NO", 0.45, 10, "PM", "tok", "B")
+        res = ex.execute(leg_a, leg_b, skip_preflight=True)
+        self.assertTrue(res.success)
+        self.assertFalse(res.naked_exposure)
+        self.assertAlmostEqual(res.gross_cost, 0.85)                 # 0.40 + 0.45
+        self.assertAlmostEqual(res.net_profit_estimate, 0.08)        # 1 - 0.85 - max(0.02,0.07)
+
+
 class ExecuteNakedPath(unittest.TestCase):
     def test_filled_legA_unfillable_legB_flags_naked(self):
         ex = Executor(dry_run=True); ex.dry_run = False
