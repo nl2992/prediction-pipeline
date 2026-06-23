@@ -1,0 +1,14 @@
+# Development / test dependencies.
+#   pip install -r requirements.txt -r requirements-dev.txt
+# This is exactly what CI installs to run the full suite + lint, so a local
+# install reproduces CI.
+
+pytest>=8.0          # test runner
+ruff>=0.5            # linter — CI runs the real-bug categories: ruff check --select F,E9,B .
+
+# Exercised by the suite. These are also optional *runtime* deps documented in
+# requirements.txt (dashboard / Kalshi auth / inline charts):
+fastapi>=0.110       # server.py + tests/test_server.py
+cryptography>=41.0   # Kalshi RSA-PSS auth signing (tests/test_kalshi_client.py)
+matplotlib>=3.7      # inline arb-charts; with it installed, tests/test_arb_charts
+                     # exercises real PNG rendering (the alerter degrades without it)

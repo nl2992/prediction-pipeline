@@ -18,14 +18,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-          cache: pip                       # cache wheels keyed on requirements.txt
-          cache-dependency-path: requirements.txt
+          cache: pip                       # cache wheels keyed on the requirements files
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
       - name: Install dependencies
-        # requests (core) + fastapi (server.py / test_server). matplotlib is
-        # optional — the chart code degrades gracefully, so tests pass without it.
+        # Core runtime (requirements.txt) + test/dev deps (requirements-dev.txt:
+        # pytest, ruff, fastapi, cryptography, matplotlib) — one source of truth.
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt fastapi pytest ruff cryptography
+          pip install -r requirements.txt -r requirements-dev.txt
       - name: Lint (real-bug categories only)
         # F = pyflakes (undefined names, unused imports, redefinitions, repeated
         # dict keys), E9 = syntax errors, B = bugbear (mutable default args, zip
