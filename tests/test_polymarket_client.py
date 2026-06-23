@@ -46,5 +46,32 @@ class VerifyClobLiquidity(unittest.TestCase):
         self.assertEqual(r["best_ask"], 0.58)
 
 
+class SearchMarketsPagination(unittest.TestCase):
+    def test_stuck_page_terminates(self):
+        c = PolymarketClient()
+        calls = {"n": 0}
+        def fake_get_markets(**kw):
+            calls["n"] += 1
+            if calls["n"] > 50:                       # broken guard would hang — fail fast
+                raise AssertionError("search_markets did not terminate on a stuck page")
+            return [{"conditionId": "same", "question": "alpha market"}]  # same page forever
+        c.get_markets = fake_get_markets
+        out = c.search_markets(["alpha"])
+        self.assertLessEqual(calls["n"], 2)           # page 1, then no-new -> stop
+        self.assertEqual(len(out), 1)                 # the one matching market, deduped
+
+    def test_normal_pagination_finds_matches_then_ends(self):
+        c = PolymarketClient()
+        pages = [
+            [{"conditionId": "1", "question": "alpha one"}, {"conditionId": "2", "question": "beta"}],
+            [{"conditionId": "3", "question": "alpha three"}],
+            [],   # end of catalog
+        ]
+        seq = iter(pages)
+        c.get_markets = lambda **kw: next(seq, [])
+        out = c.search_markets(["alpha"])
+        self.assertEqual(sorted(m["conditionId"] for m in out), ["1", "3"])
+
+
 if __name__ == "__main__":
     unittest.main()

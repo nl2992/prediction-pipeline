@@ -147,7 +147,8 @@ class PolymarketClient:
         """
         kw_lower = [k.lower() for k in keywords]
         results: list[dict] = []
-        seen: set[str] = set()
+        seen: set[str] = set()        # conditionIds already added to results (match dedup)
+        scanned: set[str] = set()     # all conditionIds seen, for the stuck-page guard
 
         offset = 0
         while max_offset is None or offset <= max_offset:
@@ -165,14 +166,22 @@ class PolymarketClient:
             if not batch:
                 break  # end of catalog
 
+            new_this_page = 0
             for mkt in batch:
                 question = (mkt.get("question") or mkt.get("title") or "").lower()
                 cid = mkt.get("conditionId") or mkt.get("id") or question
+                if cid not in scanned:
+                    scanned.add(cid)
+                    new_this_page += 1
                 if cid in seen:
                     continue
                 if any(kw in question for kw in kw_lower):
                     results.append(mkt)
                     seen.add(cid)
+            # If a full page contributes no new markets, the API isn't advancing
+            # (e.g. ignoring offset) — stop rather than loop forever (#68, like #67).
+            if new_this_page == 0:
+                break
             offset += page_size
 
         logger.info(
