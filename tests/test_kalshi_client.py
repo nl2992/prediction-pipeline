@@ -7,7 +7,7 @@ network or keys."""
 from __future__ import annotations
 
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from kalshi.client import KalshiClient
 
@@ -46,6 +46,33 @@ class PlaceOrderBody(unittest.TestCase):
         c = _client()
         c.place_order(ticker="KX", side="bid", price=0.5, count=1)
         self.assertTrue(c._post.call_args.kwargs["json_body"]["client_order_id"])  # uuid generated
+
+
+class GetRetry(unittest.TestCase):
+    def _ok(self):
+        r = MagicMock(status_code=200)
+        r.json.return_value = {"ok": True}
+        r.raise_for_status.return_value = None
+        return r
+
+    def test_retries_on_request_exception_then_succeeds(self):
+        import requests
+        c = KalshiClient(api_key=None, private_key_path=None)
+        c.session = MagicMock()
+        c.session.get.side_effect = [requests.RequestException("blip"), self._ok()]
+        with patch("time.sleep"):                     # no real backoff delay
+            out = c._get("/markets")
+        self.assertEqual(out, {"ok": True})
+        self.assertEqual(c.session.get.call_count, 2)
+
+    def test_retries_on_429_then_succeeds(self):
+        c = KalshiClient(api_key=None, private_key_path=None)
+        c.session = MagicMock()
+        c.session.get.side_effect = [MagicMock(status_code=429), self._ok()]
+        with patch("time.sleep"):
+            out = c._get("/markets")
+        self.assertEqual(out, {"ok": True})
+        self.assertEqual(c.session.get.call_count, 2)
 
 
 class Pagination(unittest.TestCase):
