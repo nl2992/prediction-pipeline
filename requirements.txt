@@ -1,6 +1,15 @@
 # Core HTTP client — required for all functionality
 requests>=2.28.0
 
+# Optional: web dashboard (server.py) — also required to run the test suite
+# (test_server imports server). Install with: pip install fastapi uvicorn
+# fastapi>=0.110.0
+# uvicorn>=0.29.0
+
+# Optional: inline order-book charts in the alert email (arb_charts). The alerter
+# degrades to a text-only email if absent.
+# matplotlib>=3.7.0
+
 # Optional: Kalshi authenticated endpoints (order placement, balance, positions)
 # Needed only if you set KALSHI_API_KEY + KALSHI_PRIVATE_KEY_PATH
 # cryptography>=41.0.0
