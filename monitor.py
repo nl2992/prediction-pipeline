@@ -645,11 +645,9 @@ def run_discover_scan(
         if arb_dir == "poly_yes__kalshi_no":
             gross_cost = round(pa + (1.0 - kb), 6)
             winning_fee = worst_fee
-            buy_yes_ask = pa
         else:
             gross_cost = round(ka + (1.0 - pb), 6)
             winning_fee = worst_fee
-            buy_yes_ask = ka
 
         signal = ArbSignal(
             scan_id=scan_id,

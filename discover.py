@@ -546,7 +546,7 @@ _DIRECTION_SYNONYMS: dict[str, str] = {
     "raise": "hike", "raising": "hike",
     "hold": "hold", "holds": "hold",
     "maintain": "hold", "maintains": "hold",
-    "unchanged": "hold", "unchanged": "hold",
+    "unchanged": "hold",
     "pause": "hold", "steady": "hold",
     "no change": "hold",
 }

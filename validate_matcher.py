@@ -24,7 +24,7 @@ import json
 import os
 
 from pipeline import MarketSnapshot, OrderBook, PriceLevel
-from matcher import match_markets, is_compatible_match
+from matcher import match_markets
 
 FIXTURE = os.path.join(os.path.dirname(__file__), "tests", "fixtures", "pairs_fixture.json")
 CATEGORIES = ["politics", "econ", "sports", "crypto", "tech", "culture", "misc"]

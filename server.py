@@ -19,7 +19,6 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 
 logging.disable(logging.WARNING)
 

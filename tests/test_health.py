@@ -130,7 +130,7 @@ class FormatHealth(unittest.TestCase):
         self.assertIn("STATUS: DEGRADED", health.format_health(s, 1, "t"))
 
     def test_scan_pairs_collapse_flagged(self):
-        normal = [f"[alerter] scan done in 800s — cap=1500, 790 pairs, 200 survivable arb(s)"] * 4
+        normal = ["[alerter] scan done in 800s — cap=1500, 790 pairs, 200 survivable arb(s)"] * 4
         collapsed = ["[alerter] scan done in 800s — cap=1500, 30 pairs, 2 survivable arb(s)"]
         s = health.summarize_log(normal + collapsed)
         self.assertEqual(s["last_scan_pairs"], 30)

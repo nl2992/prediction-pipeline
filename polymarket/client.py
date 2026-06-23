@@ -550,10 +550,6 @@ class PolymarketClient:
           sig     = HMAC-SHA256(key, message.encode()).digest()
           POLY_SIGNATURE = base64.urlsafe_b64encode(sig).decode()
         """
-        import base64
-        import hashlib
-        import hmac
-        import time
 
         if not self._is_authenticated:
             raise RuntimeError(

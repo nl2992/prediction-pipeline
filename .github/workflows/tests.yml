@@ -17,7 +17,12 @@ jobs:
         # optional — the chart code degrades gracefully, so tests pass without it.
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt fastapi pytest
+          pip install -r requirements.txt fastapi pytest ruff
+      - name: Lint (real-bug categories only)
+        # F = pyflakes (undefined names, unused imports, redefinitions, repeated
+        # dict keys), E9 = syntax errors. Not style — these catch genuine bugs like
+        # a duplicate test method that silently never runs.
+        run: python -m ruff check --select F,E9 .
       - name: Run test suite
         # The suite is hermetic (conftest excludes the live smoke_test, #18) and the
         # v2 fixture is committed (#19), so no network or secrets are needed.

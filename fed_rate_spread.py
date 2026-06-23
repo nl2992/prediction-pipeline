@@ -421,7 +421,7 @@ def cross_exchange_summary(
 
     # Count-based cut distribution
     if poly_groups["count_cuts"]:
-        print(f"\n  Polymarket 2026 cut-count distribution:")
+        print("\n  Polymarket 2026 cut-count distribution:")
         cum = 0.0
         for r in sorted(poly_groups["count_cuts"], key=lambda x: x.get("n_cuts", 99)):
             p = r["price"] or 0
@@ -526,17 +526,17 @@ def print_monotonicity_analysis(
 
             if not verify_liquidity:
                 if arb["profitable"]:
-                    print(f"      *** PROFITABLE (unverified) ***")
+                    print("      *** PROFITABLE (unverified) ***")
                 continue
 
             # Verify live CLOB liquidity on both legs
             low_mkt = mkt_by_rate.get(v["rate_low"])
             high_mkt = mkt_by_rate.get(v["rate_high"])
             if not low_mkt or not high_mkt:
-                print(f"      [SKIP] cannot find raw market dict for rate level — skipping CLOB check")
+                print("      [SKIP] cannot find raw market dict for rate level — skipping CLOB check")
                 continue
 
-            print(f"      Verifying live CLOB liquidity…")
+            print("      Verifying live CLOB liquidity…")
             liq_yes_low  = verify_clob_leg(low_mkt,  side_low,  min_depth_usd=min_depth_usd)
             liq_no_high  = verify_clob_leg(high_mkt, side_high, min_depth_usd=min_depth_usd)
 
@@ -560,7 +560,7 @@ def print_monotonicity_analysis(
                     else:
                         print(f"        Real cost={real_cost:.4f} → net_profit={real_profit:.4f} (not profitable at live prices)")
             else:
-                print(f"        Ghost market — signal rejected.")
+                print("        Ghost market — signal rejected.")
 
     _check_ladder(
         poly_groups["upper_reach"], "ascending",
