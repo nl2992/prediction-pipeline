@@ -193,6 +193,33 @@ class PolymarketFokFill(unittest.TestCase):
         self.assertFalse(ex._place_polymarket(self._intent()).success)
 
 
+class PreflightBalance(unittest.TestCase):
+    """Kalshi balance gate + cents->USD conversion (#65)."""
+    def _legs(self):
+        # valid hedge with a kalshi leg_a; max_cost_usd = 0.40 * 100 = $40.
+        a = TradeIntent("kalshi", "YES", 0.40, 100, "KX", None, "a")
+        b = TradeIntent("polymarket", "NO", 0.55, 100, "PM", "tok", "b")
+        return a, b
+
+    def test_sufficient_balance_passes(self):
+        a, b = self._legs()
+        kc = MagicMock(); kc.get_balance.return_value = {"balance": 5000}  # 5000c = $50 >= $40
+        with patch("executor.check_price_still_valid", return_value=(True, "ok", 0.40)):
+            go, msgs = pre_flight_checks(a, b, max_position_usd=500, fee_a=0.0, fee_b=0.0,
+                                         kalshi_client=kc)
+        self.assertTrue(go, msgs)
+        self.assertTrue(any("Kalshi balance $50" in m for m in msgs))
+
+    def test_insufficient_balance_fails(self):
+        a, b = self._legs()
+        kc = MagicMock(); kc.get_balance.return_value = {"balance": 3000}  # $30 < $40
+        with patch("executor.check_price_still_valid", return_value=(True, "ok", 0.40)):
+            go, msgs = pre_flight_checks(a, b, max_position_usd=500, fee_a=0.0, fee_b=0.0,
+                                         kalshi_client=kc)
+        self.assertFalse(go)
+        self.assertTrue(any("balance" in m and "< leg cost" in m for m in msgs))
+
+
 class PreflightHedgeStructure(unittest.TestCase):
     def test_same_exchange_aborts(self):
         a = TradeIntent("kalshi", "YES", 0.40, 5, "KX1", None, "a")
