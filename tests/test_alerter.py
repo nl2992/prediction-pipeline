@@ -409,6 +409,30 @@ class RunCycleIntegration(unittest.TestCase):
                     os.unlink(q)
 
 
+class MainLoop(unittest.TestCase):
+    """Entry-point loop wiring: --once and CYCLE ERROR -> _alert_operator (#87)."""
+    _cfg = {"recipients": ["a@b.com"], "from_addr": "x@y.com", "smtp_host": "h",
+            "smtp_port": 1, "smtp_user": "u", "smtp_pass": "p"}
+
+    def test_once_runs_one_cycle(self):
+        import alerter
+        with patch("sys.argv", ["alerter", "--once", "--dry-run"]), \
+             patch("alerter.load_config", return_value=self._cfg), \
+             patch("alerter.run_cycle") as rc:
+            alerter.main()
+        rc.assert_called_once()
+
+    def test_cycle_error_alerts_operator_and_exits(self):
+        import alerter
+        with patch("sys.argv", ["alerter", "--once"]), \
+             patch("alerter.load_config", return_value=self._cfg), \
+             patch("alerter.run_cycle", side_effect=RuntimeError("boom")), \
+             patch("alerter._alert_operator") as alert:
+            alerter.main()                       # must not hang or raise
+        alert.assert_called_once()
+        self.assertIn("boom", alert.call_args.args[1])   # reason carries the error
+
+
 class RunCycleNoEmailBranches(unittest.TestCase):
     """Orchestration must NOT email when there's nothing to send (#83)."""
     _cfg = {"recipients": ["a@b.com"], "from_addr": "x@y.com", "smtp_host": "h",
