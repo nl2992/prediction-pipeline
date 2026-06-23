@@ -158,6 +158,11 @@ def verify(text_a: str, text_b: str, api_key: str | None,
             payload = json.loads(resp.read().decode("utf-8"))
         content = payload["choices"][0]["message"]["content"]
         v = json.loads(content)
+        # Fail-open on a malformed-but-parseable verdict: a missing or non-boolean
+        # 'same' is a degenerate model response, not a "different" verdict — treat it
+        # as no-opinion (keep) rather than letting enforce drop a real arb (#44).
+        if not isinstance(v, dict) or not isinstance(v.get("same"), bool):
+            return None
         out = {
             "same": bool(v.get("same")),
             "same_event": bool(v.get("same_event")),

@@ -78,6 +78,16 @@ class Verify(unittest.TestCase):
             v = ai_verify.verify("X by Jun 30", "X by Dec 31", api_key="k")
         self.assertFalse(v["same"])  # same event, different settlement -> not arbable as identical
 
+    def test_malformed_verdict_missing_same_fails_open(self):
+        with patch("urllib.request.urlopen",
+                   return_value=_fake_resp({"reason": "no same field"})):
+            self.assertIsNone(ai_verify.verify("a", "b", api_key="k"))
+
+    def test_non_bool_same_fails_open(self):
+        with patch("urllib.request.urlopen",
+                   return_value=_fake_resp({"same": "false", "reason": "stringified"})):
+            self.assertIsNone(ai_verify.verify("a", "b", api_key="k"))
+
     def test_api_error_fails_open_none(self):
         with patch("urllib.request.urlopen", side_effect=OSError("boom")):
             self.assertIsNone(ai_verify.verify("a", "b", api_key="k"))
