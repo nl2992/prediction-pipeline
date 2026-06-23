@@ -517,6 +517,14 @@ _BADGE = {
 }
 
 
+def _link(url: str | None, label: str) -> str:
+    """Render an anchor only when the URL is present; otherwise plain text with a
+    note, so a missing slug/series never produces a dead <a href=''> link (#51)."""
+    if url:
+        return f'<a href="{url}">{label}</a>'
+    return f'{label} <span style="color:#aaa;font-size:12px">(link unavailable)</span>'
+
+
 def _portfolio_totals(signals: list[dict]) -> tuple[int, float, float]:
     """Aggregate executable capital and net profit across all pairs at the largest
     budget tier ($5k/market): (n_with_books, total_deploy_usd, total_net_profit_usd).
@@ -574,7 +582,7 @@ def build_email(signals: list[dict],
             {badge}<span style="font-size:16px;color:#16a34a"><b>{edge:.1f}% net edge</b></span>{ann_html}
             &nbsp;&nbsp;<b>{s['poly_title']}</b> &harr; <b>{s['kalshi_title']}</b></td></tr>
         <tr><td style="white-space:nowrap">The trade</td><td>{s['legs']} &nbsp;<span style="color:#888">— exactly one side pays $1 at settlement; you keep ~{edge:.1f}c per $1 after fees</span></td></tr>{exec_html}
-        <tr><td>Open</td><td><a href="{s['poly_url']}">Polymarket</a> &nbsp;·&nbsp; <a href="{s['kalshi_url']}">Kalshi</a> &nbsp;<span style="color:#aaa;font-size:12px">(match confidence {s['confidence']}{', independently confirmed' if s['v2_match'] else ''})</span></td></tr>""")
+        <tr><td>Open</td><td>{_link(s['poly_url'], 'Polymarket')} &nbsp;·&nbsp; {_link(s['kalshi_url'], 'Kalshi')} &nbsp;<span style="color:#aaa;font-size:12px">(match confidence {s['confidence']}{', independently confirmed' if s['v2_match'] else ''})</span></td></tr>""")
     pf_n, pf_deploy, pf_profit = _portfolio_totals(signals)
     portfolio_html = (
         f"""<p style="font-size:14px"><b>Portfolio:</b> deploying up to $5k/market across these

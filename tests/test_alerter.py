@@ -365,6 +365,20 @@ class EmailBody(unittest.TestCase):
         self.assertIn("https://kalshi.com/markets/kxser/", html)
         self.assertIn("net edge", html)
 
+    def test_missing_market_url_renders_no_dead_link(self) -> None:
+        p = pair(0.38, 0.40, 0.65, 0.68)
+        p["poly_slug"] = ""                       # -> _poly_url == "" -> no anchor
+        sigs = compute_signals([p], min_edge=0.005)
+        _, html, _ = build_email(sigs)
+        self.assertNotIn('href=""', html)         # no dead anchor anywhere
+        self.assertIn("link unavailable", html)   # graceful note instead
+
+    def test_present_urls_render_anchors(self) -> None:
+        sigs = compute_signals([pair(0.38, 0.40, 0.65, 0.68)], min_edge=0.005)
+        _, html, _ = build_email(sigs)
+        self.assertIn('<a href="https://polymarket.com/event/', html)
+        self.assertNotIn("link unavailable", html)
+
     def test_subject_tags_new_vs_resend(self) -> None:
         sigs = compute_signals([pair(0.38, 0.40, 0.65, 0.68)], min_edge=0.005)
         key = sigs[0]["key"]
