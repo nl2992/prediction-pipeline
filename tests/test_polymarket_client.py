@@ -5,9 +5,44 @@ It must pick the true best by price (max bid / min ask), not trust raw list orde
 mocked, so no network."""
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import unittest
+from unittest.mock import patch
 
 from polymarket.client import PolymarketClient
+
+# unpadded urlsafe-b64 of b"abcd"; the client appends "==" before decoding.
+_SECRET = "YWJjZA"
+_KEY = base64.urlsafe_b64decode(_SECRET + "==")
+
+
+def _expected_sig(ts: str, method: str, path: str, body: str) -> str:
+    msg = ts + method.upper() + path + body.replace("'", '"')
+    return base64.urlsafe_b64encode(
+        hmac.new(_KEY, msg.encode("utf-8"), hashlib.sha256).digest()).decode()
+
+
+class L2AuthSigning(unittest.TestCase):
+    def test_signature_matches_recomputation(self):
+        c = PolymarketClient(api_key="addr", api_secret=_SECRET, api_passphrase="pass")
+        h = c._clob_auth_headers("GET", "/order", body="")
+        self.assertEqual(h["POLY_API_KEY"], "addr")
+        self.assertEqual(h["POLY_PASSPHRASE"], "pass")
+        self.assertEqual(h["POLY_SIGNATURE"], _expected_sig(h["POLY_TIMESTAMP"], "GET", "/order", ""))
+
+    def test_body_single_quotes_normalized(self):
+        c = PolymarketClient(api_key="a", api_secret=_SECRET, api_passphrase="p")
+        h = c._clob_auth_headers("POST", "/order", body="{'x': 1}")
+        self.assertEqual(h["POLY_SIGNATURE"],
+                         _expected_sig(h["POLY_TIMESTAMP"], "POST", "/order", "{'x': 1}"))
+
+    def test_unauthenticated_raises(self):
+        with patch.dict("os.environ", {}, clear=True):     # no POLY_* creds
+            c = PolymarketClient()
+            with self.assertRaises(RuntimeError):
+                c._clob_auth_headers("GET", "/order")
 
 
 class VerifyClobLiquidity(unittest.TestCase):
