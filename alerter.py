@@ -38,6 +38,7 @@ the changed one — the operator wants the full set of runnable arbs each time.
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import re
@@ -493,7 +494,7 @@ def _exec_block(s: dict) -> tuple[str, bytes | None, str | None]:
             ai_row = ('<tr><td>AI check</td><td><span style="color:#16a34a">&#10003; '
                       'verified identical event &amp; settlement</span></td></tr>')
         else:
-            reason = (s.get("ai_reason") or "").strip()
+            reason = _esc((s.get("ai_reason") or "").strip())
             ai_row = ('<tr><td>AI check</td><td><span style="color:#b45309">&#9888; '
                       f'flagged: {reason}</span></td></tr>')
     text = (f"""
@@ -515,6 +516,12 @@ _BADGE = {
     "improved": '<span style="background:#2563eb;color:#fff;font-size:11px;padding:1px 6px;'
                 'border-radius:8px;margin-right:6px">&uarr; IMPROVED</span>',
 }
+
+
+def _esc(s) -> str:
+    """HTML-escape an externally-sourced string (market titles, AI reason) before it
+    goes into the email HTML, so &/</> render correctly and can't inject markup (#52)."""
+    return html.escape(str(s if s is not None else ""))
 
 
 def _link(url: str | None, label: str) -> str:
@@ -580,8 +587,8 @@ def build_email(signals: list[dict],
         rows.append(f"""
         <tr><td colspan="2" style="padding-top:20px;border-top:2px solid #e5e7eb">
             {badge}<span style="font-size:16px;color:#16a34a"><b>{edge:.1f}% net edge</b></span>{ann_html}
-            &nbsp;&nbsp;<b>{s['poly_title']}</b> &harr; <b>{s['kalshi_title']}</b></td></tr>
-        <tr><td style="white-space:nowrap">The trade</td><td>{s['legs']} &nbsp;<span style="color:#888">— exactly one side pays $1 at settlement; you keep ~{edge:.1f}c per $1 after fees</span></td></tr>{exec_html}
+            &nbsp;&nbsp;<b>{_esc(s['poly_title'])}</b> &harr; <b>{_esc(s['kalshi_title'])}</b></td></tr>
+        <tr><td style="white-space:nowrap">The trade</td><td>{_esc(s['legs'])} &nbsp;<span style="color:#888">— exactly one side pays $1 at settlement; you keep ~{edge:.1f}c per $1 after fees</span></td></tr>{exec_html}
         <tr><td>Open</td><td>{_link(s['poly_url'], 'Polymarket')} &nbsp;·&nbsp; {_link(s['kalshi_url'], 'Kalshi')} &nbsp;<span style="color:#aaa;font-size:12px">(match confidence {s['confidence']}{', independently confirmed' if s['v2_match'] else ''})</span></td></tr>""")
     pf_n, pf_deploy, pf_profit = _portfolio_totals(signals)
     portfolio_html = (
@@ -590,7 +597,7 @@ def build_email(signals: list[dict],
     <b style="color:#16a34a">~${pf_profit:,.0f}</b> net profit
     (~{(100 * pf_profit / pf_deploy):.1f}% on capital deployed).</p>"""
         if pf_n and pf_deploy > 0 else "")
-    html = f"""<html><body style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#111">
+    body = f"""<html><body style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#111">
     <p><b>{n}</b> cross-platform arbitrage{'s' if n != 1 else ''} with a net edge above {thr} (after fees),
     {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}, ranked by <b>annualised return</b>
     (a smaller edge that settles soon can beat a bigger one that settles years out).</p>
@@ -604,7 +611,7 @@ def build_email(signals: list[dict],
     <p style="color:#888;font-size:12px">Edges are per $1 of payout, net of Kalshi's 0.07·p·(1−p) taker fee
     (Polymarket CLOB is fee-free). Liquidity moves fast — re-check the book before executing.</p>
     </body></html>"""
-    return subject, html, images
+    return subject, body, images
 
 
 def send_email(cfg: dict, subject: str, html: str,

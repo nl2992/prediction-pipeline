@@ -365,6 +365,14 @@ class EmailBody(unittest.TestCase):
         self.assertIn("https://kalshi.com/markets/kxser/", html)
         self.assertIn("net edge", html)
 
+    def test_titles_html_escaped(self) -> None:
+        p = pair(0.38, 0.40, 0.65, 0.68, poly_title="AT&T <b>hack</b>?")
+        sigs = compute_signals([p], min_edge=0.005)
+        _, html_out, _ = build_email(sigs)
+        self.assertNotIn("<b>hack</b>", html_out)        # raw markup not injected
+        self.assertIn("AT&amp;T", html_out)              # & escaped
+        self.assertIn("&lt;b&gt;hack", html_out)         # < > escaped
+
     def test_missing_market_url_renders_no_dead_link(self) -> None:
         p = pair(0.38, 0.40, 0.65, 0.68)
         p["poly_slug"] = ""                       # -> _poly_url == "" -> no anchor
