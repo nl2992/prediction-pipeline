@@ -554,7 +554,11 @@ def build_email(signals: list[dict],
     # top-ranked pair's annualised figure (falls back to net edge if no horizon).
     _ann, _d, _settle = _settle_horizon(top)
     _best = f"{_ann*100:.0f}% annualised" if _settle else f"{top['net_accurate']*100:.1f}% net"
-    subject = f"[Pred-Arb] {n} arb{'s' if n != 1 else ''} >{thr} net — best {_best}"
+    # Inbox triage: `labels` keys only NEW/IMPROVED pairs, so its size is the count
+    # of genuinely fresh arbs; an empty set means this is a routine realert (#50).
+    n_new = len(labels)
+    fresh_tag = f" · {n_new} new" if n_new else " · re-send"
+    subject = f"[Pred-Arb] {n} arb{'s' if n != 1 else ''} >{thr} net — best {_best}{fresh_tag}"
     rows = []
     images: list[tuple[str, bytes]] = []
     for i, s in enumerate(signals):

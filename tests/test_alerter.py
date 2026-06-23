@@ -365,6 +365,14 @@ class EmailBody(unittest.TestCase):
         self.assertIn("https://kalshi.com/markets/kxser/", html)
         self.assertIn("net edge", html)
 
+    def test_subject_tags_new_vs_resend(self) -> None:
+        sigs = compute_signals([pair(0.38, 0.40, 0.65, 0.68)], min_edge=0.005)
+        key = sigs[0]["key"]
+        subj_new, _, _ = build_email(sigs, {key: "new"})
+        self.assertTrue(subj_new.endswith("· 1 new"))
+        subj_resend, _, _ = build_email(sigs, {})
+        self.assertTrue(subj_resend.endswith("· re-send"))
+
     def test_threshold_is_configurable_in_subject_and_intro(self) -> None:
         sigs = compute_signals([pair(0.38, 0.40, 0.65, 0.68)], min_edge=0.005)
         subject, html, _ = build_email(sigs, min_net=0.05)
