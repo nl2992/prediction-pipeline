@@ -344,6 +344,15 @@ class EmailBody(unittest.TestCase):
         self.assertIn("https://kalshi.com/markets/kxser/", html)
         self.assertIn("net edge", html)
 
+    def test_threshold_is_configurable_in_subject_and_intro(self) -> None:
+        sigs = compute_signals([pair(0.38, 0.40, 0.65, 0.68)], min_edge=0.005)
+        subject, html, _ = build_email(sigs, min_net=0.05)
+        self.assertIn(">5% net", subject)
+        self.assertIn("above 5%", html)
+        # default unchanged
+        subject_d, html_d, _ = build_email(sigs)
+        self.assertIn(">3% net", subject_d)
+
     def test_portfolio_totals_aggregates_and_renders(self) -> None:
         from alerter import _portfolio_totals
         p = pair(0.38, 0.40, 0.65, 0.68)

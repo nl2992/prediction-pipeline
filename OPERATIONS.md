@@ -26,7 +26,8 @@ python alerter.py --once --dry-run     # scan + build email, print instead of se
 
 ## What gets emailed
 
-- **Threshold:** only pairs with a net edge **> 3%** after fees (`MIN_NET_EMAIL = 0.03`).
+- **Threshold:** only pairs with a net edge **> 3%** after fees (default `MIN_NET_EMAIL = 0.03`;
+  override with `"min_net_email"` in `alert_config.json`). The subject/intro show the active threshold.
   Net edge = `1 − legA − legB − Kalshi fee`; Polymarket CLOB is fee-free, Kalshi's
   taker fee is `0.07·p·(1−p)`.
 - **Ranking:** richest-first by **annualised return** = `net × 365 / days`, where

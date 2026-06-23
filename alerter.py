@@ -525,15 +525,17 @@ def _portfolio_totals(signals: list[dict]) -> tuple[int, float, float]:
 
 
 def build_email(signals: list[dict],
-                labels: dict[str, str] | None = None) -> tuple[str, str, list[tuple[str, bytes]]]:
+                labels: dict[str, str] | None = None,
+                min_net: float = MIN_NET_EMAIL) -> tuple[str, str, list[tuple[str, bytes]]]:
     labels = labels or {}
     n = len(signals)
+    thr = f"{min_net * 100:g}%"   # threshold shown in the subject/intro
     top = signals[0]
     # Signals are ranked by annualised return, so the subject leads with the
     # top-ranked pair's annualised figure (falls back to net edge if no horizon).
     _ann, _d, _settle = _settle_horizon(top)
     _best = f"{_ann*100:.0f}% annualised" if _settle else f"{top['net_accurate']*100:.1f}% net"
-    subject = f"[Pred-Arb] {n} arb{'s' if n != 1 else ''} >3% net — best {_best}"
+    subject = f"[Pred-Arb] {n} arb{'s' if n != 1 else ''} >{thr} net — best {_best}"
     rows = []
     images: list[tuple[str, bytes]] = []
     for i, s in enumerate(signals):
@@ -558,7 +560,7 @@ def build_email(signals: list[dict],
     (~{(100 * pf_profit / pf_deploy):.1f}% on capital deployed).</p>"""
         if pf_n and pf_deploy > 0 else "")
     html = f"""<html><body style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#111">
-    <p><b>{n}</b> cross-platform arbitrage{'s' if n != 1 else ''} with a net edge above 3% (after fees),
+    <p><b>{n}</b> cross-platform arbitrage{'s' if n != 1 else ''} with a net edge above {thr} (after fees),
     {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}, ranked by <b>annualised return</b>
     (a smaller edge that settles soon can beat a bigger one that settles years out).</p>
     {portfolio_html}
@@ -670,9 +672,11 @@ def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False,
           f"{survivable} survivable arb(s) (>= {min_edge*100:.2f}c net)", flush=True)
 
     state = load_state()
-    # Trigger on change; email the richest pairs with a real net edge ABOVE
-    # MIN_NET_EMAIL (>3%). `fresh` is only used to decide whether to send this cycle.
-    to_email, fresh = signals_to_send(signals, state, realert_hours, min_net=MIN_NET_EMAIL)
+    # Trigger on change; email the richest pairs with a real net edge ABOVE the
+    # threshold (config "min_net_email", default MIN_NET_EMAIL = 3%). `fresh` only
+    # decides whether to send this cycle.
+    min_net = cfg.get("min_net_email", MIN_NET_EMAIL)
+    to_email, fresh = signals_to_send(signals, state, realert_hours, min_net=min_net)
     if not to_email:
         return 0
 
@@ -698,7 +702,7 @@ def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False,
         flag = " (new/changed)" if s in fresh else ""
         print(f"[alerter] SIGNAL net={s['net_accurate']*100:.2f}c  {s['poly_title'][:40]!r} <-> {s['kalshi_title'][:40]!r}{flag}")
 
-    subject, html, images = build_email(to_email, labels)
+    subject, html, images = build_email(to_email, labels, min_net=min_net)
     if dry_run:
         print(f"[alerter] DRY RUN — would email {cfg['recipients']}: {subject} "
               f"({len(to_email)} pairs, {len(images)} charts)")
