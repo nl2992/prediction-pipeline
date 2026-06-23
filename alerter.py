@@ -498,6 +498,32 @@ _BADGE = {
 }
 
 
+def _portfolio_totals(signals: list[dict]) -> tuple[int, float, float]:
+    """Aggregate executable capital and net profit across all pairs at the largest
+    budget tier ($5k/market): (n_with_books, total_deploy_usd, total_net_profit_usd).
+    Pairs without a usable book are skipped. Best-effort — never raises."""
+    n = 0
+    total_deploy = total_profit = 0.0
+    try:
+        from arb_charts import executable_summary, BUDGETS
+    except Exception:
+        return 0, 0.0, 0.0
+    for s in signals:
+        try:
+            summ = executable_summary(s)
+            if not summ:
+                continue
+            cap = summ[1]["by_budget"][max(BUDGETS)]
+            if cap.contracts <= 0:
+                continue
+            n += 1
+            total_deploy += cap.cost_a + cap.cost_b
+            total_profit += cap.profit
+        except Exception:
+            continue
+    return n, round(total_deploy, 2), round(total_profit, 2)
+
+
 def build_email(signals: list[dict],
                 labels: dict[str, str] | None = None) -> tuple[str, str, list[tuple[str, bytes]]]:
     labels = labels or {}
@@ -524,10 +550,18 @@ def build_email(signals: list[dict],
             &nbsp;&nbsp;<b>{s['poly_title']}</b> &harr; <b>{s['kalshi_title']}</b></td></tr>
         <tr><td style="white-space:nowrap">The trade</td><td>{s['legs']} &nbsp;<span style="color:#888">— exactly one side pays $1 at settlement; you keep ~{edge:.1f}c per $1 after fees</span></td></tr>{exec_html}
         <tr><td>Open</td><td><a href="{s['poly_url']}">Polymarket</a> &nbsp;·&nbsp; <a href="{s['kalshi_url']}">Kalshi</a> &nbsp;<span style="color:#aaa;font-size:12px">(match confidence {s['confidence']}{', independently confirmed' if s['v2_match'] else ''})</span></td></tr>""")
+    pf_n, pf_deploy, pf_profit = _portfolio_totals(signals)
+    portfolio_html = (
+        f"""<p style="font-size:14px"><b>Portfolio:</b> deploying up to $5k/market across these
+    {pf_n} arb{'s' if pf_n != 1 else ''} takes <b>~${pf_deploy:,.0f}</b> of capital for
+    <b style="color:#16a34a">~${pf_profit:,.0f}</b> net profit
+    (~{(100 * pf_profit / pf_deploy):.1f}% on capital deployed).</p>"""
+        if pf_n and pf_deploy > 0 else "")
     html = f"""<html><body style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#111">
     <p><b>{n}</b> cross-platform arbitrage{'s' if n != 1 else ''} with a net edge above 3% (after fees),
     {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}, ranked by <b>annualised return</b>
     (a smaller edge that settles soon can beat a bigger one that settles years out).</p>
+    {portfolio_html}
     <p style="color:#555;font-size:12px">For each pair: buy YES on one venue and NO on the other so exactly one
     side pays $1 — the <b>net edge</b> is what you keep per $1 after Kalshi's fee. Numbers below are walked
     against the <b>live order book</b>, so "execute now" and the per-stake profits already account for paying

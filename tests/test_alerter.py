@@ -344,6 +344,24 @@ class EmailBody(unittest.TestCase):
         self.assertIn("https://kalshi.com/markets/kxser/", html)
         self.assertIn("net edge", html)
 
+    def test_portfolio_totals_aggregates_and_renders(self) -> None:
+        from alerter import _portfolio_totals
+        p = pair(0.38, 0.40, 0.65, 0.68)
+        p["poly_book"] = {"bids": [[0.30, 100]], "asks": [[0.40, 100]]}
+        p["kalshi_book"] = {"bids": [[0.65, 200]], "asks": [[0.95, 100]]}
+        sigs = compute_signals([p], min_edge=0.005)
+        n, deploy, profit = _portfolio_totals(sigs)
+        self.assertEqual(n, 1)
+        self.assertGreater(deploy, 0)
+        self.assertGreater(profit, 0)
+        _, html, _ = build_email(sigs)
+        self.assertIn("Portfolio:", html)
+
+    def test_portfolio_summary_omitted_without_books(self) -> None:
+        sigs = compute_signals([pair(0.38, 0.40, 0.65, 0.68)], min_edge=0.005)  # no books
+        _, html, _ = build_email(sigs)
+        self.assertNotIn("Portfolio:", html)
+
     def test_one_bad_book_does_not_crash_whole_email(self) -> None:
         # A signal whose book makes exec rendering raise must degrade to text-only
         # (no exec block) WITHOUT crashing build_email and losing every alert (#7).
