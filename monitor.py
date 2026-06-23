@@ -268,14 +268,17 @@ def _verify_kalshi_clob(
     details: dict[str, Any] = {"ticker": ticker}
     try:
         from kalshi.client import KalshiClient
+        from executor import best_kalshi_bid
         client = KalshiClient(timeout=12)
         raw = client.get_orderbook(ticker)
         ob_fp = raw.get("orderbook_fp", {})
 
-        yes_bids = ob_fp.get("yes_dollars", [])
-        no_bids = ob_fp.get("no_dollars", [])
-        live_bid = float(yes_bids[-1][0]) if yes_bids else None
-        live_ask = round(1.0 - float(no_bids[-1][0]), 6) if no_bids else None
+        # Pick best by PRICE, not list order — the raw orderbook_fp isn't guaranteed
+        # sorted (pipeline sorts it), so [-1] could be a non-best level (#63).
+        best_yes = best_kalshi_bid(ob_fp.get("yes_dollars", []))
+        best_no = best_kalshi_bid(ob_fp.get("no_dollars", []))
+        live_bid = best_yes
+        live_ask = round(1.0 - best_no, 6) if best_no is not None else None
         live_price = live_bid if side == "bid" else live_ask
         details["live_yes_bid"] = live_bid
         details["live_yes_ask"] = live_ask
