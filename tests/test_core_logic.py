@@ -5,7 +5,9 @@ from unittest.mock import MagicMock, patch
 
 from arb import find_arb, kalshi_taker_fee, _complement_book
 from discover import _match_outcomes_within_group, _parse_dt as discover_parse_dt
-from discover import discover, _is_parlay_market, _apply_event_cap, _event_series as _es
+from discover import (
+    discover, _is_parlay_market, _apply_event_cap, _event_series as _es, _normalise_tokens,
+)
 from executor import TradeIntent, check_price_still_valid
 from kalshi.client import KalshiClient
 from matcher import (
@@ -1462,6 +1464,24 @@ class CrossPlatformFixtureRegressions(unittest.TestCase):
 
         self.assertIn(by_poly.get("pm-openai"), {"k-plain", "k-openai"})
         self.assertNotIn("pm-anthropic", by_poly)
+
+
+class NormaliseTokens(unittest.TestCase):
+    """bps-split + rate-direction synonym folding for Fed-rate matching (#81)."""
+    def test_bps_split(self):
+        toks = _normalise_tokens("hike 25bps")
+        self.assertIn("25", toks)
+        self.assertIn("bps", toks)
+
+    def test_direction_synonyms_folded(self):
+        self.assertIn("cut", _normalise_tokens("rate reduction"))        # reduction -> cut
+        self.assertNotIn("reduction", _normalise_tokens("rate reduction"))
+        self.assertIn("hike", _normalise_tokens("rate raise"))           # raise -> hike
+        self.assertIn("hold", _normalise_tokens("rates unchanged"))      # unchanged -> hold
+
+    def test_canonical_terms_unchanged(self):
+        self.assertIn("cut", _normalise_tokens("rate cut"))
+        self.assertIn("hike", _normalise_tokens("rate hike"))
 
 
 class InvertedPairArbRegressions(unittest.TestCase):
