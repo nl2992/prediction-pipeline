@@ -561,7 +561,7 @@ def _save_results(
     for source, snapshots in result.items():
         path = output_dir / f"{source}_{ts}.json"
         data = [s.to_dict() for s in snapshots]
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, default=str)
         logger.info("Saved %d %s snapshots → %s", len(snapshots), source, path)
 

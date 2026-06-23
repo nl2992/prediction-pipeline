@@ -1251,7 +1251,7 @@ def main() -> None:
     _print_results(results, show_prices=args.show_prices)
 
     if args.output and results:
-        Path(args.output).write_text(json.dumps(results, indent=2, default=str))
+        Path(args.output).write_text(json.dumps(results, indent=2, default=str), encoding="utf-8")
         print(f"Saved {len(results)} pairs → {args.output}")
 
 
