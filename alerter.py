@@ -732,13 +732,6 @@ def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False,
     # Classify new/improved vs persistent BEFORE state is updated below (#17).
     labels = _freshness_labels(to_email, state)
 
-    # Persist a lean record — the full order-book ladders are large and only
-    # needed in-memory for the charts.
-    with SIGNALS_FILE.open("a", encoding="utf-8") as f:
-        for s in to_email:
-            lean = {k: v for k, v in s.items() if k not in ("poly_book", "kalshi_book")}
-            f.write(json.dumps(lean) + "\n")
-    _cap_jsonl(SIGNALS_FILE, max_bytes=8_000_000, keep_rows=10_000)
     for s in to_email:
         flag = " (new/changed)" if s in fresh else ""
         print(f"[alerter] SIGNAL net={s['net_accurate']*100:.2f}c  {s['poly_title'][:40]!r} <-> {s['kalshi_title'][:40]!r}{flag}")
@@ -754,14 +747,21 @@ def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False,
             print(f"[alerter] EMAILED {cfg['recipients']}: {subject} ({len(to_email)} pairs)", flush=True)
         except Exception as exc:
             delivered = False   # retry next cycle — don't suppress undelivered arbs (#84)
-            print(f"[alerter] EMAIL FAILED: {exc} — signal logged to {SIGNALS_FILE.name}", flush=True)
+            print(f"[alerter] EMAIL FAILED: {exc} — not logged/suppressed; will retry next cycle", flush=True)
     else:
         print(f"[alerter] EMAIL NOT CONFIGURED — create {CONFIG_FILE.name} (see module docstring). "
               f"Signal logged to {SIGNALS_FILE.name}.", flush=True)
 
-    # Only mark pairs as alerted when delivery didn't fail; a failed send leaves the
-    # state untouched so the next cycle retries instead of suppressing for ~6h (#84).
+    # Gate BOTH the audit-log write and the realert-state update on delivery: a
+    # failed send re-delivers (and re-logs) next cycle rather than logging duplicate
+    # audit rows / suppressing the arbs for ~6h (#84, #86). Persist a lean record —
+    # the full order-book ladders are large and only needed in-memory for charts.
     if delivered:
+        with SIGNALS_FILE.open("a", encoding="utf-8") as f:
+            for s in to_email:
+                lean = {k: v for k, v in s.items() if k not in ("poly_book", "kalshi_book")}
+                f.write(json.dumps(lean) + "\n")
+        _cap_jsonl(SIGNALS_FILE, max_bytes=8_000_000, keep_rows=10_000)
         now = time.time()
         for s in to_email:
             state[s["key"]] = {"net": s["net_accurate"], "ts": now}

@@ -374,8 +374,9 @@ class RunCycleIntegration(unittest.TestCase):
             send.assert_called_once()
             subject = send.call_args.args[1]
             self.assertIn(">3% net", subject)
-            # state was persisted with the emitted pair's key
+            # state AND the audit log were persisted with the emitted pair's key
             self.assertIn(sigs[0]["key"], pathlib.Path(stp).read_text(encoding="utf-8"))
+            self.assertIn(sigs[0]["key"], pathlib.Path(sp).read_text(encoding="utf-8"))
         finally:
             for q in (sp, stp):
                 if os.path.exists(q):
@@ -398,9 +399,10 @@ class RunCycleIntegration(unittest.TestCase):
                  patch("alerter.STATE_FILE", pathlib.Path(stp)), \
                  patch("ai_verify.resolve_api_key", return_value=None):
                 alerter.run_cycle(min_edge=0.0001, realert_hours=6.0)
-            # delivery failed -> the pair's key must NOT be persisted (next cycle retries)
+            # delivery failed -> neither state nor the audit log is written (retry next cycle)
             persisted = pathlib.Path(stp).read_text(encoding="utf-8") if os.path.exists(stp) else ""
             self.assertNotIn(sigs[0]["key"], persisted)
+            self.assertEqual(pathlib.Path(sp).read_text(encoding="utf-8").strip(), "")  # no audit row (#86)
         finally:
             for q in (sp, stp):
                 if os.path.exists(q):
