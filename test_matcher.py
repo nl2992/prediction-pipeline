@@ -98,7 +98,7 @@ def main():
     matched_by_poly = {mp.poly.market_id: mp.kalshi.market_id for mp in matched_pairs}
 
     g_tp = g_tn = g_fp = g_fn = 0
-    for pair_id, (pm_id, k_id, should) in sorted(expected.items()):
+    for _pair_id, (pm_id, k_id, should) in sorted(expected.items()):
         got_k = matched_by_poly.get(pm_id)
         # Equivalence: matched K counts as correct if it is title+close identical
         # to the expected K (the fixture contains indistinguishable duplicates).

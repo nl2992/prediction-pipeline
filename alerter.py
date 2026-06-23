@@ -576,7 +576,7 @@ def build_email(signals: list[dict],
     subject = f"[Pred-Arb] {n} arb{'s' if n != 1 else ''} >{thr} net — best {_best}{fresh_tag}"
     rows = []
     images: list[tuple[str, bytes]] = []
-    for i, s in enumerate(signals):
+    for s in signals:
         exec_html, png, cid = _exec_block(s)
         if png and cid:
             images.append((cid, png))

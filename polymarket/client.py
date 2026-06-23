@@ -654,12 +654,12 @@ class PolymarketClient:
         try:
             from py_clob_client.client import ClobClient
             from py_clob_client.clob_types import OrderArgs, OrderType
-        except ImportError:
+        except ImportError as exc:
             raise RuntimeError(
                 "py-clob-client-v2 not installed.  "
                 "Run: pip install py-clob-client-v2\n"
                 "Then re-run with your Polygon private key set in POLY_PRIVATE_KEY."
-            )
+            ) from exc
 
         chain_id = 137  # Polygon mainnet
         client = ClobClient(

@@ -91,7 +91,7 @@ def make_arb_chart(signal: dict, budgets: tuple[float, ...] = BUDGETS) -> bytes 
         profits = [res["by_budget"][b].profit for b in buds]
         conts = [res["by_budget"][b].contracts for b in buds]
         bars = axL.bar([f"${b/1000:g}k" for b in buds], profits, color=c_bar, alpha=0.9)
-        for bar, p, c in zip(bars, profits, conts):
+        for bar, p, c in zip(bars, profits, conts, strict=True):  # all len(buds)
             axL.annotate(f"${p:,.0f}\n{c:,.0f} pairs", xy=(bar.get_x() + bar.get_width() / 2,
                          bar.get_height()), xytext=(0, 2), textcoords="offset points",
                          ha="center", va="bottom", fontsize=7.5)
