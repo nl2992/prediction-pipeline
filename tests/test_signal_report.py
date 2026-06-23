@@ -46,21 +46,41 @@ class Summarize(unittest.TestCase):
 
 
 class Annualised(unittest.TestCase):
+    import datetime as _dt
+    _NOW = _dt.datetime(2026, 6, 24, 12, 0, 0, tzinfo=_dt.timezone.utc)
+
+    def _close(self, days):
+        return (self._NOW + self._dt.timedelta(days=days)).date().isoformat()
+
+    def _recent_ts(self, hours):
+        return (self._NOW - self._dt.timedelta(hours=hours)).isoformat()
+
     def test_near_dated_smaller_edge_outranks_far_dated_bigger(self):
-        import datetime as dt
-        soon = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=30)).date().isoformat()
-        far = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=900)).date().isoformat()
         sigs = [
-            # 4c edge resolving in ~30d -> high annualised
-            {"key": "near", "net_accurate": 0.04, "ts": "t", "poly_title": "Near", "kalshi_title": "n",
-             "poly_close": soon, "kalshi_close": soon},
-            # 10c edge resolving in ~900d -> low annualised
-            {"key": "far", "net_accurate": 0.10, "ts": "t", "poly_title": "Far", "kalshi_title": "f",
-             "poly_close": far, "kalshi_close": far},
+            {"key": "near", "net_accurate": 0.04, "ts": self._recent_ts(1),
+             "poly_title": "Near", "kalshi_title": "n",
+             "poly_close": self._close(30), "kalshi_close": self._close(30)},      # ~30d -> high ann
+            {"key": "far", "net_accurate": 0.10, "ts": self._recent_ts(1),
+             "poly_title": "Far", "kalshi_title": "f",
+             "poly_close": self._close(900), "kalshi_close": self._close(900)},    # ~900d -> low ann
         ]
-        s = r.summarize(sigs)
+        s = r.summarize(sigs, now=self._NOW)
         self.assertEqual(s["best_annualised"][0]["poly"], "Near")   # annualised wins
         self.assertEqual(s["richest"][0]["poly"], "Far")            # raw edge differs
+
+    def test_stale_pair_excluded_from_actionable_annualised(self):
+        sigs = [
+            {"key": "stale", "net_accurate": 0.04, "ts": self._recent_ts(48),     # 48h ago -> stale
+             "poly_title": "Stale", "kalshi_title": "s",
+             "poly_close": self._close(20), "kalshi_close": self._close(20)},
+            {"key": "fresh", "net_accurate": 0.04, "ts": self._recent_ts(2),      # 2h ago -> current
+             "poly_title": "Fresh", "kalshi_title": "f",
+             "poly_close": self._close(40), "kalshi_close": self._close(40)},
+        ]
+        s = r.summarize(sigs, now=self._NOW, recent_hours=24)
+        polys = [e["poly"] for e in s["best_annualised"]]
+        self.assertIn("Fresh", polys)
+        self.assertNotIn("Stale", polys)        # excluded despite a valid annualised
 
 
 class FormatReport(unittest.TestCase):

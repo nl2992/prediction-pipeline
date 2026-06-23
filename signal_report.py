@@ -9,11 +9,26 @@ CLI: python signal_report.py [path-to-alert_signals.jsonl]
 """
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import pathlib
 import sys
 
 _LOG = pathlib.Path(__file__).resolve().parent / "alert_signals.jsonl"
+_RECENT_HOURS_DEFAULT = 24.0   # "act on" window for the best-annualised view
+
+
+def _age_hours(ts: str, now: _dt.datetime) -> float | None:
+    """Hours between an ISO ts and ``now`` (UTC); None if missing/unparseable."""
+    if not ts:
+        return None
+    try:
+        d = _dt.datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=_dt.timezone.utc)
+        return (now - d).total_seconds() / 3600.0
+    except (ValueError, AttributeError):
+        return None
 
 
 def load_signals(path: pathlib.Path | str = _LOG) -> list[dict]:
@@ -52,13 +67,16 @@ def _annualised(signal: dict) -> float:
         return 0.0
 
 
-def summarize(signals: list[dict], top_n: int = 10) -> dict:
+def summarize(signals: list[dict], top_n: int = 10,
+              now: _dt.datetime | None = None,
+              recent_hours: float = _RECENT_HOURS_DEFAULT) -> dict:
     """Group emitted signals by pair (the canonical ``key``) and rank them.
 
-    Returns: total, unique_pairs, most_recurring (count desc), richest (max net edge
-    seen), best_annualised (the latest signal's annualised return — the alerter's
-    priority metric). Each entry: {poly, kalshi, count, max_net, latest_net,
-    latest_ts, annualised}."""
+    Returns: total, unique_pairs, most_recurring (count desc) and richest (max net
+    edge) over ALL time, and best_annualised — the alerter's priority metric,
+    restricted to pairs SEEN within ``recent_hours`` so it lists currently-actionable
+    arbs, not vanished ones (#78). Each entry carries age_hours (since last seen)."""
+    now = now or _dt.datetime.now(_dt.timezone.utc)
     pairs: dict = {}
     for s in signals:
         key = s.get("key") or (s.get("poly_title", ""), s.get("kalshi_title", ""))
@@ -76,10 +94,14 @@ def summarize(signals: list[dict], top_n: int = 10) -> dict:
             e["latest_net"] = net
             e["annualised"] = _annualised(s)   # annualised of the latest snapshot
     vals = list(pairs.values())
+    for e in vals:
+        e["age_hours"] = _age_hours(e["latest_ts"], now)
     most_recurring = sorted(vals, key=lambda e: (e["count"], e["max_net"]), reverse=True)[:top_n]
     richest = sorted(vals, key=lambda e: e["max_net"], reverse=True)[:top_n]
-    best_annualised = sorted(vals, key=lambda e: e["annualised"], reverse=True)[:top_n]
-    return {"total": len(signals), "unique_pairs": len(pairs),
+    # "act on" view: only pairs seen within the window are current opportunities.
+    current = [e for e in vals if e["age_hours"] is not None and e["age_hours"] <= recent_hours]
+    best_annualised = sorted(current, key=lambda e: e["annualised"], reverse=True)[:top_n]
+    return {"total": len(signals), "unique_pairs": len(pairs), "recent_hours": recent_hours,
             "most_recurring": most_recurring, "richest": richest,
             "best_annualised": best_annualised}
 
@@ -99,11 +121,14 @@ def format_report(s: dict) -> str:
         for e in s["richest"]:
             lines.append(f"  {e['max_net']*100:5.1f}c [{e['count']}x]  "
                          f"{e['poly'][:30]} <-> {e['kalshi'][:30]}")
+    rh = s.get("recent_hours", _RECENT_HOURS_DEFAULT)
     if s.get("best_annualised"):
         lines.append("")
-        lines.append("Best by annualised return (the alerter's priority metric):")
+        lines.append(f"Best by annualised return — currently actionable (seen in last {rh:.0f}h):")
         for e in s["best_annualised"]:
-            lines.append(f"  ~{e['annualised']*100:4.0f}% ann · latest {e['latest_net']*100:.1f}c  "
+            age = e.get("age_hours")
+            seen = f", {age:.0f}h ago" if isinstance(age, (int, float)) else ""
+            lines.append(f"  ~{e['annualised']*100:4.0f}% ann · latest {e['latest_net']*100:.1f}c{seen}  "
                          f"{e['poly'][:30]} <-> {e['kalshi'][:30]}")
     return "\n".join(lines)
 
