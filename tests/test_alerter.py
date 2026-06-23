@@ -350,6 +350,38 @@ class StateConfigResilience(unittest.TestCase):
             alerter.CONFIG_FILE = orig; p.unlink()
 
 
+class RunCycleIntegration(unittest.TestCase):
+    """End-to-end orchestration: scan -> send-decision -> gate -> build -> send -> state (#82)."""
+    def test_full_cycle_emails_and_returns_count(self):
+        import os, pathlib, tempfile
+        import alerter
+        p = pair(0.38, 0.40, 0.65, 0.68)            # ~24c net -> well above >3%
+        sigs = compute_signals([p], min_edge=0.005)
+        self.assertTrue(sigs)
+        sfd, sp = tempfile.mkstemp(suffix=".jsonl"); os.close(sfd)        # signals log (temp)
+        stfd, stp = tempfile.mkstemp(suffix=".json"); os.close(stfd); os.unlink(stp)  # empty state
+        cfg = {"recipients": ["a@b.com"], "from_addr": "x@y.com", "smtp_host": "h",
+               "smtp_port": 1, "smtp_user": "u", "smtp_pass": "p"}
+        try:
+            with patch("alerter.adaptive_scan", return_value=([p], sigs, 1500)), \
+                 patch("alerter.send_email") as send, \
+                 patch("alerter.load_config", return_value=cfg), \
+                 patch("alerter.SIGNALS_FILE", pathlib.Path(sp)), \
+                 patch("alerter.STATE_FILE", pathlib.Path(stp)), \
+                 patch("ai_verify.resolve_api_key", return_value=None):   # gate no-op, no network
+                n = alerter.run_cycle(min_edge=0.0001, realert_hours=6.0)
+            self.assertGreaterEqual(n, 1)
+            send.assert_called_once()
+            subject = send.call_args.args[1]
+            self.assertIn(">3% net", subject)
+            # state was persisted with the emitted pair's key
+            self.assertIn(sigs[0]["key"], pathlib.Path(stp).read_text(encoding="utf-8"))
+        finally:
+            for q in (sp, stp):
+                if os.path.exists(q):
+                    os.unlink(q)
+
+
 class SendEmail(unittest.TestCase):
     _cfg = {"recipients": ["a@b.com", "c@d.com"], "from_addr": "x@y.com",
             "smtp_host": "smtp.test", "smtp_port": 587, "smtp_user": "u", "smtp_pass": "p"}
