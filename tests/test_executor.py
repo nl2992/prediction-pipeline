@@ -38,6 +38,29 @@ class KalshiLivePriceBestBid(unittest.TestCase):
         self.assertEqual(live, 0.55)
 
 
+class KalshiSideMapping(unittest.TestCase):
+    """The NO-side mapping (buy NO @ p == sell YES @ 1-p) is money-critical (#64)."""
+    def _exec_capturing(self):
+        ex = _live_executor()
+        ex._kalshi_client.place_order.return_value = {
+            "order_id": "o", "status": "executed", "remaining_count": 0}
+        return ex
+
+    def test_yes_maps_to_bid_at_same_price(self):
+        ex = self._exec_capturing()
+        ex._place_kalshi(TradeIntent("kalshi", "YES", 0.40, 10, "KX", None, "buy YES"))
+        kw = ex._kalshi_client.place_order.call_args.kwargs
+        self.assertEqual(kw["side"], "bid")
+        self.assertEqual(kw["price"], 0.40)
+
+    def test_no_maps_to_ask_at_complement_price(self):
+        ex = self._exec_capturing()
+        ex._place_kalshi(TradeIntent("kalshi", "NO", 0.30, 10, "KX", None, "buy NO"))
+        kw = ex._kalshi_client.place_order.call_args.kwargs
+        self.assertEqual(kw["side"], "ask")
+        self.assertEqual(kw["price"], 0.70)        # 1 - 0.30
+
+
 class KalshiFokFill(unittest.TestCase):
     def _intent(self):
         return TradeIntent("kalshi", "YES", 0.40, 10, "KX", None, "Buy YES")
