@@ -654,12 +654,12 @@ def _alert_operator(cfg: dict, reason: str, state: dict | None = None) -> None:
         if now - st.get("_last_alert_ts", 0) < _ALERT_COOLDOWN_S:
             return
         subject = f"[Pred-Arb] ALERT — pipeline degraded: {reason[:80]}"
-        html = (f"<p>The arb alerter reported a degradation at "
+        body = (f"<p>The arb alerter reported a degradation at "
                 f"{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}:</p>"
-                f"<pre>{reason}</pre>"
+                f"<pre>{_esc(reason)}</pre>"
                 f"<p>Run <code>python health.py</code> for status. Further alerts are "
                 f"suppressed for {_ALERT_COOLDOWN_S // 60} min.</p>")
-        send_email(cfg, subject, html)
+        send_email(cfg, subject, body)
         st["_last_alert_ts"] = now
         if owns_state:
             save_state(st)

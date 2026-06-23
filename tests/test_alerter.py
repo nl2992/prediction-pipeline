@@ -353,6 +353,14 @@ class DegradationAlert(unittest.TestCase):
         with patch("alerter.send_email", side_effect=OSError("smtp down")):
             _alert_operator(self._cfg, "boom", state={})    # must not raise
 
+    def test_reason_html_escaped_in_alert_body(self):
+        from alerter import _alert_operator
+        with patch("alerter.send_email") as send:
+            _alert_operator(self._cfg, "CYCLE ERROR: bad <tag> & 'x'", state={})
+        body = send.call_args[0][2]                          # (cfg, subject, body)
+        self.assertIn("&lt;tag&gt;", body)
+        self.assertNotIn("<tag>", body)
+
 
 class EmailBody(unittest.TestCase):
     def test_subject_and_links_present(self) -> None:
