@@ -321,6 +321,35 @@ class FreshnessLabels(unittest.TestCase):
         self.assertNotIn(">NEW<", html2)
 
 
+class StateConfigResilience(unittest.TestCase):
+    """Corrupt state/config must not crash-loop the alerter (#73)."""
+    def _garbage_file(self):
+        import os, tempfile, pathlib
+        fd, p = tempfile.mkstemp(suffix=".json"); os.close(fd)
+        pathlib.Path(p).write_text("{ this is : not valid json ,,,", encoding="utf-8")
+        return pathlib.Path(p)
+
+    def test_load_state_recovers_from_corrupt_file(self):
+        import alerter
+        p = self._garbage_file(); orig = alerter.STATE_FILE
+        alerter.STATE_FILE = p
+        try:
+            self.assertEqual(alerter.load_state(), {})       # recover -> empty, no raise
+        finally:
+            alerter.STATE_FILE = orig; p.unlink()
+
+    def test_load_config_recovers_from_corrupt_file(self):
+        import alerter
+        p = self._garbage_file(); orig = alerter.CONFIG_FILE
+        alerter.CONFIG_FILE = p
+        try:
+            cfg = alerter.load_config()                       # warns, applies defaults
+            self.assertIn("recipients", cfg)
+            self.assertIn("smtp_host", cfg)
+        finally:
+            alerter.CONFIG_FILE = orig; p.unlink()
+
+
 class SendEmail(unittest.TestCase):
     _cfg = {"recipients": ["a@b.com", "c@d.com"], "from_addr": "x@y.com",
             "smtp_host": "smtp.test", "smtp_port": 587, "smtp_user": "u", "smtp_pass": "p"}
