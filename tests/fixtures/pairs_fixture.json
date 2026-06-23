@@ -1,914 +1,914 @@
-{
-  "fixture_version": "1.0",
-  "generated_at": "2026-06-10T04:00:00Z",
-  "description": "50 candidate Polymarket<->Kalshi pairs for matcher + arb-engine testing. ground_truth.should_match is the matcher label; arb block is only economically meaningful when should_match is true. [slimmed in-repo copy: only fields used by test_contract_spec parity]",
-  "counts": {
-    "total": 50,
-    "should_match_true": 42,
-    "should_match_false": 8,
-    "inverted": 2,
-    "arb_opportunities": 14
-  },
-  "pairs": [
-    {
-      "pair_id": "PAIR-001",
-      "category": "politics",
-      "polymarket": {
-        "question": "Will Gavin Newsom win the 2028 Democratic presidential nomination?",
-        "end_date_iso": "2028-06-09T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Newsom to win 2028 Democratic nomination?",
-        "close_time_iso": "2028-06-09T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-002",
-      "category": "politics",
-      "polymarket": {
-        "question": "Will the Republican Party win the 2026 US Senate majority?",
-        "end_date_iso": "2026-11-05T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Which party controls the Senate after the 2026 midterms? (Republican)",
-        "close_time_iso": "2026-11-05T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "paraphrase",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-003",
-      "category": "politics",
-      "polymarket": {
-        "question": "Will Democrats win the House in the 2026 midterms?",
-        "end_date_iso": "2026-11-05T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Democrats to control the House after 2026 elections?",
-        "close_time_iso": "2026-11-05T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-004",
-      "category": "politics",
-      "polymarket": {
-        "question": "Will JD Vance be the 2028 Republican presidential nominee?",
-        "end_date_iso": "2028-06-09T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Vance to win the 2028 GOP nomination?",
-        "close_time_iso": "2028-06-09T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-005",
-      "category": "politics",
-      "polymarket": {
-        "question": "Will there be a US government shutdown before October 1, 2026?",
-        "end_date_iso": "2026-09-30T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Government shutdown by Sep 30, 2026?",
-        "close_time_iso": "2026-09-30T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "paraphrase",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-006",
-      "category": "politics",
-      "polymarket": {
-        "question": "Will the UK hold a general election in 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "UK general election called in 2027?",
-        "close_time_iso": "2027-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": false,
-        "match_type": "date_mismatch",
-        "inverted": false,
-        "note": "Same event family, different year — must NOT match"
-      }
-    },
-    {
-      "pair_id": "PAIR-007",
-      "category": "politics",
-      "polymarket": {
-        "question": "Will Trump's approval rating be above 45% on July 1, 2026?",
-        "end_date_iso": "2026-07-01T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Trump approval above 45 on Jul 1?",
-        "close_time_iso": "2026-07-01T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-008",
-      "category": "politics",
-      "polymarket": {
-        "question": "Will a US Supreme Court justice retire or die in 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "SCOTUS vacancy in 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "paraphrase",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-009",
-      "category": "politics",
-      "polymarket": {
-        "question": "Will France's government collapse (lose confidence vote) in 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "French PM ousted by no-confidence vote in 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "paraphrase",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-010",
-      "category": "politics",
-      "polymarket": {
-        "question": "Will Zohran Mamdani be NYC mayor on Dec 31, 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Mamdani to win 2029 NYC mayoral election?",
-        "close_time_iso": "2029-12-01T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": false,
-        "match_type": "event_mismatch",
-        "inverted": false,
-        "note": "Incumbency vs future election — must NOT match"
-      }
-    },
-    {
-      "pair_id": "PAIR-011",
-      "category": "crypto",
-      "polymarket": {
-        "question": "Will Bitcoin be above $150,000 on December 31, 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "BTC above $150k at year-end 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-012",
-      "category": "crypto",
-      "polymarket": {
-        "question": "Will Bitcoin be above $200,000 on December 31, 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "BTC above $150k at year-end 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": false,
-        "match_type": "strike_mismatch",
-        "inverted": false,
-        "note": "Different strike ($200k vs $150k) — must NOT match"
-      }
-    },
-    {
-      "pair_id": "PAIR-013",
-      "category": "crypto",
-      "polymarket": {
-        "question": "Will Ethereum be above $8,000 on December 31, 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "ETH above $8000 at end of 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-014",
-      "category": "crypto",
-      "polymarket": {
-        "question": "Will Bitcoin hit $175,000 at any point in 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "BTC to touch $175k in 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-015",
-      "category": "crypto",
-      "polymarket": {
-        "question": "Will Bitcoin be above $175,000 on Dec 31, 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "BTC to touch $175k in 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": false,
-        "match_type": "settlement_mismatch",
-        "inverted": false,
-        "note": "'Close above' vs 'touch anytime' — must NOT match"
-      }
-    },
-    {
-      "pair_id": "PAIR-016",
-      "category": "crypto",
-      "polymarket": {
-        "question": "Will a US spot Solana ETF have over $5B AUM by Dec 31, 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "SOL ETFs above $5B AUM by end of 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-017",
-      "category": "crypto",
-      "polymarket": {
-        "question": "Will Bitcoin dip below $80,000 at any point in 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "BTC to stay above $80k for all of 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "inverted",
-        "inverted": true,
-        "note": "Logical inverse: PM YES == Kalshi NO. Matcher must flag inversion."
-      }
-    },
-    {
-      "pair_id": "PAIR-018",
-      "category": "crypto",
-      "polymarket": {
-        "question": "Will Coinbase be in the S&P 500 on Dec 31, 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Coinbase in S&P 500 at year-end 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-019",
-      "category": "econ",
-      "polymarket": {
-        "question": "Will the Fed cut rates at the July 2026 FOMC meeting?",
-        "end_date_iso": "2026-07-29T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Fed rate cut in July 2026?",
-        "close_time_iso": "2026-07-29T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-020",
-      "category": "econ",
-      "polymarket": {
-        "question": "Will the Fed cut rates at the September 2026 FOMC meeting?",
-        "end_date_iso": "2026-09-23T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Fed rate cut in July 2026?",
-        "close_time_iso": "2026-07-29T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": false,
-        "match_type": "date_mismatch",
-        "inverted": false,
-        "note": "Sept vs July meeting — must NOT match"
-      }
-    },
-    {
-      "pair_id": "PAIR-021",
-      "category": "econ",
-      "polymarket": {
-        "question": "Will US CPI YoY for June 2026 print above 3.0%?",
-        "end_date_iso": "2026-07-15T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "June CPI above 3.0% (released July)?",
-        "close_time_iso": "2026-07-15T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-022",
-      "category": "econ",
-      "polymarket": {
-        "question": "Will the US enter a recession (NBER-declared) by end of 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "NBER recession declared in 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "paraphrase",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-023",
-      "category": "econ",
-      "polymarket": {
-        "question": "Will US unemployment exceed 4.8% in any 2026 report?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Unemployment rate above 4.8% in 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-024",
-      "category": "econ",
-      "polymarket": {
-        "question": "Will the S&P 500 close above 7,000 on Dec 31, 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "S&P 500 above 7000 at year-end?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-025",
-      "category": "econ",
-      "polymarket": {
-        "question": "Will NVIDIA market cap be above $6T on Dec 31, 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "NVDA above $6 trillion market cap at year-end 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-026",
-      "category": "econ",
-      "polymarket": {
-        "question": "Will the Fed funds target range be below 3.25% on Dec 31, 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Fed funds upper bound below 3.25% end-2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "paraphrase",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-027",
-      "category": "sports",
-      "polymarket": {
-        "question": "Will the Oklahoma City Thunder win the 2026 NBA Finals?",
-        "end_date_iso": "2026-06-22T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Thunder to win 2026 NBA Championship?",
-        "close_time_iso": "2026-06-22T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-028",
-      "category": "sports",
-      "polymarket": {
-        "question": "Will the Indiana Pacers win the 2026 NBA Finals?",
-        "end_date_iso": "2026-06-22T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Pacers to win 2026 NBA Championship?",
-        "close_time_iso": "2026-06-22T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-029",
-      "category": "sports",
-      "polymarket": {
-        "question": "Will Brazil win the 2026 FIFA World Cup?",
-        "end_date_iso": "2026-07-19T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Brazil to win 2026 World Cup?",
-        "close_time_iso": "2026-07-19T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-030",
-      "category": "sports",
-      "polymarket": {
-        "question": "Will France reach the 2026 World Cup final?",
-        "end_date_iso": "2026-07-19T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "France to win 2026 World Cup?",
-        "close_time_iso": "2026-07-19T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": false,
-        "match_type": "outcome_mismatch",
-        "inverted": false,
-        "note": "Reach final vs win — must NOT match"
-      }
-    },
-    {
-      "pair_id": "PAIR-031",
-      "category": "sports",
-      "polymarket": {
-        "question": "Will the New York Yankees win the 2026 World Series?",
-        "end_date_iso": "2026-10-30T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Yankees to win 2026 World Series?",
-        "close_time_iso": "2026-10-30T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-032",
-      "category": "sports",
-      "polymarket": {
-        "question": "Will Scottie Scheffler win the 2026 US Open (golf)?",
-        "end_date_iso": "2026-06-21T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Scheffler to win 2026 US Open?",
-        "close_time_iso": "2026-06-21T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-033",
-      "category": "sports",
-      "polymarket": {
-        "question": "Will Carlos Alcaraz win 2026 Wimbledon?",
-        "end_date_iso": "2026-07-13T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Alcaraz to win Wimbledon 2026?",
-        "close_time_iso": "2026-07-13T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-034",
-      "category": "sports",
-      "polymarket": {
-        "question": "Will the total number of goals in the 2026 WC final be over 2.5?",
-        "end_date_iso": "2026-07-20T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Over 2.5 goals in World Cup final?",
-        "close_time_iso": "2026-07-20T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-035",
-      "category": "tech",
-      "polymarket": {
-        "question": "Will OpenAI release GPT-6 before Dec 31, 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "GPT-6 released in 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-036",
-      "category": "tech",
-      "polymarket": {
-        "question": "Will Apple announce a foldable iPhone in 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Apple foldable phone announced by end of 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "paraphrase",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-037",
-      "category": "tech",
-      "polymarket": {
-        "question": "Will SpaceX Starship reach orbit and land both stages successfully in 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Starship full success (orbit + dual recovery) in 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "paraphrase",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-038",
-      "category": "tech",
-      "polymarket": {
-        "question": "Will Waymo operate paid robotaxis in NYC by Dec 31, 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Waymo paid service live in New York City in 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-039",
-      "category": "tech",
-      "polymarket": {
-        "question": "Will TikTok be banned in the US on Dec 31, 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "TikTok operating legally in the US at end of 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "inverted",
-        "inverted": true,
-        "note": "Banned vs operating-legally: logical inverse (approximately). Matcher must flag inversion."
-      }
-    },
-    {
-      "pair_id": "PAIR-040",
-      "category": "tech",
-      "polymarket": {
-        "question": "Will an AI system win a gold medal at IMO 2026?",
-        "end_date_iso": "2026-07-21T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "AI gets IMO gold in 2026?",
-        "close_time_iso": "2026-07-21T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-041",
-      "category": "tech",
-      "polymarket": {
-        "question": "Will Anthropic release a model called Claude 6 in 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "OpenAI to release GPT-6 in 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": false,
-        "match_type": "entity_mismatch",
-        "inverted": false,
-        "note": "Different company/product — must NOT match"
-      }
-    },
-    {
-      "pair_id": "PAIR-042",
-      "category": "culture",
-      "polymarket": {
-        "question": "Will 'Avengers: Doomsday' gross over $1.5B worldwide by Dec 31, 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Avengers Doomsday to pass $1.5B global box office in 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-043",
-      "category": "culture",
-      "polymarket": {
-        "question": "Will Taylor Swift announce a 2027 tour before the end of 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Taylor Swift 2027 tour announced in 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-044",
-      "category": "culture",
-      "polymarket": {
-        "question": "Will GTA VI release before December 31, 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "GTA 6 released in calendar 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-045",
-      "category": "culture",
-      "polymarket": {
-        "question": "Will GTA VI release before June 30, 2026?",
-        "end_date_iso": "2026-06-30T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "GTA 6 released in calendar 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": false,
-        "match_type": "date_mismatch",
-        "inverted": false,
-        "note": "H1-only deadline vs full-year — must NOT match"
-      }
-    },
-    {
-      "pair_id": "PAIR-046",
-      "category": "culture",
-      "polymarket": {
-        "question": "Will the next James Bond actor be announced in 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "New Bond actor named in 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-047",
-      "category": "misc",
-      "polymarket": {
-        "question": "Will a Category 5 hurricane make US landfall in the 2026 season?",
-        "end_date_iso": "2026-12-02T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Cat 5 hurricane US landfall in 2026?",
-        "close_time_iso": "2026-12-02T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-048",
-      "category": "misc",
-      "polymarket": {
-        "question": "Will 2026 be the hottest year on record (NASA GISS)?",
-        "end_date_iso": "2027-01-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "2026 hottest year on record?",
-        "close_time_iso": "2027-01-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-049",
-      "category": "misc",
-      "polymarket": {
-        "question": "Will NYC see 20+ inches of total snowfall in the 2026-27 season?",
-        "end_date_iso": "2027-03-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Central Park snowfall over 20 inches, 2026-27 winter?",
-        "close_time_iso": "2027-03-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "exact",
-        "inverted": false,
-        "note": ""
-      }
-    },
-    {
-      "pair_id": "PAIR-050",
-      "category": "misc",
-      "polymarket": {
-        "question": "Will a human walk on the Moon before Dec 31, 2026?",
-        "end_date_iso": "2026-12-31T04:00:00Z"
-      },
-      "kalshi": {
-        "title": "Crewed lunar landing in 2026?",
-        "close_time_iso": "2026-12-31T04:00:00Z"
-      },
-      "ground_truth": {
-        "should_match": true,
-        "match_type": "paraphrase",
-        "inverted": false,
-        "note": ""
-      }
-    }
-  ]
+{
+  "fixture_version": "1.0",
+  "generated_at": "2026-06-10T04:00:00Z",
+  "description": "50 candidate Polymarket<->Kalshi pairs for matcher + arb-engine testing. ground_truth.should_match is the matcher label; arb block is only economically meaningful when should_match is true. [slimmed in-repo copy: only fields used by test_contract_spec parity]",
+  "counts": {
+    "total": 50,
+    "should_match_true": 42,
+    "should_match_false": 8,
+    "inverted": 2,
+    "arb_opportunities": 14
+  },
+  "pairs": [
+    {
+      "pair_id": "PAIR-001",
+      "category": "politics",
+      "polymarket": {
+        "question": "Will Gavin Newsom win the 2028 Democratic presidential nomination?",
+        "end_date_iso": "2028-06-09T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Newsom to win 2028 Democratic nomination?",
+        "close_time_iso": "2028-06-09T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-002",
+      "category": "politics",
+      "polymarket": {
+        "question": "Will the Republican Party win the 2026 US Senate majority?",
+        "end_date_iso": "2026-11-05T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Which party controls the Senate after the 2026 midterms? (Republican)",
+        "close_time_iso": "2026-11-05T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "paraphrase",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-003",
+      "category": "politics",
+      "polymarket": {
+        "question": "Will Democrats win the House in the 2026 midterms?",
+        "end_date_iso": "2026-11-05T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Democrats to control the House after 2026 elections?",
+        "close_time_iso": "2026-11-05T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-004",
+      "category": "politics",
+      "polymarket": {
+        "question": "Will JD Vance be the 2028 Republican presidential nominee?",
+        "end_date_iso": "2028-06-09T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Vance to win the 2028 GOP nomination?",
+        "close_time_iso": "2028-06-09T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-005",
+      "category": "politics",
+      "polymarket": {
+        "question": "Will there be a US government shutdown before October 1, 2026?",
+        "end_date_iso": "2026-09-30T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Government shutdown by Sep 30, 2026?",
+        "close_time_iso": "2026-09-30T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "paraphrase",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-006",
+      "category": "politics",
+      "polymarket": {
+        "question": "Will the UK hold a general election in 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "UK general election called in 2027?",
+        "close_time_iso": "2027-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": false,
+        "match_type": "date_mismatch",
+        "inverted": false,
+        "note": "Same event family, different year â€” must NOT match"
+      }
+    },
+    {
+      "pair_id": "PAIR-007",
+      "category": "politics",
+      "polymarket": {
+        "question": "Will Trump's approval rating be above 45% on July 1, 2026?",
+        "end_date_iso": "2026-07-01T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Trump approval above 45 on Jul 1?",
+        "close_time_iso": "2026-07-01T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-008",
+      "category": "politics",
+      "polymarket": {
+        "question": "Will a US Supreme Court justice retire or die in 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "SCOTUS vacancy in 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "paraphrase",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-009",
+      "category": "politics",
+      "polymarket": {
+        "question": "Will France's government collapse (lose confidence vote) in 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "French PM ousted by no-confidence vote in 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "paraphrase",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-010",
+      "category": "politics",
+      "polymarket": {
+        "question": "Will Zohran Mamdani be NYC mayor on Dec 31, 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Mamdani to win 2029 NYC mayoral election?",
+        "close_time_iso": "2029-12-01T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": false,
+        "match_type": "event_mismatch",
+        "inverted": false,
+        "note": "Incumbency vs future election â€” must NOT match"
+      }
+    },
+    {
+      "pair_id": "PAIR-011",
+      "category": "crypto",
+      "polymarket": {
+        "question": "Will Bitcoin be above $150,000 on December 31, 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "BTC above $150k at year-end 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-012",
+      "category": "crypto",
+      "polymarket": {
+        "question": "Will Bitcoin be above $200,000 on December 31, 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "BTC above $150k at year-end 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": false,
+        "match_type": "strike_mismatch",
+        "inverted": false,
+        "note": "Different strike ($200k vs $150k) â€” must NOT match"
+      }
+    },
+    {
+      "pair_id": "PAIR-013",
+      "category": "crypto",
+      "polymarket": {
+        "question": "Will Ethereum be above $8,000 on December 31, 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "ETH above $8000 at end of 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-014",
+      "category": "crypto",
+      "polymarket": {
+        "question": "Will Bitcoin hit $175,000 at any point in 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "BTC to touch $175k in 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-015",
+      "category": "crypto",
+      "polymarket": {
+        "question": "Will Bitcoin be above $175,000 on Dec 31, 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "BTC to touch $175k in 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": false,
+        "match_type": "settlement_mismatch",
+        "inverted": false,
+        "note": "'Close above' vs 'touch anytime' â€” must NOT match"
+      }
+    },
+    {
+      "pair_id": "PAIR-016",
+      "category": "crypto",
+      "polymarket": {
+        "question": "Will a US spot Solana ETF have over $5B AUM by Dec 31, 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "SOL ETFs above $5B AUM by end of 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-017",
+      "category": "crypto",
+      "polymarket": {
+        "question": "Will Bitcoin dip below $80,000 at any point in 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "BTC to stay above $80k for all of 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "inverted",
+        "inverted": true,
+        "note": "Logical inverse: PM YES == Kalshi NO. Matcher must flag inversion."
+      }
+    },
+    {
+      "pair_id": "PAIR-018",
+      "category": "crypto",
+      "polymarket": {
+        "question": "Will Coinbase be in the S&P 500 on Dec 31, 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Coinbase in S&P 500 at year-end 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-019",
+      "category": "econ",
+      "polymarket": {
+        "question": "Will the Fed cut rates at the July 2026 FOMC meeting?",
+        "end_date_iso": "2026-07-29T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Fed rate cut in July 2026?",
+        "close_time_iso": "2026-07-29T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-020",
+      "category": "econ",
+      "polymarket": {
+        "question": "Will the Fed cut rates at the September 2026 FOMC meeting?",
+        "end_date_iso": "2026-09-23T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Fed rate cut in July 2026?",
+        "close_time_iso": "2026-07-29T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": false,
+        "match_type": "date_mismatch",
+        "inverted": false,
+        "note": "Sept vs July meeting â€” must NOT match"
+      }
+    },
+    {
+      "pair_id": "PAIR-021",
+      "category": "econ",
+      "polymarket": {
+        "question": "Will US CPI YoY for June 2026 print above 3.0%?",
+        "end_date_iso": "2026-07-15T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "June CPI above 3.0% (released July)?",
+        "close_time_iso": "2026-07-15T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-022",
+      "category": "econ",
+      "polymarket": {
+        "question": "Will the US enter a recession (NBER-declared) by end of 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "NBER recession declared in 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "paraphrase",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-023",
+      "category": "econ",
+      "polymarket": {
+        "question": "Will US unemployment exceed 4.8% in any 2026 report?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Unemployment rate above 4.8% in 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-024",
+      "category": "econ",
+      "polymarket": {
+        "question": "Will the S&P 500 close above 7,000 on Dec 31, 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "S&P 500 above 7000 at year-end?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-025",
+      "category": "econ",
+      "polymarket": {
+        "question": "Will NVIDIA market cap be above $6T on Dec 31, 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "NVDA above $6 trillion market cap at year-end 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-026",
+      "category": "econ",
+      "polymarket": {
+        "question": "Will the Fed funds target range be below 3.25% on Dec 31, 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Fed funds upper bound below 3.25% end-2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "paraphrase",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-027",
+      "category": "sports",
+      "polymarket": {
+        "question": "Will the Oklahoma City Thunder win the 2026 NBA Finals?",
+        "end_date_iso": "2026-06-22T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Thunder to win 2026 NBA Championship?",
+        "close_time_iso": "2026-06-22T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-028",
+      "category": "sports",
+      "polymarket": {
+        "question": "Will the Indiana Pacers win the 2026 NBA Finals?",
+        "end_date_iso": "2026-06-22T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Pacers to win 2026 NBA Championship?",
+        "close_time_iso": "2026-06-22T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-029",
+      "category": "sports",
+      "polymarket": {
+        "question": "Will Brazil win the 2026 FIFA World Cup?",
+        "end_date_iso": "2026-07-19T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Brazil to win 2026 World Cup?",
+        "close_time_iso": "2026-07-19T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-030",
+      "category": "sports",
+      "polymarket": {
+        "question": "Will France reach the 2026 World Cup final?",
+        "end_date_iso": "2026-07-19T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "France to win 2026 World Cup?",
+        "close_time_iso": "2026-07-19T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": false,
+        "match_type": "outcome_mismatch",
+        "inverted": false,
+        "note": "Reach final vs win â€” must NOT match"
+      }
+    },
+    {
+      "pair_id": "PAIR-031",
+      "category": "sports",
+      "polymarket": {
+        "question": "Will the New York Yankees win the 2026 World Series?",
+        "end_date_iso": "2026-10-30T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Yankees to win 2026 World Series?",
+        "close_time_iso": "2026-10-30T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-032",
+      "category": "sports",
+      "polymarket": {
+        "question": "Will Scottie Scheffler win the 2026 US Open (golf)?",
+        "end_date_iso": "2026-06-21T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Scheffler to win 2026 US Open?",
+        "close_time_iso": "2026-06-21T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-033",
+      "category": "sports",
+      "polymarket": {
+        "question": "Will Carlos Alcaraz win 2026 Wimbledon?",
+        "end_date_iso": "2026-07-13T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Alcaraz to win Wimbledon 2026?",
+        "close_time_iso": "2026-07-13T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-034",
+      "category": "sports",
+      "polymarket": {
+        "question": "Will the total number of goals in the 2026 WC final be over 2.5?",
+        "end_date_iso": "2026-07-20T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Over 2.5 goals in World Cup final?",
+        "close_time_iso": "2026-07-20T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-035",
+      "category": "tech",
+      "polymarket": {
+        "question": "Will OpenAI release GPT-6 before Dec 31, 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "GPT-6 released in 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-036",
+      "category": "tech",
+      "polymarket": {
+        "question": "Will Apple announce a foldable iPhone in 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Apple foldable phone announced by end of 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "paraphrase",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-037",
+      "category": "tech",
+      "polymarket": {
+        "question": "Will SpaceX Starship reach orbit and land both stages successfully in 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Starship full success (orbit + dual recovery) in 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "paraphrase",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-038",
+      "category": "tech",
+      "polymarket": {
+        "question": "Will Waymo operate paid robotaxis in NYC by Dec 31, 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Waymo paid service live in New York City in 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-039",
+      "category": "tech",
+      "polymarket": {
+        "question": "Will TikTok be banned in the US on Dec 31, 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "TikTok operating legally in the US at end of 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "inverted",
+        "inverted": true,
+        "note": "Banned vs operating-legally: logical inverse (approximately). Matcher must flag inversion."
+      }
+    },
+    {
+      "pair_id": "PAIR-040",
+      "category": "tech",
+      "polymarket": {
+        "question": "Will an AI system win a gold medal at IMO 2026?",
+        "end_date_iso": "2026-07-21T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "AI gets IMO gold in 2026?",
+        "close_time_iso": "2026-07-21T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-041",
+      "category": "tech",
+      "polymarket": {
+        "question": "Will Anthropic release a model called Claude 6 in 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "OpenAI to release GPT-6 in 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": false,
+        "match_type": "entity_mismatch",
+        "inverted": false,
+        "note": "Different company/product â€” must NOT match"
+      }
+    },
+    {
+      "pair_id": "PAIR-042",
+      "category": "culture",
+      "polymarket": {
+        "question": "Will 'Avengers: Doomsday' gross over $1.5B worldwide by Dec 31, 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Avengers Doomsday to pass $1.5B global box office in 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-043",
+      "category": "culture",
+      "polymarket": {
+        "question": "Will Taylor Swift announce a 2027 tour before the end of 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Taylor Swift 2027 tour announced in 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-044",
+      "category": "culture",
+      "polymarket": {
+        "question": "Will GTA VI release before December 31, 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "GTA 6 released in calendar 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-045",
+      "category": "culture",
+      "polymarket": {
+        "question": "Will GTA VI release before June 30, 2026?",
+        "end_date_iso": "2026-06-30T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "GTA 6 released in calendar 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": false,
+        "match_type": "date_mismatch",
+        "inverted": false,
+        "note": "H1-only deadline vs full-year â€” must NOT match"
+      }
+    },
+    {
+      "pair_id": "PAIR-046",
+      "category": "culture",
+      "polymarket": {
+        "question": "Will the next James Bond actor be announced in 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "New Bond actor named in 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-047",
+      "category": "misc",
+      "polymarket": {
+        "question": "Will a Category 5 hurricane make US landfall in the 2026 season?",
+        "end_date_iso": "2026-12-02T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Cat 5 hurricane US landfall in 2026?",
+        "close_time_iso": "2026-12-02T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-048",
+      "category": "misc",
+      "polymarket": {
+        "question": "Will 2026 be the hottest year on record (NASA GISS)?",
+        "end_date_iso": "2027-01-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "2026 hottest year on record?",
+        "close_time_iso": "2027-01-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-049",
+      "category": "misc",
+      "polymarket": {
+        "question": "Will NYC see 20+ inches of total snowfall in the 2026-27 season?",
+        "end_date_iso": "2027-03-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Central Park snowfall over 20 inches, 2026-27 winter?",
+        "close_time_iso": "2027-03-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "exact",
+        "inverted": false,
+        "note": ""
+      }
+    },
+    {
+      "pair_id": "PAIR-050",
+      "category": "misc",
+      "polymarket": {
+        "question": "Will a human walk on the Moon before Dec 31, 2026?",
+        "end_date_iso": "2026-12-31T04:00:00Z"
+      },
+      "kalshi": {
+        "title": "Crewed lunar landing in 2026?",
+        "close_time_iso": "2026-12-31T04:00:00Z"
+      },
+      "ground_truth": {
+        "should_match": true,
+        "match_type": "paraphrase",
+        "inverted": false,
+        "note": ""
+      }
+    }
+  ]
 }

@@ -37,7 +37,8 @@ def _kalshi(k):
 class FixturePairsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.pairs = {pr["pair_id"]: pr for pr in json.load(open(FIXTURE))["pairs"]}
+        with open(FIXTURE, encoding="utf-8") as f:   # explicit: file is UTF-8 (CI is Linux)
+            cls.pairs = {pr["pair_id"]: pr for pr in json.load(f)["pairs"]}
 
     def _compat(self, pid):
         pr = self.pairs[pid]

@@ -36,7 +36,7 @@ class ContractSpecFixtureParity(unittest.TestCase):
     def test_full_fixture_parity(self) -> None:
         if not os.path.exists(FIXTURE):
             self.skipTest(f"fixture not available at {FIXTURE}")
-        with open(FIXTURE) as f:
+        with open(FIXTURE, encoding="utf-8") as f:
             fx = json.load(f)
         wrong = []
         inverted_ok = 0
