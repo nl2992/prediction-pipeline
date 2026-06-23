@@ -3,7 +3,24 @@ from __future__ import annotations
 
 import unittest
 
-from fed_rate_spread import check_monotonicity, compute_monotonicity_arb
+from fed_rate_spread import check_monotonicity, compute_monotonicity_arb, build_kalshi_distribution
+
+
+class BuildKalshiDistribution(unittest.TestCase):
+    def test_implied_probability_arithmetic(self):
+        ladder = [
+            {"ticker": "KXFED-T3.50", "yes_bid_dollars": "0.78", "yes_ask_dollars": "0.82"},  # mid .80
+            {"ticker": "KXFED-T3.75", "yes_bid_dollars": "0.48", "yes_ask_dollars": "0.52"},  # mid .50
+        ]
+        dist = {round(d["implied_rate"], 2): d for d in build_kalshi_distribution(ladder)}
+        self.assertAlmostEqual(dist[3.50]["p_above"], 0.80)
+        self.assertAlmostEqual(dist[3.50]["p_this_level"], 0.20)   # 1.0 - 0.80
+        self.assertAlmostEqual(dist[3.75]["p_this_level"], 0.30)   # 0.80 - 0.50 (p_prev - p_above)
+        self.assertAlmostEqual(dist[3.25]["p_this_level"], 0.20)   # residual tail = 1 - 0.80
+        self.assertIsNone(dist[3.25]["p_above"])                   # tail has no p_above
+
+    def test_empty_ladder(self):
+        self.assertEqual(build_kalshi_distribution([]), [])
 
 
 class CheckMonotonicity(unittest.TestCase):
