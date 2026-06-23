@@ -353,6 +353,14 @@ class DegradationAlert(unittest.TestCase):
         with patch("alerter.send_email", side_effect=OSError("smtp down")):
             _alert_operator(self._cfg, "boom", state={})    # must not raise
 
+    def test_subject_is_single_line(self):
+        from alerter import _alert_operator
+        with patch("alerter.send_email") as send:
+            _alert_operator(self._cfg, "CYCLE ERROR: boom\nsecond line\r\nthird", state={})
+        subject = send.call_args[0][1]                       # (cfg, subject, body)
+        self.assertNotIn("\n", subject)
+        self.assertNotIn("\r", subject)
+
     def test_reason_html_escaped_in_alert_body(self):
         from alerter import _alert_operator
         with patch("alerter.send_email") as send:

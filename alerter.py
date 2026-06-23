@@ -653,7 +653,10 @@ def _alert_operator(cfg: dict, reason: str, state: dict | None = None) -> None:
         now = time.time()
         if now - st.get("_last_alert_ts", 0) < _ALERT_COOLDOWN_S:
             return
-        subject = f"[Pred-Arb] ALERT — pipeline degraded: {reason[:80]}"
+        # Collapse whitespace/newlines: a multi-line exception in a Subject header
+        # is malformed / a header-injection vector (#54).
+        reason_1line = " ".join(reason.split())
+        subject = f"[Pred-Arb] ALERT — pipeline degraded: {reason_1line[:80]}"
         body = (f"<p>The arb alerter reported a degradation at "
                 f"{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}:</p>"
                 f"<pre>{_esc(reason)}</pre>"
