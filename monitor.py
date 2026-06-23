@@ -550,6 +550,28 @@ def run_one_scan(
 # ---------------------------------------------------------------------------
 
 
+def _detect_pair_arb(pa: float, pb: float, ka: float, kb: float, worst_fee: float):
+    """Best two-leg arb for one priced pair (flat worst-case fee), matching
+    arb.find_arb economics. Returns (arb_dir, arb_profit, cost_pyk, cost_kyp).
+    arb_dir/arb_profit are None when poly_yes isn't profitable, and arb_profit may be
+    <= 0 (the caller filters non-positive). Extracted from run_discover_scan so the
+    money math is unit-testable (#66)."""
+    arb_dir = arb_profit = None
+    # poly_yes + kalshi_no: buy YES on Poly at ask, buy NO on Kalshi at (1 - bid)
+    cost_pyk = pa + (1.0 - kb)
+    profit_pyk = round(1.0 - cost_pyk - worst_fee, 6)
+    if profit_pyk > 0:
+        arb_dir = "poly_yes__kalshi_no"
+        arb_profit = profit_pyk
+    # kalshi_yes + poly_no: buy YES on Kalshi at ask, buy NO on Poly at (1 - bid)
+    cost_kyp = ka + (1.0 - pb)
+    profit_kyp = round(1.0 - cost_kyp - worst_fee, 6)
+    if arb_profit is None or profit_kyp > arb_profit:
+        arb_dir = "kalshi_yes__poly_no"
+        arb_profit = profit_kyp
+    return arb_dir, arb_profit, cost_pyk, cost_kyp
+
+
 def run_discover_scan(
     category: str = "all",
     days: int | None = None,
@@ -614,23 +636,7 @@ def run_discover_scan(
         if not (pa and kb and ka and pb):
             continue  # no live prices — skip arb check
 
-        # Compute best arb direction
-        arb_dir = arb_profit = None
-
-        # poly_yes + kalshi_no: buy YES on Poly at ask, buy NO on Kalshi at (1 - bid)
-        cost_pyk = pa + (1.0 - kb)
-        profit_pyk = round(1.0 - cost_pyk - worst_fee, 6)
-        if profit_pyk > 0:
-            arb_dir = "poly_yes__kalshi_no"
-            arb_profit = profit_pyk
-
-        # kalshi_yes + poly_no: buy YES on Kalshi at ask, buy NO on Poly at (1 - bid)
-        cost_kyp = ka + (1.0 - pb)
-        profit_kyp = round(1.0 - cost_kyp - worst_fee, 6)
-        if arb_profit is None or profit_kyp > arb_profit:
-            arb_dir = "kalshi_yes__poly_no"
-            arb_profit = profit_kyp
-
+        arb_dir, arb_profit, cost_pyk, cost_kyp = _detect_pair_arb(pa, pb, ka, kb, worst_fee)
         if arb_profit is None or arb_profit <= 0:
             continue
 

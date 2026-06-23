@@ -4,7 +4,32 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from monitor import _verify_kalshi_clob
+from monitor import _verify_kalshi_clob, _detect_pair_arb
+
+
+class DetectPairArb(unittest.TestCase):
+    def test_poly_yes_direction_only(self):
+        # pyk profitable (0.25), kyp unprofitable -> picks pyk.
+        d, profit, _cp, _ck = _detect_pair_arb(pa=0.40, pb=0.30, ka=0.60, kb=0.65, worst_fee=0.0)
+        self.assertEqual(d, "poly_yes__kalshi_no")
+        self.assertAlmostEqual(profit, 0.25)
+
+    def test_kalshi_yes_direction_when_better(self):
+        # pyk = 0 (not >0 -> None), kyp = 0.30 -> picks kyp.
+        d, profit, _cp, _ck = _detect_pair_arb(pa=0.50, pb=0.60, ka=0.30, kb=0.50, worst_fee=0.0)
+        self.assertEqual(d, "kalshi_yes__poly_no")
+        self.assertAlmostEqual(profit, 0.30)
+
+    def test_picks_higher_of_two_profitable(self):
+        # pyk = 0.50, kyp = 0.30 -> keeps pyk (the higher).
+        d, profit, _cp, _ck = _detect_pair_arb(pa=0.30, pb=0.70, ka=0.40, kb=0.80, worst_fee=0.0)
+        self.assertEqual(d, "poly_yes__kalshi_no")
+        self.assertAlmostEqual(profit, 0.50)
+
+    def test_no_arb_yields_nonpositive_profit(self):
+        # neither direction profitable -> arb_profit <= 0 (caller filters).
+        _d, profit, _cp, _ck = _detect_pair_arb(pa=0.60, pb=0.50, ka=0.60, kb=0.50, worst_fee=0.0)
+        self.assertLessEqual(profit, 0)
 
 
 class VerifyKalshiClob(unittest.TestCase):
