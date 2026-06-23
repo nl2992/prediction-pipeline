@@ -182,9 +182,16 @@ def _verdicts_info() -> tuple[int, str | None]:
         return 0, None
 
 
+def build_report(log_path: pathlib.Path | str = _LOG) -> tuple[str, bool]:
+    """Convenience entry: load → summarize → format. Returns (text, overall_ok) so
+    callers (CLI, ops.py) don't repeat the tail/summarize/info plumbing."""
+    summary = summarize_log(_tail(pathlib.Path(log_path), _TAIL_LINES))
+    n, mtime = _verdicts_info()
+    return format_health(summary, n, mtime), overall_ok(summary)
+
+
 if __name__ == "__main__":
     log_path = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else _LOG
-    summary = summarize_log(_tail(log_path, _TAIL_LINES))
-    n, mtime = _verdicts_info()
-    print(format_health(summary, n, mtime))
-    sys.exit(0 if overall_ok(summary) else 1)  # scriptable: 0 OK, 1 DEGRADED
+    text, ok = build_report(log_path)
+    print(text)
+    sys.exit(0 if ok else 1)  # scriptable: 0 OK, 1 DEGRADED
