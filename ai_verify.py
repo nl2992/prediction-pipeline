@@ -115,9 +115,16 @@ def _disk_get(dk: str) -> dict | None:
 
 
 def _disk_put(dk: str, verdict: dict) -> None:
+    global _disk
     try:
         d = _disk_load()
         d[dk] = {"v": verdict, "ts": time.time()}
+        # Prune entries past the TTL so the file doesn't grow unbounded with dead
+        # keys — vanished pairs, and the whole old key set after a _PROMPT_VERSION
+        # bump (#49). The just-added entry (ts=now) always survives.
+        cutoff = time.time() - _CACHE_TTL_S
+        d = {k: e for k, e in d.items() if e.get("ts", 0) >= cutoff}
+        _disk = d  # keep the in-memory cache consistent with what we write
         _CACHE_FILE.write_text(json.dumps(d), encoding="utf-8")
     except Exception:
         pass  # cache is best-effort; never break verification

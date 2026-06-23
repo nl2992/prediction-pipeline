@@ -55,6 +55,19 @@ class Verify(unittest.TestCase):
                 ai_verify.verify("a", "b", api_key="k")  # new key -> miss -> API again
         self.assertEqual(m.call_count, 2)
 
+    def test_disk_put_prunes_expired_entries(self):
+        import time as _t
+        ai_verify._disk = {
+            "old": {"v": {"same": True}, "ts": _t.time() - ai_verify._CACHE_TTL_S - 10},
+            "fresh": {"v": {"same": True}, "ts": _t.time()},
+        }
+        ai_verify._disk_put("new", {"same": True})
+        on_disk = json.loads(ai_verify._CACHE_FILE.read_text(encoding="utf-8"))
+        self.assertIn("new", on_disk)        # just-added survives
+        self.assertIn("fresh", on_disk)      # within TTL kept
+        self.assertNotIn("old", on_disk)     # expired pruned
+        self.assertNotIn("old", ai_verify._disk)  # in-memory matches file
+
     def test_no_key_returns_none(self):
         self.assertIsNone(ai_verify.verify("a", "b", api_key=None))
 
