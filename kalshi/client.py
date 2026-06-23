@@ -261,6 +261,7 @@ class KalshiClient:
         """
         all_markets: list[dict] = []
         cursor: str | None = None
+        seen_cursors: set[str] = set()
         pages = 0
         while max_pages is None or pages < max_pages:
             resp = self.get_markets(
@@ -274,8 +275,11 @@ class KalshiClient:
             all_markets.extend(batch)
             cursor = resp.get("cursor")
             pages += 1
-            if not cursor or not batch:
+            # Stop on the end (empty cursor/batch) OR a repeating cursor — a stuck
+            # cursor would otherwise loop forever against the API (#67).
+            if not cursor or not batch or cursor in seen_cursors:
                 break
+            seen_cursors.add(cursor)
         return all_markets
 
     def get_events(
@@ -312,6 +316,7 @@ class KalshiClient:
         """Paginate through events until exhausted, unless ``max_pages`` caps it."""
         all_events: list[dict] = []
         cursor: str | None = None
+        seen_cursors: set[str] = set()
         pages = 0
         while max_pages is None or pages < max_pages:
             resp = self.get_events(
@@ -324,8 +329,10 @@ class KalshiClient:
             all_events.extend(batch)
             cursor = resp.get("cursor")
             pages += 1
-            if not cursor or not batch:
+            # Stop on the end OR a repeating cursor (infinite-loop guard, #67).
+            if not cursor or not batch or cursor in seen_cursors:
                 break
+            seen_cursors.add(cursor)
         return all_events
 
     def get_series_list(self, limit: int = 100) -> list[dict]:

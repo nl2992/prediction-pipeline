@@ -48,5 +48,35 @@ class PlaceOrderBody(unittest.TestCase):
         self.assertTrue(c._post.call_args.kwargs["json_body"]["client_order_id"])  # uuid generated
 
 
+class Pagination(unittest.TestCase):
+    def _client(self):
+        return KalshiClient(api_key="test", private_key_path=None)
+
+    def test_stuck_cursor_terminates(self):
+        c = self._client()
+        calls = {"n": 0}
+        def fake_get_markets(**kw):
+            calls["n"] += 1
+            if calls["n"] > 50:                       # broken guard would hang — fail fast
+                raise AssertionError("pagination did not terminate on a repeating cursor")
+            return {"markets": [{"ticker": f"m{calls['n']}"}], "cursor": "STUCK"}  # never empties
+        c.get_markets = fake_get_markets
+        out = c.get_all_markets()
+        self.assertLessEqual(calls["n"], 2)           # page 1, then repeat detected -> stop
+        self.assertTrue(out)
+
+    def test_normal_pagination_walks_all_pages(self):
+        c = self._client()
+        pages = [
+            {"markets": [{"ticker": "a"}], "cursor": "c1"},
+            {"markets": [{"ticker": "b"}], "cursor": "c2"},
+            {"markets": [{"ticker": "d"}], "cursor": ""},   # end
+        ]
+        seq = iter(pages)
+        c.get_markets = lambda **kw: next(seq)
+        out = c.get_all_markets()
+        self.assertEqual([m["ticker"] for m in out], ["a", "b", "d"])
+
+
 if __name__ == "__main__":
     unittest.main()
