@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import unittest
 
-from pipeline import _parse_polymarket_book, _parse_kalshi_full_book, _is_valid_level
+from pipeline import (
+    _parse_polymarket_book, _parse_kalshi_full_book, _parse_kalshi_top_of_book, _is_valid_level,
+)
 
 
 class IsValidLevel(unittest.TestCase):
@@ -46,6 +48,28 @@ class KalshiBook(unittest.TestCase):
         self.assertEqual([(l.price, l.size) for l in ob.bids], [(0.40, 100.0)])
         # ask derived from the one valid no-bid (0.31 -> 1-0.31 = 0.69)
         self.assertEqual([round(l.price, 2) for l in ob.asks], [0.69])
+
+
+class KalshiTopOfBook(unittest.TestCase):
+    def test_drops_price_at_or_above_one(self):
+        ob = _parse_kalshi_top_of_book({
+            "yes_bid_dollars": "1.0", "yes_bid_size_fp": "50",
+            "yes_ask_dollars": "1.5", "yes_ask_size_fp": "50"})
+        self.assertEqual(ob.best_bid, None)
+        self.assertEqual(ob.best_ask, None)
+
+    def test_keeps_valid_inrange_quote(self):
+        ob = _parse_kalshi_top_of_book({
+            "yes_bid_dollars": "0.40", "yes_bid_size_fp": "50",
+            "yes_ask_dollars": "0.55", "yes_ask_size_fp": "60"})
+        self.assertEqual(ob.best_bid, 0.40)
+        self.assertEqual(ob.best_ask, 0.55)
+
+    def test_zero_price_dropped(self):
+        ob = _parse_kalshi_top_of_book({"yes_bid_dollars": "0", "yes_ask_dollars": "0.55",
+                                        "yes_ask_size_fp": "10"})
+        self.assertEqual(ob.best_bid, None)
+        self.assertEqual(ob.best_ask, 0.55)
 
 
 if __name__ == "__main__":

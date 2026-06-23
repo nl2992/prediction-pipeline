@@ -279,6 +279,13 @@ def _parse_kalshi_top_of_book(market: dict) -> OrderBook:
 
     yes_bid = _f(market.get("yes_bid_dollars"))
     yes_ask = _f(market.get("yes_ask_dollars"))
+    # _f already drops price <= 0; also drop a degenerate price >= 1 so the full
+    # (0,1) range holds, consistent with #42 (applied to prices only — _f is shared
+    # with size fields, which legitimately exceed 1).
+    if yes_bid is not None and yes_bid >= 1.0:
+        yes_bid = None
+    if yes_ask is not None and yes_ask >= 1.0:
+        yes_ask = None
     yes_bid_size = _f(market.get("yes_bid_size_fp"))
     yes_ask_size = _f(market.get("yes_ask_size_fp"))
 
