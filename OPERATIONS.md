@@ -104,6 +104,28 @@ off each pair's **latest** verdict (resolved pairs drop off; ghosts older than
   BRICS↔OPEC org-mismatch fix in `matcher.py`).
 - **Same-event, different-settlement** — correct enforce drops, not matcher bugs.
 
+### `signal_report.py` — emitted-arb digest (opportunity intelligence)
+
+```bash
+python signal_report.py
+```
+
+Digests `alert_signals.jsonl` (every emailed arb) for manual-execution decisions,
+in three views: **most recurring** (persistent opportunities, by count), **richest**
+(max net edge ever seen), and **best by annualised return** — the alerter's priority
+metric, restricted to pairs seen in the last 24h so it lists only currently-actionable
+arbs (each with its "Nh ago" age).
+
+### `ops.py` — unified dashboard
+
+```bash
+python ops.py        # health + opportunities + matcher QA in one view; exits 0/1 on health
+```
+
+One command composing `health.py`, `signal_report.py`, and `ai_verify_report.py` —
+the full operational picture (is it working? what should I act on? any matcher
+issues?). Exits 0 when healthy / 1 when degraded, so it works as a watchdog too.
+
 ## Failure handling
 
 - A `CYCLE ERROR` (uncaught exception in a scan cycle) is logged **and** emails a
