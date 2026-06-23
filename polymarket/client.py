@@ -391,22 +391,27 @@ class PolymarketClient:
         bids = book.get("bids", [])
         asks = book.get("asks", [])
 
-        def _price(lst, idx=0):
-            try:
-                return float(lst[idx]["price"])
-            except (IndexError, KeyError, TypeError, ValueError):
-                return None
+        def _levels(lst):
+            out = []
+            for item in lst or []:
+                try:
+                    out.append((float(item["price"]), float(item["size"])))
+                except (KeyError, TypeError, ValueError):
+                    continue
+            return out
 
-        def _size(lst, idx=0):
-            try:
-                return float(lst[idx]["size"])
-            except (IndexError, KeyError, TypeError, ValueError):
-                return None
-
-        best_bid = _price(bids)
-        best_ask = _price(asks)
-        bid_size = _size(bids)
-        ask_size = _size(asks)
+        # Pick the true best by PRICE (max bid / min ask) rather than trusting the
+        # raw list order — the CLOB response isn't guaranteed best-first (this is
+        # why _parse_polymarket_book sorts it), so taking [0] could read a non-best
+        # level into the executor's live-edge safety check (#61).
+        bid_levels = _levels(bids)
+        ask_levels = _levels(asks)
+        best_bid_lvl = max(bid_levels, key=lambda x: x[0]) if bid_levels else None
+        best_ask_lvl = min(ask_levels, key=lambda x: x[0]) if ask_levels else None
+        best_bid = best_bid_lvl[0] if best_bid_lvl else None
+        bid_size = best_bid_lvl[1] if best_bid_lvl else None
+        best_ask = best_ask_lvl[0] if best_ask_lvl else None
+        ask_size = best_ask_lvl[1] if best_ask_lvl else None
         spread = round(best_ask - best_bid, 6) if best_bid and best_ask else None
 
         reasons = []
