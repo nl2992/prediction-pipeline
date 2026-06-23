@@ -48,6 +48,34 @@ class PlaceOrderBody(unittest.TestCase):
         self.assertTrue(c._post.call_args.kwargs["json_body"]["client_order_id"])  # uuid generated
 
 
+class AuthSigning(unittest.TestCase):
+    def test_signature_verifies_against_public_key(self):
+        import base64
+        from cryptography.hazmat.primitives.asymmetric import rsa, padding
+        from cryptography.hazmat.primitives import hashes
+        priv = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        c = KalshiClient(api_key="my-key", private_key_path=None)
+        c._private_key = priv                              # bypass PEM load
+        headers = c._auth_headers("GET", "/trade-api/v2/markets")
+        self.assertEqual(headers["KALSHI-ACCESS-KEY"], "my-key")
+        self.assertTrue(headers["KALSHI-ACCESS-TIMESTAMP"])
+        ts = headers["KALSHI-ACCESS-TIMESTAMP"]
+        sig = base64.b64decode(headers["KALSHI-ACCESS-SIGNATURE"])
+        message = f"{ts}GET/trade-api/v2/markets".encode()
+        # verify() raises InvalidSignature on a bad signature; no raise == correct.
+        priv.public_key().verify(
+            sig, message,
+            padding.PSS(mgf=padding.MGF1(hashes.SHA256()),
+                        salt_length=padding.PSS.DIGEST_LENGTH),
+            hashes.SHA256(),
+        )
+
+    def test_unauthenticated_raises(self):
+        c = KalshiClient(api_key=None, private_key_path=None)   # no key
+        with self.assertRaises(RuntimeError):
+            c._auth_headers("GET", "/trade-api/v2/markets")
+
+
 class GetRetry(unittest.TestCase):
     def _ok(self):
         r = MagicMock(status_code=200)
