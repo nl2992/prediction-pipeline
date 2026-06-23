@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import MagicMock, patch
 
-from arb import find_arb, kalshi_taker_fee
+from arb import find_arb, kalshi_taker_fee, _complement_book
 from discover import _match_outcomes_within_group, _parse_dt as discover_parse_dt
 from discover import discover, _is_parlay_market, _apply_event_cap, _event_series as _es
 from executor import TradeIntent, check_price_still_valid
@@ -1497,6 +1497,21 @@ class InvertedPairArbRegressions(unittest.TestCase):
         p = self._snap("polymarket", "Will Bitcoin be above $150,000 on December 31, 2026?", 0.305, 0.315)
         k = self._snap("kalshi", "BTC above $150k at year-end 2026?", 0.28, 0.30)
         self.assertFalse(is_inverted_pair(p, k))
+
+    def test_complement_book_flips_sides_prices_sizes(self) -> None:
+        # The core inverted-pair transform: original ASK@p -> complement BID@(1-p),
+        # original BID@p -> complement ASK@(1-p); sizes preserved; best-first order.
+        ob = OrderBook(
+            bids=[PriceLevel(0.40, 100.0), PriceLevel(0.38, 200.0)],   # best 0.40 first
+            asks=[PriceLevel(0.45, 50.0), PriceLevel(0.50, 80.0)],     # best 0.45 first
+        )
+        c = _complement_book(ob)
+        # complement bids come from original asks (1-0.45=0.55, 1-0.50=0.50), best first
+        self.assertEqual([(round(l.price, 2), l.size) for l in c.bids], [(0.55, 50.0), (0.50, 80.0)])
+        # complement asks come from original bids (1-0.40=0.60, 1-0.38=0.62), best first
+        self.assertEqual([(round(l.price, 2), l.size) for l in c.asks], [(0.60, 100.0), (0.62, 200.0)])
+        self.assertEqual(c.best_bid, 0.55)
+        self.assertEqual(c.best_ask, 0.60)
 
     def test_find_arb_prices_inverted_pair_without_phantom_edge(self) -> None:
         # PM "dip below $80k" YES (~0.29) == Kalshi "stay above $80k" NO -> inverted.
