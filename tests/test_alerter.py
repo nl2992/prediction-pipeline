@@ -382,6 +382,48 @@ class RunCycleIntegration(unittest.TestCase):
                     os.unlink(q)
 
 
+class RunCycleNoEmailBranches(unittest.TestCase):
+    """Orchestration must NOT email when there's nothing to send (#83)."""
+    _cfg = {"recipients": ["a@b.com"], "from_addr": "x@y.com", "smtp_host": "h",
+            "smtp_port": 1, "smtp_user": "u", "smtp_pass": "p"}
+
+    def _run(self, scan_return, gate=None):
+        import os, pathlib, tempfile
+        import alerter
+        sfd, sp = tempfile.mkstemp(suffix=".jsonl"); os.close(sfd)
+        stfd, stp = tempfile.mkstemp(suffix=".json"); os.close(stfd); os.unlink(stp)
+        ctx = [patch("alerter.adaptive_scan", return_value=scan_return),
+               patch("alerter.send_email"),
+               patch("alerter.load_config", return_value=self._cfg),
+               patch("alerter.SIGNALS_FILE", pathlib.Path(sp)),
+               patch("alerter.STATE_FILE", pathlib.Path(stp)),
+               patch("ai_verify.resolve_api_key", return_value=None)]
+        if gate is not None:
+            ctx.append(patch("alerter._ai_verify_gate", side_effect=gate))
+        try:
+            from contextlib import ExitStack
+            with ExitStack() as es:
+                mocks = [es.enter_context(c) for c in ctx]
+                send = mocks[1]
+                n = alerter.run_cycle(min_edge=0.0001, realert_hours=6.0)
+            return n, send
+        finally:
+            for q in (sp, stp):
+                if os.path.exists(q):
+                    os.unlink(q)
+
+    def test_no_qualifying_signals_no_email(self):
+        n, send = self._run(([], [], 1500))      # nothing scanned
+        self.assertEqual(n, 0)
+        send.assert_not_called()
+
+    def test_gate_drops_all_no_email(self):
+        sigs = compute_signals([pair(0.38, 0.40, 0.65, 0.68)], min_edge=0.005)
+        n, send = self._run(([], sigs, 1500), gate=lambda to_email, cfg: [])   # gate drops all
+        self.assertEqual(n, 0)
+        send.assert_not_called()
+
+
 class SendEmail(unittest.TestCase):
     _cfg = {"recipients": ["a@b.com", "c@d.com"], "from_addr": "x@y.com",
             "smtp_host": "smtp.test", "smtp_port": 587, "smtp_user": "u", "smtp_pass": "p"}
