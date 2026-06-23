@@ -381,6 +381,31 @@ class RunCycleIntegration(unittest.TestCase):
                 if os.path.exists(q):
                     os.unlink(q)
 
+    def test_email_failure_leaves_state_untouched_for_retry(self):
+        import os, pathlib, tempfile
+        import alerter
+        p = pair(0.38, 0.40, 0.65, 0.68)
+        sigs = compute_signals([p], min_edge=0.005)
+        sfd, sp = tempfile.mkstemp(suffix=".jsonl"); os.close(sfd)
+        stfd, stp = tempfile.mkstemp(suffix=".json"); os.close(stfd); os.unlink(stp)
+        cfg = {"recipients": ["a@b.com"], "from_addr": "x@y.com", "smtp_host": "h",
+               "smtp_port": 1, "smtp_user": "u", "smtp_pass": "p"}
+        try:
+            with patch("alerter.adaptive_scan", return_value=([p], sigs, 1500)), \
+                 patch("alerter.send_email", side_effect=OSError("smtp down")), \
+                 patch("alerter.load_config", return_value=cfg), \
+                 patch("alerter.SIGNALS_FILE", pathlib.Path(sp)), \
+                 patch("alerter.STATE_FILE", pathlib.Path(stp)), \
+                 patch("ai_verify.resolve_api_key", return_value=None):
+                alerter.run_cycle(min_edge=0.0001, realert_hours=6.0)
+            # delivery failed -> the pair's key must NOT be persisted (next cycle retries)
+            persisted = pathlib.Path(stp).read_text(encoding="utf-8") if os.path.exists(stp) else ""
+            self.assertNotIn(sigs[0]["key"], persisted)
+        finally:
+            for q in (sp, stp):
+                if os.path.exists(q):
+                    os.unlink(q)
+
 
 class RunCycleNoEmailBranches(unittest.TestCase):
     """Orchestration must NOT email when there's nothing to send (#83)."""

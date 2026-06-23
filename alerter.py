@@ -744,6 +744,7 @@ def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False,
         print(f"[alerter] SIGNAL net={s['net_accurate']*100:.2f}c  {s['poly_title'][:40]!r} <-> {s['kalshi_title'][:40]!r}{flag}")
 
     subject, html, images = build_email(to_email, labels, min_net=min_net)
+    delivered = True   # also True for dry_run / not-configured (avoid re-log spam)
     if dry_run:
         print(f"[alerter] DRY RUN — would email {cfg['recipients']}: {subject} "
               f"({len(to_email)} pairs, {len(images)} charts)")
@@ -752,15 +753,19 @@ def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False,
             send_email(cfg, subject, html, images)
             print(f"[alerter] EMAILED {cfg['recipients']}: {subject} ({len(to_email)} pairs)", flush=True)
         except Exception as exc:
+            delivered = False   # retry next cycle — don't suppress undelivered arbs (#84)
             print(f"[alerter] EMAIL FAILED: {exc} — signal logged to {SIGNALS_FILE.name}", flush=True)
     else:
         print(f"[alerter] EMAIL NOT CONFIGURED — create {CONFIG_FILE.name} (see module docstring). "
               f"Signal logged to {SIGNALS_FILE.name}.", flush=True)
 
-    now = time.time()
-    for s in to_email:
-        state[s["key"]] = {"net": s["net_accurate"], "ts": now}
-    save_state(_prune_state(state))
+    # Only mark pairs as alerted when delivery didn't fail; a failed send leaves the
+    # state untouched so the next cycle retries instead of suppressing for ~6h (#84).
+    if delivered:
+        now = time.time()
+        for s in to_email:
+            state[s["key"]] = {"net": s["net_accurate"], "ts": now}
+        save_state(_prune_state(state))
     return len(to_email)
 
 
