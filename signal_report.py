@@ -41,12 +41,24 @@ def _net(s: dict) -> float:
         return 0.0
 
 
+def _annualised(signal: dict) -> float:
+    """Annualised return of a signal via the alerter's own horizon logic (net x 365
+    / days to the later close), so this digest ranks by the SAME metric the alerter
+    prioritises. 0.0 if it can't be computed."""
+    try:
+        from alerter import _settle_horizon
+        return _settle_horizon(signal)[0] or 0.0
+    except Exception:
+        return 0.0
+
+
 def summarize(signals: list[dict], top_n: int = 10) -> dict:
     """Group emitted signals by pair (the canonical ``key``) and rank them.
 
-    Returns: total, unique_pairs, most_recurring (by count desc), richest (by the
-    max net edge ever seen for the pair). Each entry: {poly, kalshi, count, max_net,
-    latest_net, latest_ts}."""
+    Returns: total, unique_pairs, most_recurring (count desc), richest (max net edge
+    seen), best_annualised (the latest signal's annualised return — the alerter's
+    priority metric). Each entry: {poly, kalshi, count, max_net, latest_net,
+    latest_ts, annualised}."""
     pairs: dict = {}
     for s in signals:
         key = s.get("key") or (s.get("poly_title", ""), s.get("kalshi_title", ""))
@@ -55,17 +67,21 @@ def summarize(signals: list[dict], top_n: int = 10) -> dict:
         e = pairs.setdefault(key, {
             "poly": s.get("poly_title", ""), "kalshi": s.get("kalshi_title", ""),
             "count": 0, "max_net": 0.0, "latest_net": 0.0, "latest_ts": "",
+            "annualised": 0.0,
         })
         e["count"] += 1
         e["max_net"] = max(e["max_net"], net)
         if ts >= e["latest_ts"]:          # rows ~chronological; keep the latest
             e["latest_ts"] = ts
             e["latest_net"] = net
+            e["annualised"] = _annualised(s)   # annualised of the latest snapshot
     vals = list(pairs.values())
     most_recurring = sorted(vals, key=lambda e: (e["count"], e["max_net"]), reverse=True)[:top_n]
     richest = sorted(vals, key=lambda e: e["max_net"], reverse=True)[:top_n]
+    best_annualised = sorted(vals, key=lambda e: e["annualised"], reverse=True)[:top_n]
     return {"total": len(signals), "unique_pairs": len(pairs),
-            "most_recurring": most_recurring, "richest": richest}
+            "most_recurring": most_recurring, "richest": richest,
+            "best_annualised": best_annualised}
 
 
 def format_report(s: dict) -> str:
@@ -82,6 +98,12 @@ def format_report(s: dict) -> str:
         lines.append("Richest arbs (max net edge seen):")
         for e in s["richest"]:
             lines.append(f"  {e['max_net']*100:5.1f}c [{e['count']}x]  "
+                         f"{e['poly'][:30]} <-> {e['kalshi'][:30]}")
+    if s.get("best_annualised"):
+        lines.append("")
+        lines.append("Best by annualised return (the alerter's priority metric):")
+        for e in s["best_annualised"]:
+            lines.append(f"  ~{e['annualised']*100:4.0f}% ann · latest {e['latest_net']*100:.1f}c  "
                          f"{e['poly'][:30]} <-> {e['kalshi'][:30]}")
     return "\n".join(lines)
 

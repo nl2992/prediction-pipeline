@@ -45,6 +45,24 @@ class Summarize(unittest.TestCase):
         self.assertEqual(s["richest"][0]["max_net"], 0.0)
 
 
+class Annualised(unittest.TestCase):
+    def test_near_dated_smaller_edge_outranks_far_dated_bigger(self):
+        import datetime as dt
+        soon = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=30)).date().isoformat()
+        far = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=900)).date().isoformat()
+        sigs = [
+            # 4c edge resolving in ~30d -> high annualised
+            {"key": "near", "net_accurate": 0.04, "ts": "t", "poly_title": "Near", "kalshi_title": "n",
+             "poly_close": soon, "kalshi_close": soon},
+            # 10c edge resolving in ~900d -> low annualised
+            {"key": "far", "net_accurate": 0.10, "ts": "t", "poly_title": "Far", "kalshi_title": "f",
+             "poly_close": far, "kalshi_close": far},
+        ]
+        s = r.summarize(sigs)
+        self.assertEqual(s["best_annualised"][0]["poly"], "Near")   # annualised wins
+        self.assertEqual(s["richest"][0]["poly"], "Far")            # raw edge differs
+
+
 class FormatReport(unittest.TestCase):
     def test_renders(self):
         s = r.summarize([_sig("A", 0.05, "t", "Race A", "RaceA k")])
