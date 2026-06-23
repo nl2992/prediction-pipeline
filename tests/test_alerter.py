@@ -321,6 +321,34 @@ class FreshnessLabels(unittest.TestCase):
         self.assertNotIn(">NEW<", html2)
 
 
+class SendEmail(unittest.TestCase):
+    _cfg = {"recipients": ["a@b.com", "c@d.com"], "from_addr": "x@y.com",
+            "smtp_host": "smtp.test", "smtp_port": 587, "smtp_user": "u", "smtp_pass": "p"}
+
+    def test_handshake_and_mime_with_inline_image(self):
+        from alerter import send_email
+        with patch("smtplib.SMTP") as SMTP:
+            srv = SMTP.return_value.__enter__.return_value
+            send_email(self._cfg, "Subj", "<p>hi</p>", [("chartA", b"\x89PNG\r\n\x1a\nDATA")])
+        srv.starttls.assert_called_once()
+        srv.login.assert_called_once_with("u", "p")
+        frm, rcpts, msg = srv.sendmail.call_args.args
+        self.assertEqual(frm, "x@y.com")
+        self.assertEqual(rcpts, ["a@b.com", "c@d.com"])
+        self.assertIn("multipart/related", msg)
+        self.assertIn("text/html", msg)
+        self.assertIn("image/png", msg)
+        self.assertIn("Content-ID: <chartA>", msg)
+
+    def test_no_images_has_no_image_part(self):
+        from alerter import send_email
+        with patch("smtplib.SMTP") as SMTP:
+            srv = SMTP.return_value.__enter__.return_value
+            send_email(self._cfg, "Subj", "<p>hi</p>", [])
+        msg = srv.sendmail.call_args.args[2]
+        self.assertNotIn("image/png", msg)
+
+
 class DegradationAlert(unittest.TestCase):
     _cfg = {"recipients": ["a@b.com"], "from_addr": "x@y.com", "smtp_host": "h",
             "smtp_port": 1, "smtp_user": "u", "smtp_pass": "p"}
