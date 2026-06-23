@@ -4,7 +4,9 @@ from __future__ import annotations
 import unittest
 from unittest.mock import MagicMock, patch
 
-from executor import TradeIntent, TradeResult, ArbExecution, Executor, pre_flight_checks
+from executor import (
+    TradeIntent, TradeResult, ArbExecution, Executor, pre_flight_checks, check_price_still_valid,
+)
 
 
 def _live_executor():
@@ -13,6 +15,27 @@ def _live_executor():
     ex.dry_run = False
     ex._kalshi_client = MagicMock()
     return ex
+
+
+class KalshiLivePriceBestBid(unittest.TestCase):
+    def test_yes_ask_uses_highest_no_bid_regardless_of_order(self):
+        # Unsorted no_dollars: best (highest) NO bid is 0.35, not last. YES ask must
+        # be 1 - 0.35 = 0.65, not 1 - 0.32 (the [-1] the old code would have used).
+        book = {"orderbook_fp": {"no_dollars": [["0.30", "5"], ["0.35", "5"], ["0.32", "5"]]}}
+        intent = TradeIntent("kalshi", "YES", 0.66, 10, "KX", None, "x")
+        with patch("kalshi.client.KalshiClient") as KC:
+            KC.return_value.get_orderbook.return_value = book
+            ok, msg, live = check_price_still_valid(intent, price_tolerance=0.02)
+        self.assertEqual(live, 0.65)
+        self.assertTrue(ok)        # drift 0.01 <= 0.02
+
+    def test_no_ask_uses_highest_yes_bid_regardless_of_order(self):
+        book = {"orderbook_fp": {"yes_dollars": [["0.40", "5"], ["0.45", "5"], ["0.42", "5"]]}}
+        intent = TradeIntent("kalshi", "NO", 0.55, 10, "KX", None, "x")  # NO ask = 1-0.45 = 0.55
+        with patch("kalshi.client.KalshiClient") as KC:
+            KC.return_value.get_orderbook.return_value = book
+            ok, msg, live = check_price_still_valid(intent, price_tolerance=0.02)
+        self.assertEqual(live, 0.55)
 
 
 class KalshiFokFill(unittest.TestCase):

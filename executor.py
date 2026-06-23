@@ -112,6 +112,19 @@ class ArbExecution:
 # ---------------------------------------------------------------------------
 
 
+def _best_kalshi_bid(levels) -> float | None:
+    """Highest bid price from a Kalshi orderbook_fp side (``[price, size]`` pairs),
+    robust to list order — the raw book is not guaranteed sorted (pipeline sorts it),
+    so taking ``[-1]`` could read a non-best level (#62, follows #61)."""
+    prices = []
+    for lvl in levels or []:
+        try:
+            prices.append(float(lvl[0]))
+        except (IndexError, TypeError, ValueError):
+            continue
+    return max(prices) if prices else None
+
+
 def check_price_still_valid(
     intent: TradeIntent,
     price_tolerance: float = 0.02,
@@ -143,8 +156,10 @@ def check_price_still_valid(
             raw = client.get_orderbook(intent.market_id)
             ob_fp = raw.get("orderbook_fp", {})
             if intent.contract_side == "YES":
-                no_bids = ob_fp.get("no_dollars", [])
-                live_ask = round(1.0 - float(no_bids[-1][0]), 6) if no_bids else None
+                # YES ask = 1 - best (highest) NO bid. Pick by price, not list order
+                # (the raw orderbook_fp isn't guaranteed sorted — pipeline sorts it; #62).
+                best_no = _best_kalshi_bid(ob_fp.get("no_dollars", []))
+                live_ask = round(1.0 - best_no, 6) if best_no is not None else None
                 if live_ask is None:
                     return False, "no live YES ask available", None
                 drift = abs(live_ask - intent.limit_price)
@@ -152,9 +167,8 @@ def check_price_still_valid(
                     return False, f"YES ask drifted {drift:.4f} > tolerance {price_tolerance}", live_ask
                 return True, f"YES ask OK (live={live_ask:.4f} vs intended={intent.limit_price:.4f})", live_ask
             else:
-                yes_bids = ob_fp.get("yes_dollars", [])
-                live_yes_bid = float(yes_bids[-1][0]) if yes_bids else None
-                live_no_ask = round(1.0 - live_yes_bid, 6) if live_yes_bid is not None else None
+                best_yes = _best_kalshi_bid(ob_fp.get("yes_dollars", []))  # NO ask = 1 - best YES bid
+                live_no_ask = round(1.0 - best_yes, 6) if best_yes is not None else None
                 if live_no_ask is None:
                     return False, "no live NO ask available", None
                 drift = abs(live_no_ask - intent.limit_price)
