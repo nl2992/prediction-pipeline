@@ -4,6 +4,12 @@ on:
   push:
   pull_request:
 
+# Cancel an in-flight run when a newer commit on the same ref is pushed — faster
+# feedback on the latest commit, fewer wasted runner minutes (#74).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   pytest:
     runs-on: ubuntu-latest
@@ -12,6 +18,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+          cache: pip                       # cache wheels keyed on requirements.txt
+          cache-dependency-path: requirements.txt
       - name: Install dependencies
         # requests (core) + fastapi (server.py / test_server). matplotlib is
         # optional — the chart code degrades gracefully, so tests pass without it.
