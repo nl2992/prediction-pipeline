@@ -88,6 +88,16 @@ def summarize_log(lines: list[str]) -> dict:
     #   * emails went out but NO heartbeat appears anywhere in the window.
     key_absent = bool(last_heartbeat) and "ABSENT" in last_heartbeat
     emails_without_heartbeat = last_email_subject is not None and last_heartbeat is None
+    # Verifier-API-failure: key present and N checked, but 0 confirmed AND 0 flagged
+    # means every verify() failed open (DeepSeek down / rate-limited / bad key) — the
+    # verifier is effectively dead while key=present hides it (#45). Normally
+    # confirmed+flagged == checked, so this state is unambiguous.
+    verifier_api_failing = False
+    if last_heartbeat and not key_absent:
+        m = re.search(r"(\d+) checked, (\d+) confirmed, (\d+) flagged", last_heartbeat)
+        if m:
+            checked, confirmed, flagged = (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            verifier_api_failing = checked > 0 and (confirmed + flagged) == 0
     # Partial-data scan detection (adaptive): the latest scan's matched-pair count
     # collapsing far below the recent median signals a degraded catalog fetch (#29).
     last_scan_pairs = scan_pair_counts[-1] if scan_pair_counts else None
@@ -104,6 +114,7 @@ def summarize_log(lines: list[str]) -> dict:
         "scans_since_email": scans_since_email,
         "last_heartbeat": last_heartbeat,
         "key_absent": key_absent,
+        "verifier_api_failing": verifier_api_failing,
         "emails_without_heartbeat": emails_without_heartbeat,
         "recent_cycle_error": recent_cycle_error if error_is_recent else None,
         "recent_email_failure": email_fail if email_fail_recent else None,
@@ -116,6 +127,7 @@ def overall_ok(s: dict) -> bool:
     (pipeline not running). Normal quiet (idle verifier / no recent email within the
     realert window) stays OK — those aren't faults."""
     return not (s.get("key_absent")
+                or s.get("verifier_api_failing")
                 or s.get("emails_without_heartbeat")
                 or s.get("recent_cycle_error") is not None
                 or s.get("recent_email_failure") is not None
@@ -143,6 +155,8 @@ def format_health(s: dict, verdicts_count: int, verdicts_mtime: str | None) -> s
         lines.append("[WARN] no email seen in the recent window")
     if s["key_absent"]:
         lines.append(f"[WARN] verifier: {s['last_heartbeat']} — key not resolving (see #8)")
+    elif s.get("verifier_api_failing"):
+        lines.append(f"[WARN] verifier: {s['last_heartbeat']} — all checks failed (API down/rate-limited?)")
     elif s["emails_without_heartbeat"]:
         lines.append("[WARN] emails went out but no verifier heartbeat in window — is the AI gate running? (see #8)")
     elif s["last_heartbeat"]:

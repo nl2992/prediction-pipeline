@@ -158,6 +158,22 @@ class FormatHealth(unittest.TestCase):
         s = health.summarize_log(["[alerter] scan done in 800s — cap=1500, 5 pairs, 0 survivable arb(s)"])
         self.assertFalse(s["scan_pairs_low"])         # 1 sample -> no baseline, no alarm
 
+    def test_degraded_when_verifier_api_failing(self):
+        s = health.summarize_log([
+            "[alerter] scan done in 800s — 100 survivable arb(s)",
+            "[alerter] AI verify: mode=enforce, key=present, 14 checked, 0 confirmed, 0 flagged",
+            "[alerter] EMAILED ['a@b.com']: [Pred-Arb] 14 arbs (14 pairs)",
+        ])
+        self.assertTrue(s["verifier_api_failing"])
+        self.assertFalse(health.overall_ok(s))
+        self.assertIn("all checks failed", health.format_health(s, 1, "t"))
+
+    def test_normal_heartbeat_not_flagged_api_failing(self):
+        s = health.summarize_log([
+            "[alerter] AI verify: mode=enforce, key=present, 14 checked, 13 confirmed, 1 flagged",
+        ])
+        self.assertFalse(s["verifier_api_failing"])
+
     def test_degraded_on_recent_email_failure(self):
         s = health.summarize_log([
             "[alerter] scan done in 800s — 100 survivable arb(s)",
