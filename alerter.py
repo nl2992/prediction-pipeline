@@ -277,6 +277,25 @@ def _freshness_labels(signals: list[dict], state: dict, improve_step: float = 0.
     return labels
 
 
+_STATE_MAX_AGE_S = 7 * 24 * 3600  # drop realert state for arbs not seen in a week
+
+
+def _prune_state(state: dict, max_age_s: float = _STATE_MAX_AGE_S) -> dict:
+    """Bound alert_state.json: drop arb-key entries ({net, ts}) not re-alerted
+    within ``max_age_s`` (their arbs are gone/dormant), so the file doesn't grow
+    unbounded with stale keys (#48). Non-dict specials (e.g. _last_alert_ts) are
+    preserved. A pruned-then-reappearing arb is just treated as new again."""
+    now = time.time()
+    out = {}
+    for k, v in state.items():
+        if isinstance(v, dict) and "ts" in v:
+            if now - v.get("ts", 0) <= max_age_s:
+                out[k] = v
+        else:
+            out[k] = v
+    return out
+
+
 def filter_new(signals: list[dict], state: dict, realert_hours: float, improve_step: float = 0.005) -> list[dict]:
     now = time.time()
     fresh = []
@@ -719,7 +738,7 @@ def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False,
     now = time.time()
     for s in to_email:
         state[s["key"]] = {"net": s["net_accurate"], "ts": now}
-    save_state(state)
+    save_state(_prune_state(state))
     return len(to_email)
 
 

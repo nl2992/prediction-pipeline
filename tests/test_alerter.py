@@ -277,6 +277,27 @@ class CapJsonl(unittest.TestCase):
         _cap_jsonl(pathlib.Path("does-not-exist.jsonl"), max_bytes=1, keep_rows=10)  # no raise
 
 
+class PruneState(unittest.TestCase):
+    def test_drops_old_keeps_recent_and_specials(self):
+        from alerter import _prune_state
+        now = time.time()
+        state = {
+            "fresh|k|d": {"net": 0.05, "ts": now - 3600},          # 1h old -> keep
+            "stale|k|d": {"net": 0.04, "ts": now - 8 * 24 * 3600},  # 8d old -> drop
+            "_last_alert_ts": now - 30 * 24 * 3600,                  # special -> keep
+        }
+        out = _prune_state(state)
+        self.assertIn("fresh|k|d", out)
+        self.assertNotIn("stale|k|d", out)
+        self.assertIn("_last_alert_ts", out)                        # non-dict preserved
+
+    def test_just_updated_keys_survive(self):
+        from alerter import _prune_state
+        now = time.time()
+        out = _prune_state({"k|x|d": {"net": 0.05, "ts": now}})
+        self.assertIn("k|x|d", out)
+
+
 class FreshnessLabels(unittest.TestCase):
     def test_classifies_new_improved_persistent(self):
         from alerter import _freshness_labels
