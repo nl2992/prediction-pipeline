@@ -439,10 +439,26 @@ def _ai_verify_gate(to_email: list[dict], cfg: dict) -> list[dict]:
         return to_email
 
     AI_MAX_DROP_FRACTION = 0.60
+    # Cap the gate's total wall-clock so a slow/degraded DeepSeek can't push the
+    # cycle past its 30-min interval: per-call timeout is 20s, and with up to TOP_N
+    # pairs that could add minutes. When the budget is spent, fail-open (keep) the
+    # remaining unchecked pairs. Configurable via "ai_verify_budget_s" (#137).
+    try:
+        budget_s = float(cfg.get("ai_verify_budget_s", 120.0))
+    except (TypeError, ValueError):
+        budget_s = 120.0
+    t_start = time.monotonic()
     drop_ids: set[int] = set()
     n_confirmed = 0
+    n_checked = 0
     for s in to_email:
+        if time.monotonic() - t_start > budget_s:
+            print(f"[alerter] AI verify: budget {budget_s:.0f}s exceeded after {n_checked} "
+                  f"check(s) — keeping remaining {len(to_email) - n_checked} pair(s) unchecked",
+                  flush=True)
+            break
         v = verify_signal(s, api_key)
+        n_checked += 1
         if v is None:                       # API error/timeout → fail-open, keep
             continue
         try:
@@ -470,7 +486,7 @@ def _ai_verify_gate(to_email: list[dict], cfg: dict) -> list[dict]:
             print(f"[alerter] {tag}: {s['poly_title'][:36]!r} <-> {s['kalshi_title'][:36]!r} — {v['reason']}", flush=True)
 
     # Per-cycle heartbeat so the verifier's activity is always visible in the log.
-    print(f"[alerter] AI verify: mode={mode}, key=present, {len(to_email)} checked, "
+    print(f"[alerter] AI verify: mode={mode}, key=present, {n_checked} checked, "
           f"{n_confirmed} confirmed, {len(drop_ids)} flagged", flush=True)
     # Bound the verdict audit log like the signals log (#26); 20k rows keeps ample
     # history for the digest's recent-window analysis.

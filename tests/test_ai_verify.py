@@ -164,6 +164,26 @@ class Gate(unittest.TestCase):
         self.assertEqual([s["poly_title"] for s in enforced], ["REAL"])     # phantom dropped
         self.assertEqual(len(shadow), 2)                                     # shadow keeps both
 
+    def test_budget_exhausted_keeps_remaining_without_more_api_calls(self):
+        # A spent wall-clock budget must fail-open the rest, not stall the cycle (#137).
+        from alerter import _ai_verify_gate
+        sigs = [self._sig("A"), self._sig("B")]
+        with patch("ai_verify.resolve_api_key", return_value="k"), \
+             patch("ai_verify.verify_signal") as vs:
+            kept = _ai_verify_gate(sigs, {"ai_verify_mode": "enforce", "ai_verify_budget_s": -1})
+        self.assertEqual(len(kept), 2)       # all kept (fail-open)
+        vs.assert_not_called()               # budget gone before any API call
+
+    def test_ample_budget_checks_all_pairs(self):
+        from alerter import _ai_verify_gate
+        sigs = [self._sig("A"), self._sig("B")]
+        def fake(s, key, **kw):
+            return {"same": True, "poly_settlement": None, "kalshi_settlement": None, "reason": "r"}
+        with patch("ai_verify.resolve_api_key", return_value="k"), \
+             patch("ai_verify.verify_signal", side_effect=fake) as vs:
+            _ai_verify_gate(sigs, {"ai_verify_mode": "enforce", "ai_verify_budget_s": 600})
+        self.assertEqual(vs.call_count, 2)
+
     def test_enforce_mode_is_case_and_whitespace_insensitive(self):
         # "  ENFORCE  " must enforce, not silently fall back to shadow (#124).
         from alerter import _ai_verify_gate
