@@ -241,6 +241,25 @@ class BuildReport(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("key not resolving", text)
 
+    def test_stale_log_is_degraded(self):
+        # A log whose mtime is well past _LOG_STALE_HOURS -> task likely not firing.
+        path = self._log(["[alerter] scan done in 800s — 100 survivable arb(s)"])
+        old = __import__("time").time() - (health._LOG_STALE_HOURS + 1) * 3600
+        os.utime(path, (old, old))
+        text, ok = health.build_report(path)
+        self.assertFalse(ok)
+        self.assertIn("STALE", text)
+
+    def test_fresh_log_shows_freshness_line_and_stays_ok(self):
+        path = self._log([
+            "[alerter] AI verify: mode=enforce, key=present, 5 checked, 5 confirmed, 0 flagged",
+            "[alerter] EMAILED ['a@b.com']: [Pred-Arb] 5 arbs (5 pairs)",
+            "[alerter] scan done in 800s — 100 survivable arb(s)",
+        ])
+        text, ok = health.build_report(path)
+        self.assertTrue(ok)
+        self.assertIn("log freshness", text)
+
     def test_verdicts_info_missing_file_is_failsafe(self):
         orig = health._VERDICTS
         health._VERDICTS = pathlib.Path(tempfile.gettempdir()) / "definitely-not-here-xyz.jsonl"

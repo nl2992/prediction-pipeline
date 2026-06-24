@@ -25,6 +25,11 @@ _VERDICTS = BASE / "ai_verify.jsonl"
 # A cycle is ~90 log lines; the realert window is 6h (~25 cycles), so span enough
 # lines that the last email is still visible (else "scans since email" is wrong).
 _TAIL_LINES = 2600
+# The scheduled task fires every 30 min. If the log file hasn't been written in
+# this long, the task is almost certainly not firing (disabled, machine asleep,
+# crash before logging) — content-based checks miss this since the stale lines
+# remain. >2h ≈ 4 missed cycles (#126).
+_LOG_STALE_HOURS = 2.0
 
 
 def _tail(path: pathlib.Path, n: int, block: int = 1_200_000) -> list[str]:
@@ -132,6 +137,7 @@ def overall_ok(s: dict) -> bool:
                 or s.get("recent_cycle_error") is not None
                 or s.get("recent_email_failure") is not None
                 or s.get("scan_pairs_low")
+                or s.get("log_stale")
                 or s.get("last_scan") is None)
 
 
@@ -141,6 +147,10 @@ def format_health(s: dict, verdicts_count: int, verdicts_mtime: str | None) -> s
     status = "OK" if overall_ok(s) else "DEGRADED"
     lines = ["Arb alerter - health", "=" * 40, f"STATUS: {status}", "-" * 40]
     lines.append(f"[{mark(bool(s['last_scan']))}] last scan: {s['last_scan'] or 'none seen'}")
+    age = s.get("log_age_hours")
+    if age is not None:
+        lines.append(f"[{mark(not s.get('log_stale'))}] log freshness: written {age:.1f}h ago"
+                     + (f" — STALE (>{_LOG_STALE_HOURS:.0f}h), is the task firing?" if s.get("log_stale") else ""))
     if s.get("last_scan_pairs") is not None:
         med = s.get("scan_pairs_median")
         lines.append(f"[{mark(not s.get('scan_pairs_low'))}] scan size: "
@@ -182,10 +192,25 @@ def _verdicts_info() -> tuple[int, str | None]:
         return 0, None
 
 
+def _log_age_hours(path: pathlib.Path) -> float | None:
+    """Hours since the log file was last written, or None if it is missing."""
+    try:
+        import time
+        return (time.time() - path.stat().st_mtime) / 3600.0
+    except OSError:
+        return None
+
+
 def build_report(log_path: pathlib.Path | str = _LOG) -> tuple[str, bool]:
     """Convenience entry: load → summarize → format. Returns (text, overall_ok) so
     callers (CLI, ops.py) don't repeat the tail/summarize/info plumbing."""
-    summary = summarize_log(_tail(pathlib.Path(log_path), _TAIL_LINES))
+    path = pathlib.Path(log_path)
+    summary = summarize_log(_tail(path, _TAIL_LINES))
+    # Freshness check: content-based signals can't see a task that stopped firing
+    # (the stale lines remain). The log file's mtime can. (#126)
+    age = _log_age_hours(path)
+    summary["log_age_hours"] = age
+    summary["log_stale"] = age is not None and age > _LOG_STALE_HOURS
     n, mtime = _verdicts_info()
     return format_health(summary, n, mtime), overall_ok(summary)
 
