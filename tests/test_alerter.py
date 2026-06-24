@@ -756,6 +756,24 @@ class LoadConfigRecipients(unittest.TestCase):
         with patch.object(alerter, "CONFIG_FILE", self._cfg_file({"min_net_email": 0.05})):
             self.assertAlmostEqual(alerter.load_config()["min_net_email"], 0.05)
 
+    def test_string_smtp_port_coerced_to_int(self):
+        import os, alerter
+        with patch.object(alerter, "CONFIG_FILE", self._cfg_file({"smtp_port": "587"})):
+            os.environ.pop("ALERT_SMTP_PORT", None)
+            self.assertEqual(alerter.load_config()["smtp_port"], 587)
+
+    def test_bad_env_smtp_port_falls_back_without_crashing(self):
+        import os, alerter
+        with patch.object(alerter, "CONFIG_FILE", self._cfg_file({})), \
+             patch.dict(os.environ, {"ALERT_SMTP_PORT": "abc"}):
+            self.assertEqual(alerter.load_config()["smtp_port"], 587)
+
+    def test_env_smtp_port_overrides_json(self):
+        import os, alerter
+        with patch.object(alerter, "CONFIG_FILE", self._cfg_file({"smtp_port": 10})), \
+             patch.dict(os.environ, {"ALERT_SMTP_PORT": "2525"}):
+            self.assertEqual(alerter.load_config()["smtp_port"], 2525)
+
 
 class EmailRenderHelpers(unittest.TestCase):
     """_esc (#52) and _link (#51) were bug fixes; _kalshi_url builds links (#107)."""

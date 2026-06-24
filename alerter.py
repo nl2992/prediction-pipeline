@@ -121,7 +121,12 @@ def load_config() -> dict:
             print(f"[alerter] WARNING: could not parse {CONFIG_FILE.name}: {exc}")
     env = os.environ
     cfg.setdefault("smtp_host", env.get("ALERT_SMTP_HOST", "smtp.gmail.com"))
-    cfg.setdefault("smtp_port", int(env.get("ALERT_SMTP_PORT", "587")))
+    # SMTP port: env override wins (consistent with the other SMTP fields below),
+    # then coerce to int with a safe fallback so a typo in ALERT_SMTP_PORT or a
+    # JSON string ("587") can't crash load_config or reach smtplib as a non-int (#123).
+    if env.get("ALERT_SMTP_PORT"):
+        cfg["smtp_port"] = env["ALERT_SMTP_PORT"]
+    cfg.setdefault("smtp_port", 587)
     if env.get("ALERT_SMTP_USER"):
         cfg["smtp_user"] = env["ALERT_SMTP_USER"]
     if env.get("ALERT_SMTP_PASS"):
@@ -137,6 +142,11 @@ def load_config() -> dict:
     # string to a list (comma-split), matching the ALERT_RECIPIENTS env path (#121).
     if isinstance(cfg.get("recipients"), str):
         cfg["recipients"] = [a.strip() for a in cfg["recipients"].split(",") if a.strip()]
+    try:
+        cfg["smtp_port"] = int(cfg["smtp_port"])
+    except (TypeError, ValueError):
+        print(f"[alerter] WARNING: smtp_port={cfg['smtp_port']!r} not an int; using 587")
+        cfg["smtp_port"] = 587
     # min_net_email feeds a float comparison (net_accurate >= min_net); a JSON
     # string ("0.03") would raise TypeError and crash the cycle. Coerce to float,
     # falling back to the default on a non-numeric value (#122).
