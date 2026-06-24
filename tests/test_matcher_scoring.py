@@ -12,6 +12,7 @@ from matcher import (
     _offices, _parties, _jurisdictions, _years,
     _sports_league, _legislative_scope,
     _time_scopes, _comparison_bounds, _month_names,
+    _arb_signature, is_arb_eligible,
 )
 from pipeline import MarketSnapshot, OrderBook
 
@@ -330,6 +331,30 @@ class TimeScopesAndBounds(unittest.TestCase):
 
     def test_month_names_multi(self):
         self.assertEqual(_month_names("between March and July"), {"mar", "jul"})
+
+
+class ArbSignatureAndEligibility(unittest.TestCase):
+    """The strict final gate before a pair becomes a trade signal (#106)."""
+
+    def test_arb_signature_components(self):
+        s = _arb_signature("LeBron James over 25.5 points")
+        self.assertIn("stat:points", s)
+        self.assertIn("rate:25.5", s)
+        self.assertIn("gt:25.5", s)
+
+    def test_arb_signature_time_and_rate(self):
+        s = _arb_signature("Will the Fed set rates above 5% in 2026?")
+        self.assertIn("time:year", s)
+        self.assertIn("rate:5%", s)
+
+    def test_eligible_for_identical_compatible_pair(self):
+        p = _snap("Will Bitcoin reach above $150,000 in 2026?")
+        k = _snap("Will Bitcoin be above $150k in 2026?")
+        self.assertTrue(is_arb_eligible(p, k))
+
+    def test_not_eligible_for_incompatible_pair(self):
+        self.assertFalse(is_arb_eligible(
+            _snap("Will the Lakers win?"), _snap("Will it rain in Texas?")))
 
 
 if __name__ == "__main__":
