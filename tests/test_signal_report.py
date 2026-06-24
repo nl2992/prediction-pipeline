@@ -1,6 +1,7 @@
 """Tests for the emitted-signal digest (signal_report.py, #76)."""
 from __future__ import annotations
 
+import datetime as dt
 import unittest
 
 import signal_report as r
@@ -91,6 +92,33 @@ class FormatReport(unittest.TestCase):
         self.assertIn("Most recurring", out)
         self.assertIn("Richest", out)
         self.assertIn("Race A", out)
+
+
+class DigestHelpers(unittest.TestCase):
+    """Recency + ranking helpers behind the digest (#117)."""
+
+    _NOW = dt.datetime(2026, 6, 24, 12, 0, 0, tzinfo=dt.timezone.utc)
+
+    def test_age_hours_z_and_naive(self):
+        self.assertAlmostEqual(r._age_hours("2026-06-23T12:00:00Z", self._NOW), 24.0)
+        self.assertAlmostEqual(r._age_hours("2026-06-23T12:00:00", self._NOW), 24.0)
+
+    def test_age_hours_missing_and_bad(self):
+        self.assertIsNone(r._age_hours("", self._NOW))
+        self.assertIsNone(r._age_hours("xyz", self._NOW))
+
+    def test_net_value_missing_bad(self):
+        self.assertAlmostEqual(r._net({"net_accurate": 0.07}), 0.07)
+        self.assertEqual(r._net({}), 0.0)
+        self.assertEqual(r._net({"net_accurate": "x"}), 0.0)
+
+    def test_annualised_one_year_horizon(self):
+        # net 0.10 with closes ~1 year out -> ~0.10 annualised.
+        a = r._annualised({"net_accurate": 0.10, "kalshi_close": "2027-06-24", "poly_close": "2027-06-24"})
+        self.assertAlmostEqual(a, 0.10, places=2)
+
+    def test_annualised_unknown_close_falls_back_to_net(self):
+        self.assertAlmostEqual(r._annualised({"net_accurate": 0.10}), 0.10, places=3)
 
 
 if __name__ == "__main__":
