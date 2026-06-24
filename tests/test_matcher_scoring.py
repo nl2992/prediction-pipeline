@@ -7,6 +7,7 @@ from matcher import (
     _confidence, _close_delta_hours, _settlement_type, _monetary_direction,
     is_inverted_pair, _known_orgs, _known_products, _matchup_signature,
     _names_overlap, _name_anchor_tokens,
+    _is_ou_or_spread, _has_over_under, _stat_thresholds,
 )
 from pipeline import MarketSnapshot, OrderBook
 
@@ -186,6 +187,33 @@ class NameAnchorTokens(unittest.TestCase):
 
     def test_drops_short_tokens(self):
         self.assertEqual(_name_anchor_tokens("xi"), set())
+
+
+class OuSpreadAndStats(unittest.TestCase):
+    """Bet-type gates: a totals/spread line must never match a moneyline (#101)."""
+
+    def test_ou_line_is_ou_or_spread(self):
+        self.assertTrue(_is_ou_or_spread("Sweden 1st Half O/U 0.5"))
+
+    def test_over_n_is_ou_or_spread(self):
+        self.assertTrue(_is_ou_or_spread("France over 1.5 goals"))
+
+    def test_spread_paren_is_ou_or_spread(self):
+        self.assertTrue(_is_ou_or_spread("Bosnia and Herzegovina (-1.5)"))
+
+    def test_moneyline_is_not_ou_or_spread(self):
+        self.assertFalse(_is_ou_or_spread("Will the Lakers win?"))
+
+    def test_has_over_under(self):
+        self.assertTrue(_has_over_under("Total over 1.5"))
+        self.assertFalse(_has_over_under("Lakers win"))
+
+    def test_stat_threshold_maps_keyword_to_numbers(self):
+        self.assertEqual(_stat_thresholds("LeBron over 25.5 points"), {"points": {25.5}})
+
+    def test_any_point_idiom_is_not_a_points_prop(self):
+        # "at any point" is stripped, so a price-touch title yields no stat.
+        self.assertEqual(_stat_thresholds("Will BTC dip below $80k at any point in 2026?"), {})
 
 
 if __name__ == "__main__":
