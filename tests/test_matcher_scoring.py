@@ -3,7 +3,19 @@ from __future__ import annotations
 
 import unittest
 
-from matcher import _confidence, _close_delta_hours, _settlement_type, _monetary_direction
+from matcher import (
+    _confidence, _close_delta_hours, _settlement_type, _monetary_direction,
+    is_inverted_pair,
+)
+from pipeline import MarketSnapshot, OrderBook
+
+
+def _snap(title: str, full: str = "") -> MarketSnapshot:
+    return MarketSnapshot(
+        source="x", market_id="m", event_id="e", title=title, status="open",
+        close_time=None, fetched_at="t", orderbook=OrderBook(bids=[], asks=[]),
+        extra={"full_question": full},
+    )
 
 
 class Confidence(unittest.TestCase):
@@ -80,6 +92,33 @@ class MonetaryDirection(unittest.TestCase):
 
     def test_neither(self):
         self.assertEqual(_monetary_direction("Who wins?"), set())
+
+
+class IsInvertedPair(unittest.TestCase):
+    """Poly-YES == Kalshi-NO detection; a wrong verdict fabricates or misses
+    an arb. Text-only, never price-based (#97)."""
+
+    def test_threshold_flip_touch_vs_hold(self):
+        p = _snap("Will BTC dip below $80k at any point?")
+        k = _snap("Will BTC stay above $80k for all of 2026?")
+        self.assertTrue(is_inverted_pair(p, k))
+
+    def test_antonym_state_cue(self):
+        self.assertTrue(is_inverted_pair(
+            _snap("Will TikTok be banned?"), _snap("Will TikTok be operating legally?")))
+
+    def test_same_direction_not_inverted(self):
+        self.assertFalse(is_inverted_pair(
+            _snap("Will BTC be above $80k?"), _snap("Will BTC be above $80k?")))
+
+    def test_unrelated_not_inverted(self):
+        self.assertFalse(is_inverted_pair(
+            _snap("Who wins the election?"), _snap("Who wins the cup?")))
+
+    def test_both_mixed_antonym_is_not_inversion(self):
+        # Both sides mention banned AND legal -> not a clean one-neg/one-pos flip.
+        mixed = "Will TikTok be banned or stay legal?"
+        self.assertFalse(is_inverted_pair(_snap(mixed), _snap(mixed)))
 
 
 if __name__ == "__main__":
