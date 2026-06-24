@@ -8,6 +8,7 @@ from matcher import (
     is_inverted_pair, _known_orgs, _known_products, _matchup_signature,
     _names_overlap, _name_anchor_tokens,
     _is_ou_or_spread, _has_over_under, _stat_thresholds,
+    _is_win_market, _is_player_prop,
 )
 from pipeline import MarketSnapshot, OrderBook
 
@@ -214,6 +215,33 @@ class OuSpreadAndStats(unittest.TestCase):
     def test_any_point_idiom_is_not_a_points_prop(self):
         # "at any point" is stripped, so a price-touch title yields no stat.
         self.assertEqual(_stat_thresholds("Will BTC dip below $80k at any point in 2026?"), {})
+
+
+class WinMarketAndPlayerProp(unittest.TestCase):
+    """Moneyline vs player-prop discrimination (#102)."""
+
+    def test_win_and_beat_are_win_markets(self):
+        self.assertTrue(_is_win_market("Will the Lakers win?"))
+        self.assertTrue(_is_win_market("Will the Lakers beat the Celtics?"))
+
+    def test_ou_line_is_not_a_win_market(self):
+        self.assertFalse(_is_win_market("Lakers O/U 215.5"))
+
+    def test_colon_stat_is_player_prop(self):
+        self.assertTrue(_is_player_prop("Cody Gakpo: 2+ assists"))
+
+    def test_goalscorer_is_player_prop(self):
+        self.assertTrue(_is_player_prop("Mitch Marner: First Goalscorer"))
+
+    def test_n_plus_stat_is_player_prop(self):
+        self.assertTrue(_is_player_prop("Aaron Judge 3+ total bases"))
+
+    def test_plain_win_is_not_player_prop(self):
+        self.assertFalse(_is_player_prop("Will the Lakers win?"))
+
+    def test_team_margin_is_not_player_prop(self):
+        # "win by over 1.5 goals" is a margin/total, not a "N+ stat" prop.
+        self.assertFalse(_is_player_prop("Lakers win by over 1.5 goals"))
 
 
 if __name__ == "__main__":
