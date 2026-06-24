@@ -4,7 +4,10 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 
-from discover import _parse_dt, _is_parlay, _is_parlay_market, _category, _derive_keywords
+from discover import (
+    _parse_dt, _is_parlay, _is_parlay_market, _category, _derive_keywords,
+    _apply_event_cap, _event_series,
+)
 
 
 class ParseDt(unittest.TestCase):
@@ -119,6 +122,41 @@ class DeriveKeywords(unittest.TestCase):
     def test_fallback_longest_tokens(self):
         # No proper pair / league / district -> longest non-stopword tokens.
         self.assertIn("consumption", _derive_keywords("What is the cheese consumption forecast?"))
+
+
+class EventSeries(unittest.TestCase):
+    def test_prefers_series_ticker(self):
+        self.assertEqual(_event_series({"series_ticker": "S", "event_ticker": "E-9"}), "S")
+
+    def test_falls_back_to_event_ticker_prefix(self):
+        self.assertEqual(_event_series({"event_ticker": "KXFOO-12"}), "KXFOO")
+
+    def test_empty_when_no_keys(self):
+        self.assertEqual(_event_series({}), "")
+
+
+class ApplyEventCap(unittest.TestCase):
+    def _ev(self, series, i):
+        return {"series_ticker": series, "event_ticker": f"{series}-{i}"}
+
+    def test_none_cap_returns_all(self):
+        filt = [self._ev("KXA", 1), self._ev("KXB", 2)]
+        self.assertEqual(_apply_event_cap(filt, None), filt)
+
+    def test_under_cap_returns_all(self):
+        filt = [self._ev("KXA", 1), self._ev("KXB", 2)]
+        self.assertEqual(_apply_event_cap(filt, 10), filt)
+
+    def test_truncates_and_drops_ordinary_beyond_cap(self):
+        filt = [self._ev("KXA", 1), self._ev("KXB", 2), self._ev("KXC", 3)]
+        kept = [_event_series(e) for e in _apply_event_cap(filt, 2)]
+        self.assertEqual(kept, ["KXA", "KXB"])  # ordinary KXC dropped
+
+    def test_always_include_series_retained_beyond_cap(self):
+        # KXBILLS sits past the cap but must survive the truncation.
+        filt = [self._ev("KXA", 1), self._ev("KXB", 2), self._ev("KXBILLS", 3), self._ev("KXC", 4)]
+        kept = [_event_series(e) for e in _apply_event_cap(filt, 2)]
+        self.assertEqual(kept, ["KXA", "KXB", "KXBILLS"])  # KXC dropped, KXBILLS kept
 
 
 if __name__ == "__main__":
