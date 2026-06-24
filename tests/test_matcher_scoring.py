@@ -11,6 +11,7 @@ from matcher import (
     _is_win_market, _is_player_prop,
     _offices, _parties, _jurisdictions, _years,
     _sports_league, _legislative_scope,
+    _time_scopes, _comparison_bounds, _month_names,
 )
 from pipeline import MarketSnapshot, OrderBook
 
@@ -299,6 +300,36 @@ class SportsLeagueAndLegislativeScope(unittest.TestCase):
 
     def test_legislative_none(self):
         self.assertIsNone(_legislative_scope("Who wins the presidency?"))
+
+
+class TimeScopesAndBounds(unittest.TestCase):
+    """Resolution-granularity and bound extraction (#105)."""
+
+    def test_specific_day(self):
+        self.assertEqual(_time_scopes("Will it resolve on Jan 15?"), {"day:jan-15"})
+
+    def test_month_scope(self):
+        self.assertEqual(_time_scopes("Will it happen in March?"), {"month:mar"})
+
+    def test_year_phrases(self):
+        self.assertEqual(_time_scopes("Will it happen this year?"), {"year"})
+        self.assertEqual(_time_scopes("Will it happen in 2026?"), {"year"})
+
+    def test_day_suppresses_year_scope(self):
+        # A concrete date is more specific than the surrounding year.
+        self.assertEqual(_time_scopes("Will BTC hit 150k on Dec 31 in 2026?"), {"day:dec-31"})
+
+    def test_no_time_scope(self):
+        self.assertEqual(_time_scopes("Who wins?"), set())
+
+    def test_comparison_bounds_lt_only(self):
+        self.assertEqual(_comparison_bounds("less than 5%"), {"lt": {5.0}, "gt": set()})
+
+    def test_comparison_bounds_both(self):
+        self.assertEqual(_comparison_bounds("more than 3 and less than 5"), {"lt": {5.0}, "gt": {3.0}})
+
+    def test_month_names_multi(self):
+        self.assertEqual(_month_names("between March and July"), {"mar", "jul"})
 
 
 if __name__ == "__main__":
