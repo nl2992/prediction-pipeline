@@ -6,6 +6,7 @@ import unittest
 from matcher import (
     _confidence, _close_delta_hours, _settlement_type, _monetary_direction,
     is_inverted_pair, _known_orgs, _known_products, _matchup_signature,
+    _names_overlap, _name_anchor_tokens,
 )
 from pipeline import MarketSnapshot, OrderBook
 
@@ -152,6 +153,39 @@ class MatchupSignature(unittest.TestCase):
 
     def test_none_when_no_matchup(self):
         self.assertIsNone(_matchup_signature("Who wins the election?"))
+
+
+class NamesOverlap(unittest.TestCase):
+    """Entity matching across differing abbreviations; must over-match neither
+    via qualifiers nor lose the ticker-clip rule (#100)."""
+
+    def test_substring_containment(self):
+        self.assertTrue(_names_overlap({"donald trump"}, {"trump"}))
+
+    def test_ticker_prefix_clip(self):
+        # "sol" clips to "solana", "etf" to "etfs".
+        self.assertTrue(_names_overlap({"solana etf"}, {"sol etfs"}))
+
+    def test_shared_real_anchor(self):
+        self.assertTrue(_names_overlap({"james bond"}, {"new bond"}))
+
+    def test_distinct_names_do_not_overlap(self):
+        self.assertFalse(_names_overlap({"biden"}, {"trump"}))
+
+    def test_qualifier_is_not_a_shared_anchor(self):
+        # "New York" vs "New Jersey" must NOT match on "new".
+        self.assertFalse(_names_overlap({"new york"}, {"new jersey"}))
+
+
+class NameAnchorTokens(unittest.TestCase):
+    def test_drops_qualifier_words(self):
+        self.assertEqual(_name_anchor_tokens("new bond"), {"bond"})
+
+    def test_all_qualifiers_yields_empty(self):
+        self.assertEqual(_name_anchor_tokens("the will jan"), set())
+
+    def test_drops_short_tokens(self):
+        self.assertEqual(_name_anchor_tokens("xi"), set())
 
 
 if __name__ == "__main__":
