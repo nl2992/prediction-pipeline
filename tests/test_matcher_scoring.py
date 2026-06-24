@@ -10,6 +10,7 @@ from matcher import (
     _is_ou_or_spread, _has_over_under, _stat_thresholds,
     _is_win_market, _is_player_prop,
     _offices, _parties, _jurisdictions, _years,
+    _sports_league, _legislative_scope,
 )
 from pipeline import MarketSnapshot, OrderBook
 
@@ -272,6 +273,32 @@ class PoliticalGeoYearGates(unittest.TestCase):
     def test_years_four_digit_and_two_digit_normalization(self):
         self.assertEqual(_years("2026 election outcome"), {"2026"})
         self.assertEqual(_years("26 election"), {"2026"})
+
+
+class SportsLeagueAndLegislativeScope(unittest.TestCase):
+    """Disjointness gates against shared-token phantom matches (#104)."""
+
+    def test_nba(self):
+        self.assertEqual(_sports_league("NBA Finals: New York"), {"nba"})
+
+    def test_wnba_is_not_nba(self):
+        self.assertEqual(_sports_league("WNBA championship: New York"), {"wnba"})
+
+    def test_mls_and_nhl_shared_city_are_disjoint(self):
+        self.assertEqual(_sports_league("Los Angeles FC (MLS Cup)"), {"mls"})
+        self.assertEqual(_sports_league("Los Angeles Kings (Stanley Cup)"), {"nhl"})
+
+    def test_no_league(self):
+        self.assertEqual(_sports_league("Will it rain tomorrow?"), set())
+
+    def test_legislative_seat(self):
+        self.assertEqual(_legislative_scope("Will the Republican Party win the IN-01 House seat?"), "seat")
+
+    def test_legislative_chamber(self):
+        self.assertEqual(_legislative_scope("Which party will win the U.S. House?"), "chamber")
+
+    def test_legislative_none(self):
+        self.assertIsNone(_legislative_scope("Who wins the presidency?"))
 
 
 if __name__ == "__main__":
