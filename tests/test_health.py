@@ -1,6 +1,9 @@
 """Tests for the read-only production health summary (health.py)."""
 from __future__ import annotations
 
+import os
+import pathlib
+import tempfile
 import unittest
 
 import health
@@ -206,6 +209,45 @@ class FormatHealth(unittest.TestCase):
         s = health.summarize_log(["[alerter] scan done in 800s — 100 survivable arb(s)"])
         out = health.format_health(s, 0, None)
         self.assertIn("verifier idle", out)
+
+
+class BuildReport(unittest.TestCase):
+    """The public (text, overall_ok) entry composed by ops.py + the CLI (#119)."""
+
+    def _log(self, lines):
+        fd, path = tempfile.mkstemp(suffix=".log")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        self.addCleanup(lambda: os.path.exists(path) and os.remove(path))
+        return path
+
+    def test_healthy_log_reports_ok(self):
+        path = self._log([
+            "[alerter] AI verify: mode=enforce, key=present, 15 checked, 15 confirmed, 0 flagged",
+            "[alerter] EMAILED ['a@b.com']: [Pred-Arb] 15 arbs >3% net (15 pairs)",
+            "[alerter] scan done in 800s — 100 survivable arb(s)",
+        ])
+        text, ok = health.build_report(path)
+        self.assertIsInstance(text, str)
+        self.assertTrue(ok)
+        self.assertIn("STATUS: OK", text)
+
+    def test_key_absent_log_reports_degraded(self):
+        path = self._log([
+            "[alerter] AI verify: mode=enforce, key=ABSENT — verification SKIPPED (12 pairs kept as-is)",
+            "[alerter] EMAILED ['a@b.com']: [Pred-Arb] 12 arbs (12 pairs)",
+        ])
+        text, ok = health.build_report(path)
+        self.assertFalse(ok)
+        self.assertIn("key not resolving", text)
+
+    def test_verdicts_info_missing_file_is_failsafe(self):
+        orig = health._VERDICTS
+        health._VERDICTS = pathlib.Path(tempfile.gettempdir()) / "definitely-not-here-xyz.jsonl"
+        try:
+            self.assertEqual(health._verdicts_info(), (0, None))
+        finally:
+            health._VERDICTS = orig
 
 
 if __name__ == "__main__":
