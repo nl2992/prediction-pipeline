@@ -187,7 +187,11 @@ def _verdicts_info() -> tuple[int, str | None]:
         import datetime
         with _VERDICTS.open(encoding="utf-8", errors="replace") as f:
             n = sum(1 for _ in f)
-        mtime = datetime.datetime.fromtimestamp(_VERDICTS.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+        # UTC to match every other timestamp in the report (scans/heartbeats are
+        # UTC); a bare fromtimestamp() would show local time and mislead (#136).
+        mtime = datetime.datetime.fromtimestamp(
+            _VERDICTS.stat().st_mtime, tz=datetime.timezone.utc
+        ).strftime("%Y-%m-%d %H:%M:%S UTC")
         return n, mtime
     except Exception:
         return 0, None

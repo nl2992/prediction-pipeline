@@ -276,6 +276,19 @@ class BuildReport(unittest.TestCase):
         self.assertEqual(n, 3)
         self.assertIsNotNone(mtime)
 
+    def test_verdicts_info_mtime_is_utc_labelled(self):
+        # Consistent with the rest of the (UTC) report (#136).
+        vfile = pathlib.Path(tempfile.mkdtemp()) / "ai_verify.jsonl"
+        vfile.write_text('{"a":1}\n', encoding="utf-8")
+        orig = health._VERDICTS
+        health._VERDICTS = vfile
+        try:
+            n, mtime = health._verdicts_info()
+        finally:
+            health._VERDICTS = orig
+        self.assertEqual(n, 1)
+        self.assertTrue(mtime.endswith(" UTC"), mtime)
+
     def test_verdicts_info_missing_file_is_failsafe(self):
         orig = health._VERDICTS
         health._VERDICTS = pathlib.Path(tempfile.gettempdir()) / "definitely-not-here-xyz.jsonl"
