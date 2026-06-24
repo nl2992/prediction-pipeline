@@ -185,7 +185,8 @@ def format_health(s: dict, verdicts_count: int, verdicts_mtime: str | None) -> s
 def _verdicts_info() -> tuple[int, str | None]:
     try:
         import datetime
-        n = sum(1 for _ in _VERDICTS.open(encoding="utf-8", errors="replace"))
+        with _VERDICTS.open(encoding="utf-8", errors="replace") as f:
+            n = sum(1 for _ in f)
         mtime = datetime.datetime.fromtimestamp(_VERDICTS.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
         return n, mtime
     except Exception:

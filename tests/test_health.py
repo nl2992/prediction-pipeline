@@ -260,6 +260,22 @@ class BuildReport(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIn("log freshness", text)
 
+    def test_verdicts_info_counts_rows_without_leaking_handle(self):
+        # _verdicts_info must close the file it reads (#134).
+        import warnings
+        vfile = pathlib.Path(tempfile.mkdtemp()) / "ai_verify.jsonl"
+        vfile.write_text('{"a":1}\n{"a":2}\n{"a":3}\n', encoding="utf-8")
+        orig = health._VERDICTS
+        health._VERDICTS = vfile
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", ResourceWarning)
+                n, mtime = health._verdicts_info()
+        finally:
+            health._VERDICTS = orig
+        self.assertEqual(n, 3)
+        self.assertIsNotNone(mtime)
+
     def test_verdicts_info_missing_file_is_failsafe(self):
         orig = health._VERDICTS
         health._VERDICTS = pathlib.Path(tempfile.gettempdir()) / "definitely-not-here-xyz.jsonl"
