@@ -46,6 +46,23 @@ class LoadSignals(unittest.TestCase):
             p.unlink()
 
 
+class RunScan(unittest.TestCase):
+    """Scan wrapper behind /api/scan: graceful error + count/arb_count shaping (#132)."""
+
+    def test_discover_error_returns_graceful_shape(self):
+        with patch("discover.discover", side_effect=RuntimeError("boom")):
+            r = server._run_scan()
+        self.assertEqual(r, {"error": "boom", "pairs": [], "elapsed": 0})
+
+    def test_success_shapes_count_and_arb_count(self):
+        pairs = [{"arb_net_profit": 0.05}, {"arb_net_profit": 0.0}, {"arb_net_profit": 0.02}]
+        with patch("discover.discover", return_value=pairs):
+            r = server._run_scan()
+        self.assertEqual(r["count"], 3)
+        self.assertEqual(r["arb_count"], 2)   # only the two with positive net profit
+        self.assertIn("scanned_at", r)
+
+
 class ApiStatus(unittest.TestCase):
     """The connectivity check must never crash — a venue down is reported as an
     error string, not an exception (#131). Clients are imported inside the
