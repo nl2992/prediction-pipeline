@@ -132,6 +132,11 @@ def load_config() -> dict:
         cfg["recipients"] = [a.strip() for a in env["ALERT_RECIPIENTS"].split(",") if a.strip()]
     cfg.setdefault("recipients", DEFAULT_RECIPIENTS)
     cfg.setdefault("from_addr", cfg.get("smtp_user", ""))
+    # A JSON config that sets recipients to a bare string ("a@b.com") would make
+    # ", ".join(...) split it into characters and corrupt the To header. Coerce a
+    # string to a list (comma-split), matching the ALERT_RECIPIENTS env path (#121).
+    if isinstance(cfg.get("recipients"), str):
+        cfg["recipients"] = [a.strip() for a in cfg["recipients"].split(",") if a.strip()]
     return cfg
 
 

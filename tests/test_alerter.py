@@ -714,6 +714,32 @@ class EmailBody(unittest.TestCase):
         self.assertNotIn("AI check", html)
 
 
+class LoadConfigRecipients(unittest.TestCase):
+    """A string recipients value must be coerced to a list so the To header is
+    not split into characters (#121)."""
+
+    def _cfg_file(self, payload):
+        import json, tempfile, pathlib
+        p = pathlib.Path(tempfile.mkdtemp()) / "alert_config.json"
+        p.write_text(json.dumps(payload), encoding="utf-8")
+        return p
+
+    def test_string_recipients_coerced_to_list(self):
+        import os, alerter
+        with patch.object(alerter, "CONFIG_FILE",
+                          self._cfg_file({"recipients": "a@b.com", "smtp_user": "u", "smtp_pass": "x"})), \
+             patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("ALERT_RECIPIENTS", None)
+            self.assertEqual(alerter.load_config()["recipients"], ["a@b.com"])
+
+    def test_list_recipients_unchanged(self):
+        import os, alerter
+        with patch.object(alerter, "CONFIG_FILE",
+                          self._cfg_file({"recipients": ["a@b.com", "c@d.com"], "smtp_user": "u", "smtp_pass": "x"})):
+            os.environ.pop("ALERT_RECIPIENTS", None)
+            self.assertEqual(alerter.load_config()["recipients"], ["a@b.com", "c@d.com"])
+
+
 class EmailRenderHelpers(unittest.TestCase):
     """_esc (#52) and _link (#51) were bug fixes; _kalshi_url builds links (#107)."""
 
