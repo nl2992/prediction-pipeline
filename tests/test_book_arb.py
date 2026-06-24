@@ -8,7 +8,7 @@ from __future__ import annotations
 import unittest
 
 from pipeline import OrderBook, PriceLevel
-from book_arb import build_buy_ladder, executable_arb, cumulative_curve
+from book_arb import build_buy_ladder, executable_arb, cumulative_curve, _fill
 
 
 def ob(bids, asks):
@@ -85,6 +85,35 @@ class CumulativeCurve(unittest.TestCase):
         legA = build_buy_ladder(empty, "yes")
         legB = build_buy_ladder(self.kalshi, "no")
         self.assertEqual(cumulative_curve(legA, legB, "B"), [])
+
+
+class Fill(unittest.TestCase):
+    """Depth-walk fill simulator: numbers are hand-computed (fee(0.5)=0.0175,
+    so single-rung pair profit = 1-0.40-0.50-0.0175 = 0.0825) (#110)."""
+
+    def test_single_rung(self):
+        f = _fill([(0.40, 100.0)], [(0.50, 100.0)], "B", None)
+        self.assertEqual(f.contracts, 100.0)
+        self.assertAlmostEqual(f.profit, 8.25)
+        self.assertAlmostEqual(f.vwap_a, 0.40)
+        self.assertAlmostEqual(f.vwap_b, 0.50)
+
+    def test_budget_caps_contracts(self):
+        # budget 20 on the 0.50 leg -> 40 contracts (20/0.50).
+        f = _fill([(0.40, 100.0)], [(0.50, 100.0)], "B", 20.0)
+        self.assertEqual(f.contracts, 40.0)
+        self.assertAlmostEqual(f.profit, 3.3)
+
+    def test_stops_at_unprofitable_rung(self):
+        # Rung 2 (0.49) makes the pair unprofitable, so only rung 1 fills.
+        f = _fill([(0.40, 50.0), (0.49, 50.0)], [(0.50, 100.0)], "B", None)
+        self.assertEqual(f.contracts, 50.0)
+        self.assertAlmostEqual(f.profit, 4.125)
+
+    def test_zero_when_no_profitable_overlap(self):
+        f = _fill([(0.60, 100.0)], [(0.50, 100.0)], "B", None)
+        self.assertEqual(f.contracts, 0.0)
+        self.assertEqual(f.profit, 0.0)
 
 
 if __name__ == "__main__":
