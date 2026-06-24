@@ -108,5 +108,19 @@ class SearchMarketsPagination(unittest.TestCase):
         self.assertEqual(sorted(m["conditionId"] for m in out), ["1", "3"])
 
 
+class IsAuthenticated(unittest.TestCase):
+    """Signed-request gate: needs api_key AND api_secret AND api_passphrase (#116)."""
+
+    def test_no_creds(self):
+        self.assertFalse(PolymarketClient()._is_authenticated)
+
+    def test_partial_creds(self):
+        self.assertFalse(PolymarketClient(api_key="a", api_secret="b")._is_authenticated)
+
+    def test_full_creds(self):
+        self.assertTrue(
+            PolymarketClient(api_key="a", api_secret="b", api_passphrase="c")._is_authenticated)
+
+
 if __name__ == "__main__":
     unittest.main()

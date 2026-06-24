@@ -133,6 +133,17 @@ class Pagination(unittest.TestCase):
         self.assertEqual([m["ticker"] for m in out], ["a", "b", "d"])
 
 
+class IsAuthenticated(unittest.TestCase):
+    """Signed-request gate: partial creds must NOT authenticate (#116)."""
+
+    def test_no_creds(self):
+        self.assertFalse(KalshiClient(api_key=None, private_key_path=None)._is_authenticated)
+
+    def test_partial_creds(self):
+        # api_key but no private key -> still not authenticated.
+        self.assertFalse(KalshiClient(api_key="x", private_key_path=None)._is_authenticated)
+
+
 class ParseTopOfBook(unittest.TestCase):
     """Raw market dict -> normalised top-of-book; 0.0/malformed/missing -> None (#115)."""
 
