@@ -133,5 +133,33 @@ class Pagination(unittest.TestCase):
         self.assertEqual([m["ticker"] for m in out], ["a", "b", "d"])
 
 
+class ParseTopOfBook(unittest.TestCase):
+    """Raw market dict -> normalised top-of-book; 0.0/malformed/missing -> None (#115)."""
+
+    def test_full_market_parsed(self):
+        m = {
+            "ticker": "KXFOO-T1", "event_ticker": "KXFOO", "title": "Foo?", "status": "active",
+            "yes_bid_dollars": "0.59", "yes_ask_dollars": "0.62",
+            "no_bid_dollars": "0.38", "no_ask_dollars": "0.41",
+            "last_price_dollars": "0.60", "volume_24h_fp": "1234",
+            "close_time": "2026-12-31T00:00:00Z",
+        }
+        r = KalshiClient.parse_top_of_book(m)
+        self.assertAlmostEqual(r["yes_bid"], 0.59)
+        self.assertAlmostEqual(r["no_ask"], 0.41)
+        self.assertAlmostEqual(r["volume_24h"], 1234.0)
+        self.assertEqual(r["ticker"], "KXFOO-T1")
+        self.assertEqual(r["event_ticker"], "KXFOO")
+        self.assertEqual(r["status"], "active")
+        self.assertEqual(r["close_time"], "2026-12-31T00:00:00Z")
+
+    def test_zero_malformed_missing_become_none(self):
+        r = KalshiClient.parse_top_of_book(
+            {"ticker": "X", "yes_bid_dollars": "0.0", "yes_ask_dollars": "bad"})
+        self.assertIsNone(r["yes_bid"])   # 0.0 = no resting order
+        self.assertIsNone(r["yes_ask"])   # malformed
+        self.assertIsNone(r["no_bid"])    # missing
+
+
 if __name__ == "__main__":
     unittest.main()
