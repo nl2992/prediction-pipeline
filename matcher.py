@@ -437,7 +437,9 @@ def _numeric_threshold(text: str) -> tuple[str, float, str] | None:
     elif re.search(
         r"\b(above|over|reach|reaches|hit|hits|exceed|exceeds|at least|greater than|more than|or above|"
         r"top|tops|topping|surpass|surpasses|surpassing|breach|breaches|cross|crosses)\b", low
-    ):
+    ) or re.search(r"\b\d+\s*\+", low):
+        # A bare trailing "+" ("85+ wins") is itself an at-least cue, so the
+        # plus-suffixed count form below is reachable.
         direction = "up"
     else:
         return None

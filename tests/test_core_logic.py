@@ -736,6 +736,17 @@ class CoreLogicTests(unittest.TestCase):
         # A bare count with no count-noun context is not a threshold.
         self.assertIsNone(_numeric_threshold("more than 84.5 by 2026"))
 
+    def test_plus_suffix_count_form_is_reachable(self) -> None:
+        # "85+ wins" — a bare trailing "+" is an at-least cue, so the plus-form
+        # count branch fires and matches "more than 84.5 games" (#99).
+        self.assertEqual(_numeric_threshold("Will they win 85+ games?"), ("up", 85.0, "count"))
+        self.assertTrue(_threshold_equal(
+            _numeric_threshold("Will they win 85+ games?"),
+            _numeric_threshold("win more than 84.5 games"),
+        ))
+        # No direction cue and no "+" -> still not a threshold.
+        self.assertIsNone(_numeric_threshold("Will they win 85 games?"))
+
     def test_win_total_matches_correct_rung_only(self) -> None:
         poly = titled_snap("polymarket", "poly-wt",
                            "Will the Toronto Blue Jays win more than 84.5 games in the 2026 MLB Regular Season?",
