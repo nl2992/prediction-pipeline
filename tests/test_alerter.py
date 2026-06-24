@@ -6,7 +6,10 @@ import time
 import unittest
 from unittest.mock import patch
 
-from alerter import build_email, compute_signals, filter_new, signals_to_send, _exec_block, _settle_horizon
+from alerter import (
+    build_email, compute_signals, filter_new, signals_to_send, _exec_block, _settle_horizon,
+    _esc, _link, _kalshi_url,
+)
 
 
 def pair(pb, pa, kb, ka, **extra):
@@ -709,6 +712,41 @@ class EmailBody(unittest.TestCase):
     def test_exec_block_omits_ai_row_when_unchecked(self) -> None:
         html, _p, _c = _exec_block(self._book_sig())  # no ai_same -> no key, graceful
         self.assertNotIn("AI check", html)
+
+
+class EmailRenderHelpers(unittest.TestCase):
+    """_esc (#52) and _link (#51) were bug fixes; _kalshi_url builds links (#107)."""
+
+    def test_esc_escapes_markup(self):
+        self.assertEqual(_esc("A & B <c>"), "A &amp; B &lt;c&gt;")
+
+    def test_esc_none_and_non_str(self):
+        self.assertEqual(_esc(None), "")
+        self.assertEqual(_esc(42), "42")
+
+    def test_link_renders_anchor_when_url_present(self):
+        self.assertEqual(_link("http://x", "lbl"), '<a href="http://x">lbl</a>')
+
+    def test_link_unavailable_for_missing_or_empty_url(self):
+        for url in (None, ""):
+            out = _link(url, "lbl")
+            self.assertIn("(link unavailable)", out)
+            self.assertNotIn("<a href", out)
+
+    def test_kalshi_url_full(self):
+        url = _kalshi_url({
+            "kalshi_series_ticker": "KXFOO",
+            "kalshi_event_title": "Will X Win?",
+            "kalshi_ticker": "KXFOO-26-A",
+        })
+        self.assertEqual(url, "https://kalshi.com/markets/kxfoo/will-x-win?ticker=KXFOO-26-A")
+
+    def test_kalshi_url_empty_without_series(self):
+        self.assertEqual(_kalshi_url({}), "")
+
+    def test_kalshi_url_series_from_event_ticker_prefix(self):
+        url = _kalshi_url({"kalshi_event_ticker": "KXBAR-26", "kalshi_title": "Bar Event"})
+        self.assertEqual(url, "https://kalshi.com/markets/kxbar/bar-event")
 
 
 if __name__ == "__main__":
