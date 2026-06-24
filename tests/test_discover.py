@@ -4,7 +4,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 
-from discover import _parse_dt
+from discover import _parse_dt, _is_parlay, _is_parlay_market, _category
 
 
 class ParseDt(unittest.TestCase):
@@ -49,6 +49,57 @@ class ParseDt(unittest.TestCase):
     def test_result_is_always_tz_aware(self):
         for s in ("2027-01-15T12:30:00Z", "2027-01-15T12:30:00", "2027-01-15"):
             self.assertIsNotNone(_parse_dt(s).tzinfo, s)
+
+
+class IsParlayEvent(unittest.TestCase):
+    def test_kxmve_event_prefix(self):
+        self.assertTrue(_is_parlay({"event_ticker": "KXMVE-1", "title": "x"}))
+
+    def test_stats_only_title(self):
+        self.assertTrue(_is_parlay({"event_ticker": "AAA", "title": "What will voter turnout be?"}))
+
+    def test_yes_no_combo_title(self):
+        self.assertTrue(_is_parlay({"event_ticker": "AAA", "title": "yes Chiefs,yes Lakers"}))
+
+    def test_normal_single_event_is_not_parlay(self):
+        self.assertFalse(_is_parlay({"event_ticker": "AAA", "title": "Will the Fed cut rates?"}))
+
+
+class IsParlayMarket(unittest.TestCase):
+    def test_three_or_more_win_legs(self):
+        self.assertTrue(_is_parlay_market(
+            {"title": "Will the Chiefs win the AFC, win the Super Bowl, and win game 1?"}))
+
+    def test_and_will_conjunctive_parlay(self):
+        self.assertTrue(_is_parlay_market(
+            {"title": "Will ACA credits not be extended and will the GOP win the House?"}))
+
+    def test_yes_no_combo_title(self):
+        self.assertTrue(_is_parlay_market({"title": "yes A,no B"}))
+
+    def test_single_leg_market_is_not_parlay(self):
+        self.assertFalse(_is_parlay_market({"title": "Will Trump win the 2028 election?"}))
+
+
+class Category(unittest.TestCase):
+    def test_election(self):
+        self.assertEqual(_category({"title": "Will a Republican win the Senate race in Ohio?"}), "election")
+
+    def test_election_priority_over_sports(self):
+        # "race" / team-name substrings must not pull a Senate event into sports.
+        self.assertEqual(_category({"title": "Who wins the House race in district 3?"}), "election")
+
+    def test_economic(self):
+        self.assertEqual(_category({"title": "Will the Fed cut interest rates in March?"}), "economic")
+
+    def test_political(self):
+        self.assertEqual(_category({"title": "Will SCOTUS overturn the ruling?"}), "political")
+
+    def test_sports(self):
+        self.assertEqual(_category({"title": "Will the Lakers win game 4?"}), "sports")
+
+    def test_pop_fallback(self):
+        self.assertEqual(_category({"title": "Will Taylor Swift release an album?"}), "pop")
 
 
 if __name__ == "__main__":
