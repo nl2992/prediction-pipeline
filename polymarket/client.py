@@ -26,6 +26,7 @@ CLOB_BASE = "https://clob.polymarket.com"
 GAMMA_BASE = "https://gamma-api.polymarket.com"
 
 DEFAULT_TIMEOUT = 15  # seconds
+DEFAULT_MAX_RETRIES = 3  # transient-failure retries for GET (mirrors Kalshi #69)
 
 
 class PolymarketClient:
@@ -71,7 +72,29 @@ class PolymarketClient:
 
     def _get(self, base: str, path: str, params: dict | None = None) -> Any:
         url = f"{base}{path}"
-        resp = self.session.get(url, params=params, timeout=self.timeout)
+        # Retry transient failures (network errors, 429) with exponential backoff,
+        # mirroring the Kalshi client (#69). Only GET is retried; _post stays
+        # single-attempt so an order is never resubmitted (#120).
+        backoff = 5
+        resp = None
+        for attempt in range(DEFAULT_MAX_RETRIES):
+            try:
+                resp = self.session.get(url, params=params, timeout=self.timeout)
+            except requests.RequestException:
+                if attempt == DEFAULT_MAX_RETRIES - 1:
+                    raise
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 60)
+                continue
+            if resp.status_code == 429 and attempt < DEFAULT_MAX_RETRIES - 1:
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 60)
+                continue
+            resp.raise_for_status()
+            return resp.json()
+        # Exhausted retries (last response was 429) — let it raise.
+        if resp is None:
+            raise RuntimeError("Polymarket GET failed before a response was received")
         resp.raise_for_status()
         return resp.json()
 

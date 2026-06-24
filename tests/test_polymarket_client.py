@@ -9,7 +9,9 @@ import base64
 import hashlib
 import hmac
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+
+import requests
 
 from polymarket.client import PolymarketClient
 
@@ -106,6 +108,49 @@ class SearchMarketsPagination(unittest.TestCase):
         c.get_markets = lambda **kw: next(seq, [])
         out = c.search_markets(["alpha"])
         self.assertEqual(sorted(m["conditionId"] for m in out), ["1", "3"])
+
+
+def _resp(status=200, body=None):
+    r = MagicMock()
+    r.status_code = status
+    r.json.return_value = body if body is not None else {"ok": True}
+    if status >= 400:
+        r.raise_for_status.side_effect = requests.HTTPError(f"{status}")
+    else:
+        r.raise_for_status.return_value = None
+    return r
+
+
+class GetRetry(unittest.TestCase):
+    """_get mirrors Kalshi's transient-failure retry (#120)."""
+
+    def _client(self):
+        c = PolymarketClient()
+        c.session = MagicMock()
+        return c
+
+    def test_retries_on_request_exception_then_succeeds(self):
+        c = self._client()
+        c.session.get.side_effect = [requests.ConnectionError("boom"), _resp(200, {"v": 1})]
+        with patch("time.sleep"):
+            out = c._get("https://x", "/p")
+        self.assertEqual(out, {"v": 1})
+        self.assertEqual(c.session.get.call_count, 2)
+
+    def test_retries_on_429_then_succeeds(self):
+        c = self._client()
+        c.session.get.side_effect = [_resp(429), _resp(200, {"v": 2})]
+        with patch("time.sleep"):
+            out = c._get("https://x", "/p")
+        self.assertEqual(out, {"v": 2})
+        self.assertEqual(c.session.get.call_count, 2)
+
+    def test_non_retryable_http_error_raises(self):
+        c = self._client()
+        c.session.get.side_effect = [_resp(404)]
+        with patch("time.sleep"), self.assertRaises(requests.HTTPError):
+            c._get("https://x", "/p")
+        self.assertEqual(c.session.get.call_count, 1)  # 404 is not retried
 
 
 class IsAuthenticated(unittest.TestCase):
