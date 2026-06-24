@@ -73,7 +73,8 @@ def select_pairs(all_true: list[dict], n: int, offset: int) -> list[dict]:
 
 def run(n: int = 20, offset: int = 0, min_sim: float = 0.30,
         max_delta: float = 99999.0) -> dict:
-    data = json.load(open(FIXTURE, encoding="utf-8"))
+    with open(FIXTURE, encoding="utf-8") as _f:
+        data = json.load(_f)
     all_true = [p for p in data["pairs"] if p["ground_truth"]["should_match"]]
     chosen = select_pairs(all_true, n, offset)
 
