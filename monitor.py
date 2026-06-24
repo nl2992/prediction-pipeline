@@ -1013,6 +1013,7 @@ def main() -> None:
 
     scan_count = 0
     total_verified = 0
+    had_error = False
 
     while _running[0]:
         scan_count += 1
@@ -1081,6 +1082,7 @@ def main() -> None:
             total_verified += summary.verified_signals
 
         except Exception as exc:
+            had_error = True
             logger.error("Scan #%d uncaught error: %s", scan_count, exc)
             logger.debug(traceback.format_exc())
 
@@ -1101,6 +1103,10 @@ def main() -> None:
         "Monitor stopped — %d scans completed, %d total verified signals.",
         scan_count, total_verified,
     )
+    # In --once mode, surface a scan failure in the exit code so wrapping
+    # automation/schedulers don't read a caught error as success (mirrors #125).
+    if had_error and args.once:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

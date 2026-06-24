@@ -53,5 +53,28 @@ class VerifyKalshiClob(unittest.TestCase):
         self.assertTrue(ok)
 
 
+class MainExitCode(unittest.TestCase):
+    """--once must surface a scan failure in the exit code (#127)."""
+
+    def test_once_scan_error_exits_nonzero(self):
+        import monitor
+        with patch("sys.argv", ["monitor", "--once"]), \
+             patch("monitor._setup_logging"), \
+             patch("monitor.run_one_scan", side_effect=RuntimeError("boom")):
+            with self.assertRaises(SystemExit) as cm:
+                monitor.main()
+        self.assertEqual(cm.exception.code, 1)
+
+    def test_once_success_exits_zero(self):
+        import monitor
+        from types import SimpleNamespace
+        ok_summary = SimpleNamespace(signals=[], verified_signals=0)
+        with patch("sys.argv", ["monitor", "--once"]), \
+             patch("monitor._setup_logging"), \
+             patch("monitor.print_scan_summary"), \
+             patch("monitor.run_one_scan", return_value=ok_summary):
+            monitor.main()  # no SystemExit -> clean exit 0
+
+
 if __name__ == "__main__":
     unittest.main()
