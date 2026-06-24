@@ -243,8 +243,14 @@ def _derive_keywords(title: str) -> list[str]:
     """
     keywords: list[str] = []
 
+    # Strip the leading question word ("Will", "Who will", ...) before proper-noun
+    # extraction so it isn't captured as part of a name pair — e.g. "Will Donald
+    # Trump win ..." must yield "Donald Trump", not "Will Donald", which would
+    # weaken the cross-venue search query.
+    proper_src = _QUESTION_PREFIX.sub("", title)
+
     # 1. Proper noun pairs — most specific signal
-    for m in _PROPER_PAIR_RE.finditer(title):
+    for m in _PROPER_PAIR_RE.finditer(proper_src):
         kw = m.group(1)
         # Skip generic two-word phrases
         if not any(skip in kw.lower() for skip in ("which ", "that ", "this ")):

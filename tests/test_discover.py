@@ -4,7 +4,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 
-from discover import _parse_dt, _is_parlay, _is_parlay_market, _category
+from discover import _parse_dt, _is_parlay, _is_parlay_market, _category, _derive_keywords
 
 
 class ParseDt(unittest.TestCase):
@@ -100,6 +100,25 @@ class Category(unittest.TestCase):
 
     def test_pop_fallback(self):
         self.assertEqual(_category({"title": "Will Taylor Swift release an album?"}), "pop")
+
+
+class DeriveKeywords(unittest.TestCase):
+    """Keyword extraction drives the cross-venue search query, so the
+    highest-priority proper-noun branch must not capture the leading question
+    word as part of a name pair (#91)."""
+
+    def test_will_prefix_not_captured_in_name_pair(self):
+        self.assertEqual(_derive_keywords("Will Donald Trump win the 2028 election?"), ["Donald Trump"])
+
+    def test_who_will_prefix_stripped(self):
+        self.assertEqual(_derive_keywords("Who will Joe Biden endorse?"), ["Joe Biden"])
+
+    def test_league_game_branch_unchanged(self):
+        self.assertEqual(_derive_keywords("Will the Lakers win NBA Finals game 4?"), ["NBA game 4"])
+
+    def test_fallback_longest_tokens(self):
+        # No proper pair / league / district -> longest non-stopword tokens.
+        self.assertIn("consumption", _derive_keywords("What is the cheese consumption forecast?"))
 
 
 if __name__ == "__main__":
