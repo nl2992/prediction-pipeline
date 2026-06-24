@@ -46,6 +46,31 @@ class LoadSignals(unittest.TestCase):
             p.unlink()
 
 
+class ApiStatus(unittest.TestCase):
+    """The connectivity check must never crash — a venue down is reported as an
+    error string, not an exception (#131). Clients are imported inside the
+    function, so patch them at their source modules; hermetic, no network."""
+
+    def test_both_venues_down_reports_errors_without_raising(self):
+        from unittest.mock import MagicMock
+        kc = MagicMock(); kc.return_value.get_markets.side_effect = RuntimeError("kdown")
+        pc = MagicMock(); pc.return_value.get_markets.side_effect = RuntimeError("pdown")
+        with patch("kalshi.client.KalshiClient", kc), patch("polymarket.client.PolymarketClient", pc):
+            body = json.loads(server.api_status().body)
+        self.assertIn("error", body["kalshi"])
+        self.assertIn("error", body["polymarket"])
+        self.assertIn("ts", body)
+
+    def test_both_venues_up_reports_ok(self):
+        from unittest.mock import MagicMock
+        kc = MagicMock(); kc.return_value.get_markets.return_value = {"markets": [{"x": 1}]}
+        pc = MagicMock(); pc.return_value.get_markets.return_value = [{"y": 1}]
+        with patch("kalshi.client.KalshiClient", kc), patch("polymarket.client.PolymarketClient", pc):
+            body = json.loads(server.api_status().body)
+        self.assertEqual(body["kalshi"], "ok")
+        self.assertEqual(body["polymarket"], "ok")
+
+
 class ApiSignals(unittest.TestCase):
     """The /api/signals endpoint forwards n and wraps rows as {"signals": [...]}
     (#130). Called directly (no TestClient/httpx dependency)."""
