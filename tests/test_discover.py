@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from discover import (
     _parse_dt, _is_parlay, _is_parlay_market, _category, _derive_keywords,
-    _apply_event_cap, _event_series,
+    _apply_event_cap, _event_series, _p_snap, _p_snap_from_event,
 )
 
 
@@ -157,6 +157,55 @@ class ApplyEventCap(unittest.TestCase):
         filt = [self._ev("KXA", 1), self._ev("KXB", 2), self._ev("KXBILLS", 3), self._ev("KXC", 4)]
         kept = [_event_series(e) for e in _apply_event_cap(filt, 2)]
         self.assertEqual(kept, ["KXA", "KXB", "KXBILLS"])  # KXC dropped, KXBILLS kept
+
+
+class PolymarketSnapshot(unittest.TestCase):
+    """Gamma returns outcomePrices/clobTokenIds as JSON strings; the builders
+    must parse them and apply the documented fallbacks (#93)."""
+
+    def _market(self, **over):
+        m = {
+            "outcomePrices": '["0.42", "0.58"]',
+            "clobTokenIds": '["tok1", "tok2"]',
+            "conditionId": "cond1",
+            "endDate": "2027-01-01T00:00:00Z",
+            "endDateIso": "2099-01-01",
+            "groupItemTitle": "France",
+            "question": "Will France win?",
+            "active": True,
+            "groupSlug": "world-cup",
+            "groupTitle": "World Cup",
+        }
+        m.update(over)
+        return m
+
+    def test_parses_json_string_prices_and_tokens(self):
+        s = _p_snap(self._market(), "t")
+        self.assertAlmostEqual(s.orderbook.bids[0].price, 0.42)
+        self.assertEqual(s.extra["clob_token_ids"], ["tok1", "tok2"])
+
+    def test_close_prefers_endDate_over_endDateIso(self):
+        self.assertEqual(_p_snap(self._market(), "t").close_time, "2027-01-01T00:00:00Z")
+
+    def test_label_fallback_groupItemTitle_then_question(self):
+        self.assertEqual(_p_snap(self._market(), "t").title, "France")
+        m = self._market()
+        del m["groupItemTitle"]
+        self.assertEqual(_p_snap(m, "t").title, "Will France win?")
+
+    def test_malformed_prices_yield_empty_book(self):
+        s = _p_snap(self._market(outcomePrices="not json"), "t")
+        self.assertEqual(s.orderbook.bids, [])
+        self.assertEqual(s.orderbook.asks, [])
+
+    def test_status_from_active_flag(self):
+        self.assertEqual(_p_snap(self._market(active=True), "t").status, "open")
+        self.assertEqual(_p_snap(self._market(active=False), "t").status, "closed")
+
+    def test_from_event_uses_parent_slug_and_title(self):
+        se = _p_snap_from_event(self._market(), "EV TITLE", "ev-slug", "t")
+        self.assertEqual(se.event_id, "ev-slug")
+        self.assertEqual(se.extra["event_title"], "EV TITLE")
 
 
 if __name__ == "__main__":
