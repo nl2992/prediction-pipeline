@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from executor import (
     TradeIntent, TradeResult, ArbExecution, Executor, pre_flight_checks, check_price_still_valid,
+    best_kalshi_bid,
 )
 
 
@@ -308,6 +309,21 @@ class PreflightCombinedEdge(unittest.TestCase):
             go, msgs = pre_flight_checks(a, b, max_position_usd=500, fee_a=0.0, fee_b=0.02)
         self.assertTrue(go, msgs)
         self.assertTrue(any("live combined edge" in m and "OK" in m for m in msgs))
+
+
+class BestKalshiBid(unittest.TestCase):
+    """Highest bid regardless of order; the #61/#62/#63 bug-class guard (#111)."""
+
+    def test_returns_max_regardless_of_order(self):
+        # Neither [0] (0.30) nor [-1] (0.40) is the best — 0.55 is.
+        self.assertEqual(best_kalshi_bid([[0.30, 10], [0.55, 5], [0.40, 8]]), 0.55)
+
+    def test_empty_and_none(self):
+        self.assertIsNone(best_kalshi_bid([]))
+        self.assertIsNone(best_kalshi_bid(None))
+
+    def test_skips_malformed_levels(self):
+        self.assertEqual(best_kalshi_bid([["bad"], [0.50, 1], []]), 0.50)
 
 
 if __name__ == "__main__":
