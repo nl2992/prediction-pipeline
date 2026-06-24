@@ -425,13 +425,15 @@ class MainLoop(unittest.TestCase):
             alerter.main()
         rc.assert_called_once()
 
-    def test_cycle_error_alerts_operator_and_exits(self):
+    def test_cycle_error_alerts_operator_and_exits_nonzero(self):
         import alerter
         with patch("sys.argv", ["alerter", "--once"]), \
              patch("alerter.load_config", return_value=self._cfg), \
              patch("alerter.run_cycle", side_effect=RuntimeError("boom")), \
              patch("alerter._alert_operator") as alert:
-            alerter.main()                       # must not hang or raise
+            with self.assertRaises(SystemExit) as cm:
+                alerter.main()                   # --once cycle error -> exit 1 (#125)
+        self.assertEqual(cm.exception.code, 1)   # surfaced in the scheduler LastResult
         alert.assert_called_once()
         self.assertIn("boom", alert.call_args.args[1])   # reason carries the error
 

@@ -822,6 +822,11 @@ def main() -> None:
         except Exception as exc:
             print(f"[alerter] CYCLE ERROR: {exc}", flush=True)
             _alert_operator(cfg, f"CYCLE ERROR: {exc}")
+            if args.once:
+                # Surface the failure in the process exit code so the scheduled
+                # task's LastResult flags it (a caught error otherwise exited 0,
+                # masking the failure at the scheduler level) (#125).
+                sys.exit(1)
         if args.once:
             break
         time.sleep(args.interval)
