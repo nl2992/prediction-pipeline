@@ -7,6 +7,7 @@ import json
 import os
 import pathlib
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -181,6 +182,35 @@ class Gate(unittest.TestCase):
         with patch("ai_verify.resolve_api_key", return_value="k"), \
              patch("ai_verify.verify_signal", return_value=None):
             self.assertEqual(_ai_verify_gate(sigs, {"ai_verify_mode": "enforce"}), sigs)
+
+
+class DiskCacheHelpers(unittest.TestCase):
+    """Verdict disk-cache key + TTL semantics; manipulates the in-process _disk
+    global so no real cache file is read/written (#112)."""
+
+    def setUp(self):
+        self._orig = ai_verify._disk
+
+    def tearDown(self):
+        ai_verify._disk = self._orig
+
+    def test_disk_key_deterministic_order_sensitive_24char(self):
+        ka = ai_verify._disk_key("A", "B")
+        self.assertEqual(ka, ai_verify._disk_key("A", "B"))      # deterministic
+        self.assertNotEqual(ka, ai_verify._disk_key("B", "A"))   # order-sensitive
+        self.assertEqual(len(ka), 24)
+
+    def test_disk_get_fresh_hit(self):
+        ai_verify._disk = {"k1": {"ts": time.time(), "v": {"same": True}}}
+        self.assertEqual(ai_verify._disk_get("k1"), {"same": True})
+
+    def test_disk_get_expired_returns_none(self):
+        ai_verify._disk = {"old": {"ts": time.time() - 10 * ai_verify._CACHE_TTL_S, "v": {"same": False}}}
+        self.assertIsNone(ai_verify._disk_get("old"))
+
+    def test_disk_get_missing_returns_none(self):
+        ai_verify._disk = {}
+        self.assertIsNone(ai_verify._disk_get("nope"))
 
 
 if __name__ == "__main__":
