@@ -46,6 +46,25 @@ class LoadSignals(unittest.TestCase):
             p.unlink()
 
 
+class ScanEndpoints(unittest.TestCase):
+    """/api/scan vs /api/scan/fast differ in show_prices (full vs catalog-only) (#133)."""
+
+    def test_api_scan_forwards_show_prices_true_and_params(self):
+        with patch("server._run_scan", return_value={}) as m:
+            server.api_scan(category="election", min_sim=0.4, max_events=50, days=30)
+        kw = m.call_args.kwargs
+        self.assertTrue(kw["show_prices"])
+        self.assertEqual((kw["category"], kw["min_sim"], kw["max_events"], kw["days"]),
+                         ("election", 0.4, 50, 30))
+
+    def test_api_scan_fast_forwards_show_prices_false(self):
+        with patch("server._run_scan", return_value={}) as m:
+            server.api_scan_fast(category="sports", max_events=20, days=7)
+        kw = m.call_args.kwargs
+        self.assertFalse(kw["show_prices"])
+        self.assertEqual((kw["category"], kw["max_events"], kw["days"]), ("sports", 20, 7))
+
+
 class RunScan(unittest.TestCase):
     """Scan wrapper behind /api/scan: graceful error + count/arb_count shaping (#132)."""
 
