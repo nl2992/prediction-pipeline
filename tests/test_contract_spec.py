@@ -10,7 +10,10 @@ import json
 import os
 import unittest
 
-from contract_spec import extract_spec, match_spec
+from contract_spec import (
+    extract_spec, match_spec,
+    _bet_type, _num_range, _first_name_collision, _polarity,
+)
 from pipeline import MarketSnapshot, OrderBook, PriceLevel
 
 # Default to the in-repo slimmed fixture so parity ALWAYS runs (never silently
@@ -247,6 +250,71 @@ class SportsBetTypeGate(unittest.TestCase):
         # The single-digit scoreline regex must not classify "2028"/"2026-06" rows.
         self.assertTrue(decide("Will Newsom win the 2028 Democratic nomination?",
                                "Newsom to win 2028 Democratic nomination?").match)
+
+
+class BetType(unittest.TestCase):
+    """Sports contract-type discrimination for the v2 gate (#108)."""
+
+    def test_total(self):
+        self.assertEqual(_bet_type("Sweden 1st Half O/U 0.5"), "total")
+
+    def test_margin_wins_by(self):
+        self.assertEqual(_bet_type("Korea wins by over 2.5 goals"), "margin")
+
+    def test_margin_spread_paren(self):
+        self.assertEqual(_bet_type("DR Congo (-1.5)"), "margin")
+
+    def test_correct_score(self):
+        self.assertEqual(_bet_type("Brazil 2-1 Argentina correct score?"), "correct_score")
+
+    def test_score(self):
+        self.assertEqual(_bet_type("Both Teams to Score?"), "score")
+
+    def test_prop(self):
+        self.assertEqual(_bet_type("Cody Gakpo: 2+ assists"), "prop")
+
+    def test_moneyline(self):
+        self.assertEqual(_bet_type("Will the Lakers win?"), "moneyline")
+
+    def test_none(self):
+        self.assertIsNone(_bet_type("Who will be president?"))
+
+
+class NumRange(unittest.TestCase):
+    def test_small_bucket(self):
+        self.assertEqual(_num_range("GDP growth 2 to 3%"), (2.0, 3.0))
+
+    def test_large_numbers_excluded(self):
+        # "2026-06" is a date, not a range.
+        self.assertIsNone(_num_range("2026-06 outcome"))
+
+
+class FirstNameCollision(unittest.TestCase):
+    """Different-people phantom-arb guard (run 52/54)."""
+
+    def test_same_first_different_surname_is_collision(self):
+        self.assertTrue(_first_name_collision(
+            frozenset({"julian ryerson"}), frozenset({"julian alvarez"})))
+
+    def test_single_token_name_is_not_collision(self):
+        self.assertFalse(_first_name_collision(
+            frozenset({"donald trump"}), frozenset({"trump"})))
+
+    def test_office_descriptor_fragments_excluded(self):
+        self.assertFalse(_first_name_collision(
+            frozenset({"democratic vice"}), frozenset({"democratic vp"})))
+
+    def test_shared_surname_is_same_person(self):
+        self.assertFalse(_first_name_collision(
+            frozenset({"donald trump"}), frozenset({"fred trump"})))
+
+
+class Polarity(unittest.TestCase):
+    def test_negative_cue(self):
+        self.assertTrue(_polarity("Will TikTok be banned?"))
+
+    def test_positive_only_is_false(self):
+        self.assertFalse(_polarity("Will TikTok stay legal?"))
 
 
 if __name__ == "__main__":
