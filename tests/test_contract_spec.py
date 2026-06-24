@@ -13,6 +13,7 @@ import unittest
 from contract_spec import (
     extract_spec, match_spec,
     _bet_type, _num_range, _first_name_collision, _polarity,
+    _corporate_event, _beat_order,
 )
 from pipeline import MarketSnapshot, OrderBook, PriceLevel
 
@@ -315,6 +316,35 @@ class Polarity(unittest.TestCase):
 
     def test_positive_only_is_false(self):
         self.assertFalse(_polarity("Will TikTok stay legal?"))
+
+
+class CorporateEvent(unittest.TestCase):
+    """Mutually-exclusive terminal states (#28/#30)."""
+
+    def test_ipo(self):
+        self.assertEqual(_corporate_event("Will OpenAI IPO in 2026?"), "ipo")
+
+    def test_acquisition(self):
+        self.assertEqual(_corporate_event("Will Figma be acquired by Adobe?"), "acquisition")
+
+    def test_bankruptcy(self):
+        self.assertEqual(_corporate_event("Will WeWork file for bankruptcy?"), "bankruptcy")
+
+    def test_none(self):
+        self.assertIsNone(_corporate_event("Who wins the election?"))
+
+
+class BeatOrder(unittest.TestCase):
+    """Directional: 'A beat B' != 'B beat A'."""
+
+    def test_a_beats_b(self):
+        self.assertEqual(_beat_order("Will Lakers beat Celtics?"), ("lakers", "celtics"))
+
+    def test_b_beats_a_is_reversed(self):
+        self.assertEqual(_beat_order("Will Celtics defeat Lakers?"), ("celtics", "lakers"))
+
+    def test_none_without_beat_framing(self):
+        self.assertIsNone(_beat_order("Who wins the game?"))
 
 
 if __name__ == "__main__":
