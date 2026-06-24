@@ -411,7 +411,9 @@ def _ai_verify_gate(to_email: list[dict], cfg: dict) -> list[dict]:
     # Key lives ONLY in the DEEPSEEK_API_KEY env var (never in the repo/config).
     # resolve_api_key adds a Windows registry fallback because the scheduled task's
     # fresh processes don't inherit a setx'd User env var into os.environ (#8).
-    mode = cfg.get("ai_verify_mode", "shadow")
+    # Normalise so "Enforce"/" ENFORCE " honour the operator's intent rather than
+    # silently running in shadow on an exact-match miss (#124).
+    mode = str(cfg.get("ai_verify_mode", "shadow")).strip().lower()
     try:
         from ai_verify import verify_signal, resolve_api_key
     except Exception:

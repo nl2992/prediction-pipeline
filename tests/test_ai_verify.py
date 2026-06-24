@@ -164,6 +164,18 @@ class Gate(unittest.TestCase):
         self.assertEqual([s["poly_title"] for s in enforced], ["REAL"])     # phantom dropped
         self.assertEqual(len(shadow), 2)                                     # shadow keeps both
 
+    def test_enforce_mode_is_case_and_whitespace_insensitive(self):
+        # "  ENFORCE  " must enforce, not silently fall back to shadow (#124).
+        from alerter import _ai_verify_gate
+        sigs = [self._sig("REAL"), self._sig("PHANTOM")]
+        def fake_verify(s, key, **kw):
+            return {"same": s["poly_title"] == "REAL", "poly_settlement": None,
+                    "kalshi_settlement": None, "reason": "r"}
+        with patch("ai_verify.resolve_api_key", return_value="k"), \
+             patch("ai_verify.verify_signal", side_effect=fake_verify):
+            enforced = _ai_verify_gate(sigs, {"ai_verify_mode": "  ENFORCE  "})
+        self.assertEqual([s["poly_title"] for s in enforced], ["REAL"])     # phantom dropped
+
     def test_enforce_mass_drop_keeps_all(self):
         # If the AI would drop > 60% of the cycle (API/prompt anomaly), enforce
         # must fail-open and keep ALL rather than send a near-empty email (issue #1).
