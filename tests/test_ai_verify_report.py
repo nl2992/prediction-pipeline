@@ -140,5 +140,22 @@ class FormatReport(unittest.TestCase):
         self.assertIn("diff windows", out)
 
 
+class DigestHelpers(unittest.TestCase):
+    """QA-digest helpers (#118)."""
+
+    def test_hours_since_value_missing_bad(self):
+        self.assertAlmostEqual(r._hours_since("2026-06-22T06:00:00Z", _NOW), 6.0)
+        self.assertIsNone(r._hours_since("", _NOW))
+        self.assertIsNone(r._hours_since("zz", _NOW))
+
+    def test_pair_value_and_defaults(self):
+        self.assertEqual(r._pair({"poly": "Trump 2028", "kalshi": "KXPRES"}), ("Trump 2028", "KXPRES"))
+        self.assertEqual(r._pair({}), ("", ""))
+
+    def test_is_test_sentinel_vs_real(self):
+        self.assertTrue(r._is_test(("PHANTOM", "x")))
+        self.assertFalse(r._is_test(("Trump 2028", "KXPRES")))
+
+
 if __name__ == "__main__":
     unittest.main()
