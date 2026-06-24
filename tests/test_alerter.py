@@ -739,6 +739,23 @@ class LoadConfigRecipients(unittest.TestCase):
             os.environ.pop("ALERT_RECIPIENTS", None)
             self.assertEqual(alerter.load_config()["recipients"], ["a@b.com", "c@d.com"])
 
+    def test_string_min_net_email_coerced_to_float(self):
+        import alerter
+        with patch.object(alerter, "CONFIG_FILE", self._cfg_file({"min_net_email": "0.03"})):
+            v = alerter.load_config()["min_net_email"]
+            self.assertIsInstance(v, float)
+            self.assertAlmostEqual(v, 0.03)
+
+    def test_non_numeric_min_net_email_falls_back_to_default(self):
+        import alerter
+        with patch.object(alerter, "CONFIG_FILE", self._cfg_file({"min_net_email": "abc"})):
+            self.assertAlmostEqual(alerter.load_config()["min_net_email"], alerter.MIN_NET_EMAIL)
+
+    def test_numeric_min_net_email_unchanged(self):
+        import alerter
+        with patch.object(alerter, "CONFIG_FILE", self._cfg_file({"min_net_email": 0.05})):
+            self.assertAlmostEqual(alerter.load_config()["min_net_email"], 0.05)
+
 
 class EmailRenderHelpers(unittest.TestCase):
     """_esc (#52) and _link (#51) were bug fixes; _kalshi_url builds links (#107)."""

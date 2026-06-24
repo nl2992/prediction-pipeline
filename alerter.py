@@ -137,6 +137,16 @@ def load_config() -> dict:
     # string to a list (comma-split), matching the ALERT_RECIPIENTS env path (#121).
     if isinstance(cfg.get("recipients"), str):
         cfg["recipients"] = [a.strip() for a in cfg["recipients"].split(",") if a.strip()]
+    # min_net_email feeds a float comparison (net_accurate >= min_net); a JSON
+    # string ("0.03") would raise TypeError and crash the cycle. Coerce to float,
+    # falling back to the default on a non-numeric value (#122).
+    if "min_net_email" in cfg:
+        try:
+            cfg["min_net_email"] = float(cfg["min_net_email"])
+        except (TypeError, ValueError):
+            print(f"[alerter] WARNING: min_net_email={cfg['min_net_email']!r} not numeric; "
+                  f"using default {MIN_NET_EMAIL}")
+            cfg["min_net_email"] = MIN_NET_EMAIL
     return cfg
 
 
