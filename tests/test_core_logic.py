@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import MagicMock, patch
 
-from arb import find_arb, kalshi_taker_fee, _complement_book
+from arb import find_arb, kalshi_taker_fee, _complement_book, _min_size
 from discover import _match_outcomes_within_group, _parse_dt as discover_parse_dt
 from discover import (
     discover, _is_parlay_market, _apply_event_cap, _event_series as _es, _normalise_tokens,
@@ -1687,6 +1687,20 @@ class TotalsVsMoneylineVeto(unittest.TestCase):
         # Run 16: baseball stats (total bases / runs) added to the prop lexicon.
         self.assertFalse(self._c("Pete Crow-Armstrong", "Pete Crow-Armstrong: 3+ total bases?"))
         self.assertFalse(self._c("Fernando Tatis Jr.", "Fernando Tatis Jr.: 5+ total bases?"))
+
+
+class MinSize(unittest.TestCase):
+    """None-aware leg-depth combiner used by find_arb (#113)."""
+
+    def test_both_none(self):
+        self.assertIsNone(_min_size(None, None))
+
+    def test_one_none_returns_other(self):
+        self.assertEqual(_min_size(None, 5.0), 5.0)
+        self.assertEqual(_min_size(5.0, None), 5.0)
+
+    def test_returns_min(self):
+        self.assertEqual(_min_size(3.0, 7.0), 3.0)
 
 
 if __name__ == "__main__":

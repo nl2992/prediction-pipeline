@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import unittest
 
-from arb_charts import executable_summary, make_arb_chart
+from arb_charts import executable_summary, make_arb_chart, _level
 
 
 def signal_with_books():
@@ -72,6 +72,17 @@ class MakeChart(unittest.TestCase):
 
     def test_returns_none_without_books(self):
         self.assertIsNone(make_arb_chart({"direction": "x"}))
+
+
+class Level(unittest.TestCase):
+    def test_basic_price_size(self):
+        lv = _level([0.4, 100])
+        self.assertEqual((lv.price, lv.size), (0.4, 100))
+
+    def test_tolerates_extra_trailing_fields(self):
+        # Some multi-outcome books append an order count; take the first two.
+        lv = _level([0.4, 100, 7])
+        self.assertEqual((lv.price, lv.size), (0.4, 100))
 
 
 if __name__ == "__main__":
