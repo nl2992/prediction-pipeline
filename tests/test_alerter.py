@@ -777,6 +777,32 @@ class LoadConfigRecipients(unittest.TestCase):
             self.assertEqual(alerter.load_config()["smtp_port"], 2525)
 
 
+class RotateCronLog(unittest.TestCase):
+    """The unbounded cron log is capped to its tail when oversized (#128)."""
+
+    def _file(self, text):
+        import tempfile, pathlib
+        p = pathlib.Path(tempfile.mkdtemp()) / "cron.log"
+        p.write_text(text, encoding="utf-8")
+        return p
+
+    def test_small_file_untouched(self):
+        import alerter
+        p = self._file("a\nb\nc\n")
+        alerter._rotate_cron_log(p, max_bytes=1_000, keep_lines=2)
+        self.assertEqual(p.read_text(encoding="utf-8"), "a\nb\nc\n")
+
+    def test_oversized_file_keeps_tail(self):
+        import alerter
+        p = self._file("\n".join(str(i) for i in range(100)) + "\n")
+        alerter._rotate_cron_log(p, max_bytes=10, keep_lines=3)
+        self.assertEqual(p.read_text(encoding="utf-8").strip().split("\n"), ["97", "98", "99"])
+
+    def test_missing_file_is_noop(self):
+        import alerter, tempfile, pathlib
+        alerter._rotate_cron_log(pathlib.Path(tempfile.mkdtemp()) / "nope.log")  # must not raise
+
+
 class EmailRenderHelpers(unittest.TestCase):
     """_esc (#52) and _link (#51) were bug fixes; _kalshi_url builds links (#107)."""
 

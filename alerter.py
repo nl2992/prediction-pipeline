@@ -63,10 +63,23 @@ SIGNALS_FILE = BASE / "alert_signals.jsonl"
 DEFAULT_RECIPIENTS = ["hyutong88@gmail.com", "nl2992@columbia.edu"]
 FLAT_FEE = 0.07
 
+def _rotate_cron_log(path, max_bytes: int = 5_000_000, keep_lines: int = 20_000) -> None:
+    """Cap the unbounded cron log: when it exceeds ``max_bytes``, keep only the last
+    ``keep_lines``. Safe to call only before the append handle is opened (the file
+    is rewritten in place). Best-effort — a failure must never block logging (#128)."""
+    try:
+        if path.exists() and path.stat().st_size > max_bytes:
+            tail = path.read_text(encoding="utf-8", errors="replace").splitlines()[-keep_lines:]
+            path.write_text("\n".join(tail) + "\n", encoding="utf-8")
+    except Exception:
+        pass
+
+
 # When launched headless (Windows Task Scheduler via pythonw.exe), there is no
 # console: sys.stdout/sys.stderr are None and every print() would raise. Redirect
 # both to a rolling log file so scheduled runs are silent yet still auditable.
 if sys.stdout is None or sys.stderr is None:
+    _rotate_cron_log(BASE / "alerter_cron.log")  # cap before opening for append
     _cron_log = open(BASE / "alerter_cron.log", "a", encoding="utf-8", buffering=1)
     if sys.stdout is None:
         sys.stdout = _cron_log
