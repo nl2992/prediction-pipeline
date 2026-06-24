@@ -87,8 +87,9 @@ python health.py || notify-someone   # usable as a watchdog
 Parses the tail of `alerter_cron.log` + `ai_verify.jsonl`: last scan, last email and
 scans-since (vs the realert window), the verifier heartbeat (with a silent-no-op
 check), recent `CYCLE ERROR`, and verdict-log freshness. **DEGRADED** only on real
-faults — verifier `key=ABSENT`, emails-without-heartbeat, a recent cycle error, or
-no scan seen at all; normal quiet periods stay OK.
+faults — verifier `key=ABSENT`, emails-without-heartbeat, a recent cycle error,
+no scan seen at all, or a **stale cron log** (mtime > 2h ⇒ the scheduled task is
+likely not firing — content checks alone can't see this); normal quiet periods stay OK.
 
 ### `ai_verify_report.py` — verdict-log digest (matcher QA)
 
@@ -131,5 +132,10 @@ issues?). Exits 0 when healthy / 1 when degraded, so it works as a watchdog too.
 - A `CYCLE ERROR` (uncaught exception in a scan cycle) is logged **and** emails a
   degradation alert to the operator, with a 1-hour cooldown so repeated faults
   don't spam. The alert path is best-effort and never raises.
+- **Exit code:** in `--once` mode a cycle error exits **1** (after alerting), so the
+  scheduled task's `LastResult` flags the failure — not just the alert email + health
+  check. A clean cycle exits 0. (`monitor.py --once` behaves the same for scans.)
 - The verifier fails **open**: any API/parse error returns no opinion and the pair
   is kept, so a flaky DeepSeek never drops a real arb or blocks an email.
+- **Log size:** `alerter_cron.log` self-rotates — once it passes ~5 MB the headless
+  bootstrap keeps the last ~20k lines, so the unbounded log can't fill the disk.
