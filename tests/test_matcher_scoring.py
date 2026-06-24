@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import unittest
 
-from matcher import _confidence, _close_delta_hours
+from matcher import _confidence, _close_delta_hours, _settlement_type, _monetary_direction
 
 
 class Confidence(unittest.TestCase):
@@ -42,6 +42,44 @@ class CloseDeltaHours(unittest.TestCase):
     def test_none_when_either_missing_or_unparseable(self):
         self.assertIsNone(_close_delta_hours(None, "2027-01-01"))
         self.assertIsNone(_close_delta_hours("garbage", "2027-01-01"))
+
+
+class SettlementType(unittest.TestCase):
+    """Path-dependence classifier; the point-vs-touch split is the PAIR-015
+    trap (different contracts at the same strike) (#96)."""
+
+    def test_hold(self):
+        self.assertEqual(_settlement_type("Will BTC stay above $80k for all of 2026?"), "hold")
+
+    def test_touch_verb(self):
+        self.assertEqual(_settlement_type("Will BTC hit $175k?"), "touch")
+
+    def test_touch_at_any_point(self):
+        self.assertEqual(_settlement_type("Will BTC dip below $80k at any point?"), "touch")
+
+    def test_reach_scoped_to_whole_year_is_touch(self):
+        self.assertEqual(_settlement_type("Will BTC be above $150k in 2026?"), "touch")
+
+    def test_point_in_time_on_date_is_none(self):
+        # PAIR-015: "close above ON Dec 31" is a point read, NOT a touch.
+        self.assertIsNone(_settlement_type("Will BTC close above $150k on Dec 31?"))
+
+    def test_no_signal_is_none(self):
+        self.assertIsNone(_settlement_type("Who wins the election?"))
+
+
+class MonetaryDirection(unittest.TestCase):
+    def test_hike(self):
+        self.assertEqual(_monetary_direction("Will the Fed hike rates?"), {"up"})
+
+    def test_cut(self):
+        self.assertEqual(_monetary_direction("Will the Fed cut rates?"), {"down"})
+
+    def test_both(self):
+        self.assertEqual(_monetary_direction("Will the Fed raise then cut?"), {"up", "down"})
+
+    def test_neither(self):
+        self.assertEqual(_monetary_direction("Who wins?"), set())
 
 
 if __name__ == "__main__":
