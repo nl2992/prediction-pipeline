@@ -9,6 +9,7 @@ from matcher import (
     _names_overlap, _name_anchor_tokens,
     _is_ou_or_spread, _has_over_under, _stat_thresholds,
     _is_win_market, _is_player_prop,
+    _offices, _parties, _jurisdictions, _years,
 )
 from pipeline import MarketSnapshot, OrderBook
 
@@ -242,6 +243,35 @@ class WinMarketAndPlayerProp(unittest.TestCase):
     def test_team_margin_is_not_player_prop(self):
         # "win by over 1.5 goals" is a margin/total, not a "N+ stat" prop.
         self.assertFalse(_is_player_prop("Lakers win by over 1.5 goals"))
+
+
+class PoliticalGeoYearGates(unittest.TestCase):
+    """Office/party/jurisdiction/year scoping with documented traps (#103)."""
+
+    def test_president_office(self):
+        self.assertIn("president", _offices("Will the presidential election be close?"))
+
+    def test_vice_president_is_not_president(self):
+        found = _offices("Who will be the vice presidential nominee?")
+        self.assertIn("vice_president", found)
+        self.assertNotIn("president", found)
+
+    def test_party_aliases(self):
+        self.assertEqual(_parties("Will the GOP win?"), {"republican"})
+        self.assertEqual(_parties("Will Labour win the seat?"), {"democratic"})
+        self.assertEqual(_parties("Will the Tories hold?"), {"conservative"})
+
+    def test_indiana_does_not_register_india(self):
+        found = _jurisdictions("Indiana Senate race")
+        self.assertIn("indiana", found)
+        self.assertNotIn("india", found)
+
+    def test_india_registers_when_standalone(self):
+        self.assertIn("india", _jurisdictions("India general election"))
+
+    def test_years_four_digit_and_two_digit_normalization(self):
+        self.assertEqual(_years("2026 election outcome"), {"2026"})
+        self.assertEqual(_years("26 election"), {"2026"})
 
 
 if __name__ == "__main__":
