@@ -1,9 +1,14 @@
 """Tests for discover.py pure helpers (#89)."""
 from __future__ import annotations
 
+import json
+import tempfile
+import time
 import unittest
 from datetime import datetime, timezone
+from pathlib import Path
 
+import discover
 from discover import (
     _parse_dt, _is_parlay, _is_parlay_market, _category, _derive_keywords,
     _apply_event_cap, _event_series, _p_snap, _p_snap_from_event,
@@ -206,6 +211,40 @@ class PolymarketSnapshot(unittest.TestCase):
         se = _p_snap_from_event(self._market(), "EV TITLE", "ev-slug", "t")
         self.assertEqual(se.event_id, "ev-slug")
         self.assertEqual(se.extra["event_title"], "EV TITLE")
+
+
+class CatalogCache(unittest.TestCase):
+    """TTL round-trip for the catalog cache; a bug here serves stale catalogs
+    or silently disables caching (#94)."""
+
+    def setUp(self):
+        self._orig = discover._CACHE_DIR
+        discover._CACHE_DIR = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        discover._CACHE_DIR = self._orig
+
+    def test_store_then_load_within_ttl(self):
+        discover._cache_store("cat.json", {"x": 1})
+        self.assertEqual(discover._cache_load("cat.json", 60), {"x": 1})
+
+    def test_ttl_zero_or_negative_disables(self):
+        discover._cache_store("cat.json", {"x": 1})
+        self.assertIsNone(discover._cache_load("cat.json", 0))
+        self.assertIsNone(discover._cache_load("cat.json", -5))
+
+    def test_missing_file_returns_none(self):
+        self.assertIsNone(discover._cache_load("nope.json", 60))
+
+    def test_expired_entry_returns_none(self):
+        (discover._CACHE_DIR / "old.json").write_text(
+            json.dumps({"fetched_at": time.time() - 100, "data": {"y": 2}}), encoding="utf-8"
+        )
+        self.assertIsNone(discover._cache_load("old.json", 10))
+
+    def test_malformed_json_returns_none(self):
+        (discover._CACHE_DIR / "bad.json").write_text("not json", encoding="utf-8")
+        self.assertIsNone(discover._cache_load("bad.json", 60))
 
 
 if __name__ == "__main__":
