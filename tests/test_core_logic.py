@@ -27,7 +27,7 @@ from matcher import (
     match_markets,
     _tokens,
 )
-from monitor import _resolve_poly_token, _verify_kalshi_clob
+from monitor import _resolve_poly_token, _resolve_poly_yes_token, _verify_kalshi_clob
 from pipeline import (
     MarketSnapshot,
     OrderBook,
@@ -112,6 +112,27 @@ class CoreLogicTests(unittest.TestCase):
 
         self.assertEqual(_resolve_poly_token(poly, "YES"), "token-yes")
         self.assertEqual(_resolve_poly_token(poly, "NO"), "token-no")
+
+    def test_resolve_poly_token_parses_json_string_ids(self) -> None:
+        # Gamma can deliver clobTokenIds as a JSON string; no outcomes -> index fallback.
+        poly = snap("polymarket", "poly", bid=0.4, ask=0.5,
+                    extra={"clob_token_ids": '["a", "b"]'})
+        self.assertEqual(_resolve_poly_token(poly, "YES"), "a")   # index 0
+        self.assertEqual(_resolve_poly_token(poly, "NO"), "b")    # index 1
+
+    def test_resolve_poly_token_malformed_and_empty_return_none(self) -> None:
+        bad = snap("polymarket", "poly", bid=0.4, ask=0.5, extra={"clob_token_ids": "not json"})
+        self.assertIsNone(_resolve_poly_token(bad, "YES"))
+        empty = snap("polymarket", "poly", bid=0.4, ask=0.5, extra={"clob_token_ids": []})
+        self.assertIsNone(_resolve_poly_token(empty, "YES"))
+
+    def test_resolve_poly_token_single_token_no_falls_back_to_index0(self) -> None:
+        one = snap("polymarket", "poly", bid=0.4, ask=0.5, extra={"clob_token_ids": ["only"]})
+        self.assertEqual(_resolve_poly_token(one, "NO"), "only")
+
+    def test_resolve_poly_yes_token_wrapper(self) -> None:
+        poly = snap("polymarket", "poly", bid=0.4, ask=0.5, extra={"clob_token_ids": ["a", "b"]})
+        self.assertEqual(_resolve_poly_yes_token(poly), "a")
 
     def test_datetime_parsers_accept_fractional_utc_offsets(self) -> None:
         self.assertEqual(
