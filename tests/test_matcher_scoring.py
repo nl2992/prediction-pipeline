@@ -5,7 +5,7 @@ import unittest
 
 from matcher import (
     _confidence, _close_delta_hours, _settlement_type, _monetary_direction,
-    is_inverted_pair,
+    is_inverted_pair, _known_orgs, _known_products, _matchup_signature,
 )
 from pipeline import MarketSnapshot, OrderBook
 
@@ -119,6 +119,39 @@ class IsInvertedPair(unittest.TestCase):
         # Both sides mention banned AND legal -> not a clean one-neg/one-pos flip.
         mixed = "Will TikTok be banned or stay legal?"
         self.assertFalse(is_inverted_pair(_snap(mixed), _snap(mixed)))
+
+
+class KnownOrgsProducts(unittest.TestCase):
+    """Org/product mismatch gate: BRICS != OPEC (#13), Claude != GPT (#98)."""
+
+    def test_orgs_distinct(self):
+        self.assertEqual(_known_orgs("Will BRICS expand in 2026?"), {"brics"})
+        self.assertEqual(_known_orgs("Will OPEC cut output?"), {"opec"})
+
+    def test_orgs_empty_when_none_present(self):
+        self.assertEqual(_known_orgs("Who wins the race?"), set())
+
+    def test_products_distinct(self):
+        self.assertEqual(_known_products("Will Claude 6 launch?"), {"claude"})
+        self.assertEqual(_known_products("Will GPT-6 launch?"), {"gpt"})
+
+
+class MatchupSignature(unittest.TestCase):
+    def test_order_independent(self):
+        # The whole point: "A vs B" and "B vs A" are the same game.
+        self.assertEqual(
+            _matchup_signature("Lakers vs Celtics winner"),
+            _matchup_signature("Celtics vs. Lakers"),
+        )
+
+    def test_at_form_parsed(self):
+        self.assertEqual(
+            _matchup_signature("Yankees at Red Sox"),
+            frozenset((frozenset({"yankees"}), frozenset({"red", "sox"}))),
+        )
+
+    def test_none_when_no_matchup(self):
+        self.assertIsNone(_matchup_signature("Who wins the election?"))
 
 
 if __name__ == "__main__":
