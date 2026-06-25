@@ -13,6 +13,7 @@ from matcher import (
     _sports_league, _legislative_scope,
     _time_scopes, _comparison_bounds, _month_names,
     _arb_signature, is_arb_eligible,
+    _jaccard, _ascii_lower, _rates, _set_numbers, _draft_pick_numbers,
 )
 from pipeline import MarketSnapshot, OrderBook
 
@@ -355,6 +356,31 @@ class ArbSignatureAndEligibility(unittest.TestCase):
     def test_not_eligible_for_incompatible_pair(self):
         self.assertFalse(is_arb_eligible(
             _snap("Will the Lakers win?"), _snap("Will it rain in Texas?")))
+
+
+class MatcherPrimitives(unittest.TestCase):
+    """Foundational similarity/text/extractor helpers (#138)."""
+
+    def test_jaccard(self):
+        self.assertEqual(_jaccard(frozenset({"a", "b"}), frozenset({"a", "b"})), 1.0)
+        self.assertAlmostEqual(_jaccard(frozenset({"a", "b"}), frozenset({"a", "c"})), 1 / 3)
+        self.assertEqual(_jaccard(frozenset({"a"}), frozenset({"b"})), 0.0)
+
+    def test_jaccard_empty_is_zero_not_zerodivision(self):
+        self.assertEqual(_jaccard(frozenset(), frozenset()), 0.0)
+
+    def test_ascii_lower_folds_accents(self):
+        self.assertEqual(_ascii_lower("Flávio CAFÉ"), "flavio cafe")
+
+    def test_rates(self):
+        self.assertEqual(_rates("Fed sets 5% or 4.25 level"), {"5%", "4.25"})
+
+    def test_set_numbers(self):
+        self.assertEqual(_set_numbers("Alcaraz to win set 3"), {"3"})
+
+    def test_draft_pick_numbers(self):
+        self.assertEqual(_draft_pick_numbers("the 1st overall pick"), {"1"})
+        self.assertEqual(_draft_pick_numbers("picked 4th"), {"4"})
 
 
 if __name__ == "__main__":
