@@ -3,7 +3,36 @@ from __future__ import annotations
 
 import unittest
 
-from fed_rate_spread import check_monotonicity, compute_monotonicity_arb, build_kalshi_distribution
+from fed_rate_spread import (
+    check_monotonicity, compute_monotonicity_arb, build_kalshi_distribution,
+    _f, _mid, _rate_from_ticker, _parse_poly_price,
+)
+
+
+class FedParseHelpers(unittest.TestCase):
+    """Raw venue data -> prices/rates for the distribution + monotonicity math (#139)."""
+
+    def test_f(self):
+        self.assertAlmostEqual(_f("0.5"), 0.5)
+        self.assertIsNone(_f("0"))      # 0 = no resting order
+        self.assertIsNone(_f("x"))
+        self.assertIsNone(_f(None))
+
+    def test_mid(self):
+        self.assertAlmostEqual(_mid(0.40, 0.42), 0.41)
+        self.assertAlmostEqual(_mid(0.40, None), 0.40)   # bid-only
+        self.assertAlmostEqual(_mid(None, 0.42), 0.42)   # ask-only
+        self.assertIsNone(_mid(None, None))
+
+    def test_rate_from_ticker(self):
+        self.assertAlmostEqual(_rate_from_ticker("KXFED-26JUN-T3.50"), 3.5)
+        self.assertIsNone(_rate_from_ticker("NOPE"))
+
+    def test_parse_poly_price(self):
+        self.assertAlmostEqual(_parse_poly_price({"outcomePrices": '["0.62", "0.38"]'}), 0.62)
+        self.assertAlmostEqual(_parse_poly_price({"outcomePrices": [0.55, 0.45]}), 0.55)
+        self.assertIsNone(_parse_poly_price({"outcomePrices": "notjson"}))
+        self.assertIsNone(_parse_poly_price({}))
 
 
 class BuildKalshiDistribution(unittest.TestCase):
