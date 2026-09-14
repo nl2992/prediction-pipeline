@@ -1,0 +1,4224 @@
+{
+ "description": "Iteration-4 labelled audit set for v2 (contract_spec) matcher precision, built from a fresh live discover run (2026-09-14, after iteration 3's fixes) since the 2026-09-14 iteration-2/3 fixture's false positives were mostly fixed and stopped finding new problems. signal_subset = production-signal pairs (alerter.compute_signals, min_edge=0.0001, min_size=MIN_DEPTH) NOT already present in the original endorsed_audit_2026-09-14.json fixture. stratified_subset = a seed=11 stratified-by-category random sample of ~200 other v2-endorsed pairs, also excluding anything already in the original fixture. Labels are conservative: 'same' only if both contracts settle identically (same subject, outcome side, threshold/range, location, date/horizon, settlement period).",
+ "generated": "2026-09-14",
+ "signal_subset": [
+  {
+   "poly_title": "Roy Cooper",
+   "poly_event_title": "Democratic Presidential Nominee 2028",
+   "poly_close": "2028-11-07",
+   "poly_id": "0x939eeb2dea216749bd409bedde483c3f2bfb0e24d4f2d34461c0b21c6e91f010",
+   "kalshi_title": "Will Roy Cooper be the Democratic Presidential nominee in 2028?",
+   "kalshi_event_title": "2028 Democratic presidential nominee",
+   "kalshi_close": "2028-11-07",
+   "kalshi_ticker": "KXPRESNOMD-28-RC",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.86 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "George Russell",
+   "poly_event_title": "F1 Drivers' Champion",
+   "poly_close": "2026-12-06",
+   "poly_id": "0x1b7fd0fe5dbf07c9f7aab729a6688686e5d2df9b443233cd29004bd11818553d",
+   "kalshi_title": "Will George Russell win the F1 Drivers Championship?",
+   "kalshi_event_title": "F1 Drivers Champion",
+   "kalshi_close": "2026-12-22",
+   "kalshi_ticker": "KXF1-26-GR",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.62 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Mark Kelly",
+   "poly_event_title": "Democratic Presidential Nominee 2028",
+   "poly_close": "2028-11-07",
+   "poly_id": "0x36db77c539bcc8c7bf0686c1b99f30c5a5eed1f53d3b3a27a071550c81f83701",
+   "kalshi_title": "Will Mark Kelly be the Democratic Presidential nominee in 2028?",
+   "kalshi_event_title": "2028 Democratic presidential nominee",
+   "kalshi_close": "2028-11-07",
+   "kalshi_ticker": "KXPRESNOMD-28-MK",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.86 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Donald Trump",
+   "poly_event_title": "Nobel Peace Prize Winner 2026",
+   "poly_close": "2026-10-10",
+   "poly_id": "0x962e5b226a77266ab429029ee04665e8fcfeb10b91af593786ceab871d2e945f",
+   "kalshi_title": "Who will win the Nobel Peace Prize? Donald Trump",
+   "kalshi_event_title": "2026 Nobel Peace Prize winner",
+   "kalshi_close": "2026-12-31",
+   "kalshi_ticker": "KXNOBELPEACE-26-DJT",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 1.00 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Gr\u00fcne",
+   "poly_event_title": "Berlin State Election Winner",
+   "poly_close": "2026-09-20",
+   "poly_id": "0xe56ea36629f22db9d86fffb7a326a1d64750d3da6037ef69dd7d3ff301ff880b",
+   "kalshi_title": "Will Gr\u00fcne win the 2026 Berlin state election?",
+   "kalshi_event_title": "Berlin state election winner?",
+   "kalshi_close": "2027-09-20",
+   "kalshi_ticker": "KXBERLINSTATE-26SEP20-GRUN",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.70 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Goldman Sachs",
+   "poly_event_title": "Lead Bank in Anthropic's IPO?",
+   "poly_close": "2027-12-31",
+   "poly_id": "0x27dcf3218163c07c9509240174f145ec03631f5598ad8d216fa369878b94fbd8",
+   "kalshi_title": "Will Goldman Sachs serve as lead-left underwriter on Anthropic's IPO?",
+   "kalshi_event_title": "Which bank will lead Anthropic's IPO?",
+   "kalshi_close": "2028-01-01",
+   "kalshi_ticker": "KXANTHROPICLEADLEFT-28JAN01B-GSX",
+   "category": "economic",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.57 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Tyler Reddick",
+   "poly_event_title": "NASCAR Cup Series: 2026 Champion",
+   "poly_close": "2026-11-08",
+   "poly_id": "0xb0da73520022a9717c98a4cdcf6879cd500fbfb06df12c4c3f04561cc147be8b",
+   "kalshi_title": "Will Tyler Reddick be the NASCAR Cup Series Champion?",
+   "kalshi_event_title": "NASCAR Cup Series Champion",
+   "kalshi_close": "2026-11-15",
+   "kalshi_ticker": "KXNASCARCUPSERIES-NCS26-TRED",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Glenn Thompson (R)",
+   "poly_event_title": "PA-15 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0xaf3562e817b16e3b3eb4eba77ae83296f1190cc6ad3a859aa91b651cee7ad431",
+   "kalshi_title": "Will Republican win the House race for PA-15? Glenn Thompson",
+   "kalshi_event_title": "PA-15 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-PA15-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Justin Murphy (R)",
+   "poly_event_title": "New Jersey Senate Election Winner",
+   "poly_close": "",
+   "poly_id": "0x378f6ce7b81670608a5a4f0fcf740e3dbb44c3e402e5b0beba49871a5c05b259",
+   "kalshi_title": "Will Republicans win the Senate race in New Jersey? Justin Murphy",
+   "kalshi_event_title": "New Jersey Senate winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "SENATENJ-26-R",
+   "category": "political",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.82 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Andy Barr (R)",
+   "poly_event_title": "Kentucky Senate Election Winner",
+   "poly_close": "",
+   "poly_id": "0x4151b05d1d98bb10d1a459f013d8583267b5fc6fa9e7bc755653f074f4a5e33a",
+   "kalshi_title": "Will Republicans win the Senate race in Kentucky? Andy Barr",
+   "kalshi_event_title": "Kentucky Senate winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "SENATELA-26-R",
+   "category": "political",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.80 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Henry Cuellar (D)",
+   "poly_event_title": "TX-28 House Election Winner",
+   "poly_close": "2026-11-04",
+   "poly_id": "0x404f17162fa31cfc9b4ce7688a274bc30afe8394cae0077d944b43e22cc4fac2",
+   "kalshi_title": "Will Democratic win the House race for TX-28? Henry Cuellar",
+   "kalshi_event_title": "TX-28 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "HOUSETX28-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Pete Crow-Armstrong",
+   "poly_event_title": "MLB: 2026 NL MVP",
+   "poly_close": "2026-11-13",
+   "poly_id": "0x5ead3427438ac002ff56c51aa6d338acfcf689ddbda928fe9be649edc1e02f35",
+   "kalshi_title": "Will Pete Crow-Armstrong win NL MVP?",
+   "kalshi_event_title": "NL MVP Winner?",
+   "kalshi_close": "2026-12-08",
+   "kalshi_ticker": "KXMLBNLMVP-26-PCRO",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.50 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Will Shrek 5 be delayed?",
+   "poly_event_title": "Will Shrek 5 be delayed?",
+   "poly_close": "2027-06-30",
+   "poly_id": "0x8385d270208d25aee1c9728b35afbd2484a45c213e51db99eddf0be3d53d7fc4",
+   "kalshi_title": "Will SHREK 5 be delayed? Before Jul 1, 2027",
+   "kalshi_event_title": "Will SHREK 5 be delayed?",
+   "kalshi_close": "2027-07-01",
+   "kalshi_ticker": "KXMOVIEDELAY-27JUL01",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.50 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Brad Meyer (D)",
+   "poly_event_title": "IN-09 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x73d5c7e357e622677e27a006e5dba5179a83cfd93b04e17d2e0d7ea2322040e6",
+   "kalshi_title": "Will Democratic win the House race for IN-09? Brad Meyer",
+   "kalshi_event_title": "IN-09 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-IN09-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.64 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Leticia Gutierrez (D)",
+   "poly_event_title": "TX-09 House Election Winner",
+   "poly_close": "2026-11-04",
+   "poly_id": "0x6995e8ac437713345a1a6486140279b7db55635122accc68965590241dfdf03c",
+   "kalshi_title": "Will Democratic win the House race for TX-09? Leticia Gutierrez",
+   "kalshi_event_title": "TX-09 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSETX9-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Myles Garrett",
+   "poly_event_title": "Pro Football: 2026-27 Sacks Leader",
+   "poly_close": "2027-01-12",
+   "poly_id": "0x595454eadc0ed365e269470cb5ddf4a1d5af6b60331452534271aa6376d71a47",
+   "kalshi_title": "Will Myles Garrett lead Pro Football in Sacks for the 2026-2027 Regular Season?",
+   "kalshi_event_title": "Pro Football Sacks Leader",
+   "kalshi_close": "2027-02-08",
+   "kalshi_ticker": "KXLEADERNFLSACKS-27-MGARRETT95",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.60 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "North Korea",
+   "poly_event_title": "Which countries will Donald Trump visit in 2026?",
+   "poly_close": "2027-01-01",
+   "poly_id": "0x035b7cc0833f825c4476352a1d5edeb870fc8250776803352177d44d34b03c6e",
+   "kalshi_title": "Will Donald Trump visit North Korea before Jan 1, 2027?",
+   "kalshi_event_title": "What countries will Trump visit in 2026?",
+   "kalshi_close": "2027-01-01",
+   "kalshi_ticker": "KXTRUMPCOUNTRIES-27JAN01-NK",
+   "category": "political",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.70 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "David Seymour",
+   "poly_event_title": "Next Prime Minister of New Zealand?",
+   "poly_close": "2026-11-07",
+   "poly_id": "0xc373506f31377031294354429d846470a7dd62c51ba6712e76a401168888ac82",
+   "kalshi_title": "Will David Seymour become Prime Minister of New Zealand following the 2026 New Zealand general election?",
+   "kalshi_event_title": "New Zealand Prime Minister after the election?",
+   "kalshi_close": "2027-11-07",
+   "kalshi_ticker": "KXNZPM-26NOV07-DSEY",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.54 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Ron Eller (R)",
+   "poly_event_title": "MS-02 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x8a335b146be423c575a126c5e45329dec4d3a6b6763340d4b82928c53f1b84be",
+   "kalshi_title": "Will Republican win the House race for MS-02? Ron Eller",
+   "kalshi_event_title": "MS-02 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-MS02-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Jorge Martin",
+   "poly_event_title": "MotoGP World Champion (2026)",
+   "poly_close": "2026-11-29",
+   "poly_id": "0x99f18bc7978dec08d3dea44371e86e71d0258032772bff4db3f907f6cd61dde5",
+   "kalshi_title": "Will Jorge Martin be the 2026 MotoGP World Champion?",
+   "kalshi_event_title": "MotoGP World Champion",
+   "kalshi_close": "2026-12-14",
+   "kalshi_ticker": "KXMOTOGP-26-JOMA",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.75 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Dan Patrick (R)",
+   "poly_event_title": "Texas Lieutenant Governor Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x1c440135088a3eb411356aeb62cd9cebe3b6da73b612465d61ceebb654a27009",
+   "kalshi_title": "Will the Republican party win the Lieutenant Governor race in Texas? Dan Patrick",
+   "kalshi_event_title": "Texas Lieutenant Governor winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXLTGOVTX-26-GOP",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.69 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Robert Charles (R)",
+   "poly_event_title": "Maine Governor Election Winner",
+   "poly_close": "",
+   "poly_id": "0x9654f26388e982fb566059486d3af4ded2f80564ea32ec0af4b51e04f1c02a07",
+   "kalshi_title": "Will the Republican party win the governorship in Maine Robert Charles",
+   "kalshi_event_title": "Maine Governor winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "GOVPARTYME-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.46 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Bass Persuades - Miley Cyrus",
+   "poly_event_title": "#2 Spotify song this week? (September 18)",
+   "poly_close": "2026-09-18",
+   "poly_id": "0xa957e622ce494ff56599a562628a17def42565ba3516419bc51b13bdfd760e20",
+   "kalshi_title": "How long will Bass Persuades by Miley Cyrus be? At least 30 minutes",
+   "kalshi_event_title": "Bass Persuades: Album Duration",
+   "kalshi_close": "2026-09-19",
+   "kalshi_ticker": "KXALBUMLENGTH-26SEP18-BAS-30",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "proper-noun bridge: shared name ['bass persuades', 'miley cyrus'], sim 0.25"
+   ],
+   "label": "different",
+   "reason_class": "different_subject"
+  },
+  {
+   "poly_title": "Tom Tiffany (R)",
+   "poly_event_title": "Wisconsin Governor Election Winner",
+   "poly_close": "",
+   "poly_id": "0xd66eadbd64b3e815e31c7994470b44fe15c7ef1146f78937d0cfaa4c04fcfda7",
+   "kalshi_title": "Will the Republican party win the governorship in Wisconsin Tom Tiffany",
+   "kalshi_event_title": "Wisconsin Governor winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "GOVPARTYWI-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.46 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Nana",
+   "poly_event_title": "What will be the name of the first hurricane in the Atlantic for the 2026 Hurricane Season?",
+   "poly_close": "2026-12-01",
+   "poly_id": "0x55c28eb3b7cdc0293fcf4a1853071f65823cf65c377c539a7fe5a7796e4864ef",
+   "kalshi_title": "Will Nana be the first named hurricane in the Atlantic in 2026?",
+   "kalshi_event_title": "What will be the name of the first hurricane in the Atlantic this year?",
+   "kalshi_close": "2026-12-01",
+   "kalshi_ticker": "KXFIRSTHURRICANE-26DEC01ATL-NAN",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Sepideh Moafi \u2013 \u201cThe Pitt\u201d",
+   "poly_event_title": "Emmys 2026: Outstanding supporting actress in a drama series",
+   "poly_close": "2026-09-14",
+   "poly_id": "0xa96a1d42134c31d2bd3ec3a7bc834ad8d751635374a1813aefc2ebc22e98de97",
+   "kalshi_title": "Will Sepideh Moafi win Drama Supporting Actress at the Emmy Awards?",
+   "kalshi_event_title": "Emmy Winner: Outstanding Supporting Actress in a Drama Series",
+   "kalshi_close": "2027-09-14",
+   "kalshi_ticker": "KXEMMYDSACTR-26SEP14-SEP",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.57 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Makai Lemon",
+   "poly_event_title": "Pro Football: 2026-27 AP Offensive Rookie of the Year Winner",
+   "poly_close": "2027-02-11",
+   "poly_id": "0x906809bb4571202cb99aee4a6ba64921646338de19bcb86ab6f320189db9f229",
+   "kalshi_title": "Will Makai Lemon win the Offensive Rookie of the Year?",
+   "kalshi_event_title": "Offensive Rookie of the Year Winner?",
+   "kalshi_close": "2028-02-28",
+   "kalshi_ticker": "KXNFLOROTY-27-MLEM",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.47 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Lamar Jackson",
+   "poly_event_title": "Pro Football: 2026 MVP Winner",
+   "poly_close": "2027-02-15",
+   "poly_id": "0x3b774c2f0ccb7f794fb7445fafa41feda55be9080e4e348c914d82e809b266be",
+   "kalshi_title": "Will Lamar Jackson win the MVP?",
+   "kalshi_event_title": "MVP Winner?",
+   "kalshi_close": "2028-02-12",
+   "kalshi_ticker": "KXNFLMVP-27-LJAC",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.56 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Justin Herbert",
+   "poly_event_title": "Pro Football: 2026 MVP Winner",
+   "poly_close": "2027-02-15",
+   "poly_id": "0x705a58f860c9884dae531857d908bd1cfd2263bade7b703a59b2bea525f9859e",
+   "kalshi_title": "Will Justin Herbert win the MVP?",
+   "kalshi_event_title": "MVP Winner?",
+   "kalshi_close": "2028-02-12",
+   "kalshi_ticker": "KXNFLMVP-27-JHER",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.56 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Caribbean Premier League: Antigua And Barbuda Falcons vs Guyana Amazon Warriors",
+   "poly_event_title": "Caribbean Premier League: Antigua And Barbuda Falcons vs Guyana Amazon Warriors",
+   "poly_close": "2026-09-24",
+   "poly_id": "0xa88a7ba0f54f884fac0d3d6907ab216adfc6212a0208e71e4306dd997ebdd5a0",
+   "kalshi_title": "Will Antigua And Barbuda Falcons win the 2026 Caribbean Premier League championship?",
+   "kalshi_event_title": "Caribbean Premier League Champion",
+   "kalshi_close": "2026-10-05",
+   "kalshi_ticker": "KXCPL-26-ANT",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.43 >= 0.3"
+   ],
+   "label": "different",
+   "reason_class": "scope_mismatch"
+  },
+  {
+   "poly_title": "Resident Evil Requiem",
+   "poly_event_title": "The Game Awards: Best Audio Design",
+   "poly_close": "2026-12-10",
+   "poly_id": "0x0931c81483e0759af61320dacbab6df2129f9c341397fde1b30a9a82b909002e",
+   "kalshi_title": "2026 Game of the Year? Resident Evil Requiem",
+   "kalshi_event_title": "The Game Awards: 2026 Game of the Year",
+   "kalshi_close": "2027-12-31",
+   "kalshi_ticker": "KXGAMEAWARDS-2026-RES",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.55 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Orlando City SC",
+   "poly_event_title": "MLS Cup Winner 2026",
+   "poly_close": "2026-12-19",
+   "poly_id": "0x4a08c641f9dea7e6b8366cc6cef5758e955552051aef4bdc7d5f50c7ae1066b0",
+   "kalshi_title": "Will Orlando win the MLS Cup?",
+   "kalshi_event_title": "MLS Cup Champion",
+   "kalshi_close": "2027-01-08",
+   "kalshi_ticker": "KXMLSCUP-26-ORL",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.44 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "David Crowley (D)",
+   "poly_event_title": "Wisconsin Governor Election Winner",
+   "poly_close": "",
+   "poly_id": "0xfbd0a65112e26d9a2a68dc47f8a95c6c14d22650cb4837c5429b546726661b71",
+   "kalshi_title": "Will the Democratic party win the governorship in Wisconsin David Crowley",
+   "kalshi_event_title": "Wisconsin Governor winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "GOVPARTYWI-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.46 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Jaxon Smith-Njigba",
+   "poly_event_title": "Pro Football: 2026-27 AP Offensive Player of the Year Winner",
+   "poly_close": "2027-02-11",
+   "poly_id": "0xd7cffbb2e632275f07a1a9d7fd66b7882820dcaca38bcb0b2d49229300049351",
+   "kalshi_title": "Will Jaxon Smith-Njigba win the Offensive Player of the Year?",
+   "kalshi_event_title": "Offensive Player of the Year Winner?",
+   "kalshi_close": "2028-02-08",
+   "kalshi_ticker": "KXNFLOPOTY-27-JSMI",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.50 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Lee Zeldin",
+   "poly_event_title": "Who will leave Trump Administration before 2027?",
+   "poly_close": "2027-01-01",
+   "poly_id": "0xa9eb387628150ecc2ee19613ae55dc26f7e9e6a24b31ccecdcdae43c7824d2d3",
+   "kalshi_title": "Will Lee Zeldin leaves EPA Administrator in before 2027?",
+   "kalshi_event_title": "Who will leave their role in the Trump administration in 2026?",
+   "kalshi_close": "2027-01-01",
+   "kalshi_ticker": "KXTRUMPADMINLEAVE-26DEC31-LZEL",
+   "category": "political",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.55 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Rastislav Mochnack\u00fd",
+   "poly_event_title": "Pre\u0161ov Mayoral Election Winner",
+   "poly_close": "2026-10-24",
+   "poly_id": "0xecdcc7db3fc8145454f18c746acf957b673433ddc86ebbef6bb8e7fe139479a6",
+   "kalshi_title": "Will Rastislav Mochnack\u00fd win the 2026 Pre\u0161ov mayoral election?",
+   "kalshi_event_title": "Pre\u0161ov mayoral election winner?",
+   "kalshi_close": "2027-10-24",
+   "kalshi_ticker": "KXPRESOVMAYOR-26OCT24-RMOC",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 1.00 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Sonny Styles",
+   "poly_event_title": "Pro Football: 2026-27 AP Defensive Rookie of the Year Winner",
+   "poly_close": "2027-02-11",
+   "poly_id": "0x119069553cfa70c0bc61f9a6e168645b1ba9f1b59293403cb891e1cd2333f61e",
+   "kalshi_title": "Will Sonny Styles win the Defensive Rookie of the Year?",
+   "kalshi_event_title": "Defensive Rookie of the Year Winner?",
+   "kalshi_close": "2028-02-28",
+   "kalshi_ticker": "KXNFLDROTY-27-SSTY",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.47 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Mercedes / Mercedes-Benz",
+   "poly_event_title": "What companies will Trump mention in September?",
+   "poly_close": "2026-09-30",
+   "poly_id": "0xf7996dba38187963d004da859b3b434d9b31449ffe2f110a8127d64f4bd730ab",
+   "kalshi_title": "Will Trump say \"Mercedes / Mercedes-Benz\" before Oct 1, 2026?",
+   "kalshi_event_title": "What companies will Trump say in September?",
+   "kalshi_close": "2026-10-01",
+   "kalshi_ticker": "KXTRUMPSAYCOMPANY-26OCT01-MERC",
+   "category": "political",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.60 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Monaco",
+   "poly_event_title": "Ligue 1: 2027 Champion",
+   "poly_close": "2027-05-30",
+   "poly_id": "0xc80adeb9310ab49a681533204c59856668abc4c0cbcd4b9e0bc31145f0a43071",
+   "kalshi_title": "Will Monaco win the 2026-27 Ligue 1?",
+   "kalshi_event_title": "Ligue 1 Champion",
+   "kalshi_close": "2027-06-13",
+   "kalshi_ticker": "KXLIGUE1-27-ASM",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.78 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Alexandre de Moraes out as Brazil Supreme Court Justice?",
+   "poly_event_title": "Alexandre de Moraes out as Brazil Supreme Court Justice?",
+   "poly_close": "2026-12-31",
+   "poly_id": "0xae515ea2b1b95486007cff8aa4afbd5f677e2760dd8752c1068d9cc55afb6d58",
+   "kalshi_title": "Will Alexandre de Moraes leave Brazil's Supreme Court before Jan 1, 2027?",
+   "kalshi_event_title": "Will Alexandre de Moraes leave Brazil's Supreme Court?",
+   "kalshi_close": "2027-01-01",
+   "kalshi_ticker": "KXDEMORAESOUT-26SEP-27JAN01",
+   "category": "political",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.50 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "David Bailey",
+   "poly_event_title": "Pro Football: 2026-27 AP Defensive Rookie of the Year Winner",
+   "poly_close": "2027-02-11",
+   "poly_id": "0x24c70c3f981e2b59c677fbb64cb6e210496bc9375ba77e9f046613fa2bd2e687",
+   "kalshi_title": "Will David Bailey win the Defensive Rookie of the Year?",
+   "kalshi_event_title": "Defensive Rookie of the Year Winner?",
+   "kalshi_close": "2028-02-28",
+   "kalshi_ticker": "KXNFLDROTY-27-DBAI",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.47 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Ai Ogura",
+   "poly_event_title": "MotoGP World Champion (2026)",
+   "poly_close": "2026-11-29",
+   "poly_id": "0xd23c0f9d9b186f9059b5779b2ea6a6cd29d8e1f99bdbee1fce5654f68426433f",
+   "kalshi_title": "Will Ai Ogura be the MotoGP World Champion?",
+   "kalshi_event_title": "MotoGP World Champion",
+   "kalshi_close": "2026-12-14",
+   "kalshi_ticker": "KXMOTOGP-26-AIOG",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.62 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Will Trump cut corporate taxes before 2027?",
+   "poly_event_title": "Will Trump cut corporate taxes before 2027?",
+   "poly_close": "2027-01-01",
+   "poly_id": "0xc005f6bbab45762a81273660e306c85cfbf283f8c705ba67c537d30e9ffa2ad2",
+   "kalshi_title": "Will the corporate tax be decreased before Jan 1, 2027? Yes",
+   "kalshi_event_title": "Will Trump cut corporate taxes this year?",
+   "kalshi_close": "2027-01-01",
+   "kalshi_ticker": "KXCORPTAXCUT-27JAN01-21",
+   "category": "political",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.50 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Shelley Hughes",
+   "poly_event_title": "Alaska Governor Election Winner  ",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x12923582cca8ff08ea1bb23e4e042b80e11fae9974d528d9f19249e5ad131f2a",
+   "kalshi_title": "Who will win the governorship in Alaska? Shelley Hughes",
+   "kalshi_event_title": "Alaska Governor winner? (Person)",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXGOVAK-26-SHUG",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.60 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Chicago, IL",
+   "poly_event_title": "Where will it rain on September 14?",
+   "poly_close": "2026-09-15",
+   "poly_id": "0x0fcb65fb4f25631307d9057dbe822a2e449f0ca601f6330109c0802a844549a0",
+   "kalshi_title": "Will it rain in Chicago on Sep 14, 2026?",
+   "kalshi_event_title": "Where will it rain on Sep 14, 2026?",
+   "kalshi_close": "2026-09-15",
+   "kalshi_ticker": "KXRAIN-26SEP14-CHI",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.43 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "92-93\u00b0F",
+   "poly_event_title": "Highest temperature in Atlanta on September 14?",
+   "poly_close": "2026-09-14",
+   "poly_id": "0x034edb50fcfcb22dfcb6915ca753dd64e788b2b507fdf77309c89a04182e7994",
+   "kalshi_title": "Will the maximum temperature be 92-93\u00b0 on Sep 14, 2026? 92\u00b0 to 93\u00b0",
+   "kalshi_event_title": "Highest temperature in Atlanta on Sep 14, 2026?",
+   "kalshi_close": "2026-09-15",
+   "kalshi_ticker": "KXHIGHTATL-26SEP14-B92.5",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.55 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Parker Retzlaff",
+   "poly_event_title": "NASCAR O'Reilly Auto Parts Series Champion (2026)",
+   "poly_close": "2026-11-07",
+   "poly_id": "0x54199c8b59065f671fdc47de744f06dbd7d576c1f1fe479e45a494d6b2c6fcf6",
+   "kalshi_title": "Will Parker Retzlaff be the NASCAR O'Reilly Auto Parts Series Champion?",
+   "kalshi_event_title": "NASCAR O'Reilly Auto Parts Series Champion",
+   "kalshi_close": "2026-11-09",
+   "kalshi_ticker": "KXNASCARAUTOPARTSSERIES-NAPS26-PRET",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.73 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Reporters Without Borders",
+   "poly_event_title": "Nobel Peace Prize Winner 2026",
+   "poly_close": "2026-10-10",
+   "poly_id": "0xacdaffa2ea50a83f01ed7e23a6f0818289e9ab2abd54ec687fbee8a003344dd6",
+   "kalshi_title": "Who will win the Nobel Peace Prize? Doctors Without Borders (M\u00e9decins Sans Fronti\u00e8res)",
+   "kalshi_event_title": "2026 Nobel Peace Prize winner",
+   "kalshi_close": "2026-12-31",
+   "kalshi_ticker": "KXNOBELPEACE-26-DOC",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.62 >= 0.3"
+   ],
+   "label": "different",
+   "reason_class": "different_subject"
+  }
+ ],
+ "stratified_subset": [
+  {
+   "poly_title": "SpaceX IPO: Officially added to S&P 500 in 2026?",
+   "poly_event_title": "SpaceX IPO: Officially added to S&P 500 in 2026?",
+   "poly_close": "2027-01-01",
+   "poly_id": "0xdfe1ba56a9168c2b97632085f063bc3ae13e3de21323dd80e78c241d9d0771fb",
+   "kalshi_title": "Will SpaceX be added to the S&P 500 in Q4 2026?",
+   "kalshi_event_title": "Which companies will be added to the S&P 500 in Q4?",
+   "kalshi_close": "2027-01-01",
+   "kalshi_ticker": "KXSP500ADDQ-26DEC31-SPCX",
+   "category": "economic",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.50 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Anthony Albanese",
+   "poly_event_title": "Who will be the next Prime Minister of Australia after the next election? ",
+   "poly_close": "2028-09-23",
+   "poly_id": "0x1b79d38eaa46ca614c80ad8567b83f515c07427aa097e526f97b8ccb3740ae73",
+   "kalshi_title": "Will Anthony Albanese become Prime Minister of Australia following the next Australian federal election for the House of Representatives?",
+   "kalshi_event_title": "Prime Minister of Australia after the next election? ",
+   "kalshi_close": "2029-09-23",
+   "kalshi_ticker": "KXAUSTPM-28SEP23-AALB",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.54 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "LeBron James",
+   "poly_event_title": "Democratic Presidential Nominee 2028",
+   "poly_close": "2028-11-07",
+   "poly_id": "0x8b203037c7c0e21b500314f8398d2a8ea294b7ce1f4f9185f426425a3505bc45",
+   "kalshi_title": "Will Lebron James be the Democratic Presidential nominee in 2028?",
+   "kalshi_event_title": "2028 Democratic presidential nominee",
+   "kalshi_close": "2028-11-07",
+   "kalshi_ticker": "KXPRESNOMD-28-LJAM",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.86 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Ivica Da\u010di\u0107",
+   "poly_event_title": "Next Prime Minister of Serbia?",
+   "poly_close": "2028-06-30",
+   "poly_id": "0xcd389dc1c548c9b327512958136afec891aace97d0bf995fab6988c36a4ccfdf",
+   "kalshi_title": "Will Ivica Da\u010di\u0107 become Prime Minister of Serbia following the next Serbian general election?",
+   "kalshi_event_title": "Prime Minister of Serbia after the next election?",
+   "kalshi_close": "2028-12-31",
+   "kalshi_ticker": "KXSERBIAPM-27DEC31-IDAC",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.55 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "New Mexico",
+   "poly_event_title": "Closest Governor's Race?",
+   "poly_close": "2026-11-03",
+   "poly_id": "0xde8c90e199c8a209795473f8b2a945854dc8dbc4a3cea7ff2bde85bdd656f87c",
+   "kalshi_title": "Will New Mexico have the smallest margin of victory in 2026 United States gubernatorial elections?",
+   "kalshi_event_title": "Closest Governor race in 2026?",
+   "kalshi_close": "2027-01-20",
+   "kalshi_ticker": "KXCLOSESTGOVERNOR-27JAN20-NM",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.46 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Elmano de Freitas",
+   "poly_event_title": "Cear\u00e1 Governor Election Winner",
+   "poly_close": "2026-10-04",
+   "poly_id": "0x0098859230696a9dcaa04f3bddea2ec8c154a4ae5e21de56d99ea2ebd5430755",
+   "kalshi_title": "Will Elmano de Freitas win the 2026 Cear\u00e1 gubernatorial election?",
+   "kalshi_event_title": "Cear\u00e1 gubernatorial election winner?",
+   "kalshi_close": "2027-10-04",
+   "kalshi_ticker": "KXCEARAGOV-26OCT04-EFRE",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.90 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Ruben Gallego",
+   "poly_event_title": "Democratic VP Nominee 2028",
+   "poly_close": "2028-08-10",
+   "poly_id": "0x6aec8c045a82e8c85fdb23db903247bd94b9ceab06cd8ef46609b1736615980f",
+   "kalshi_title": "Will Ruben Gallego be the nominee for the Vice Presidency for the Democratic party?",
+   "kalshi_event_title": "2028 Democratic VP nominee",
+   "kalshi_close": "2028-11-07",
+   "kalshi_ticker": "KXVPRESNOMD-28-RGAL",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.70 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Karim Bouamrane",
+   "poly_event_title": "2027 French Presidential Election: who will be on the ballot?",
+   "poly_close": "2027-04-17",
+   "poly_id": "0xe2dc926b0f11206e7eb2b5983a408ffac49ccc02cc4484afc7437dad55b001c7",
+   "kalshi_title": "Will Karim Bouamrane appear on the official candidate list for the first round of the 2027 French presidential election?",
+   "kalshi_event_title": "2027 French Presidential Election: who will be on the ballot?",
+   "kalshi_close": "2027-06-30",
+   "kalshi_ticker": "KXFRPRESBALLOT-27JUN30-KBOU",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.54 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Elon Musk",
+   "poly_event_title": "Republican Presidential Nominee 2028",
+   "poly_close": "2028-11-07",
+   "poly_id": "0xfbb80ea5f8fc02ee7df8bd4f58790e1d04b874078a49a7b7028a74a2075100c9",
+   "kalshi_title": "Will Elon Musk be the nominee for the Presidency for the Republican party?",
+   "kalshi_event_title": "2028 Republican presidential nominee",
+   "kalshi_close": "2028-11-07",
+   "kalshi_ticker": "KXPRESNOMR-28-EM",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Giorgia Meloni",
+   "poly_event_title": "Next Prime Minister of Italy?",
+   "poly_close": "2028-12-31",
+   "poly_id": "0x29e5bc9758ce36266371c56bfd0af97f163691b1aec980577542fa2de13398e0",
+   "kalshi_title": "Will Giorgia Meloni become Prime Minister of Italy following the next Italian general election?",
+   "kalshi_event_title": "Who will become Prime Minister of Italy following the next general election?",
+   "kalshi_close": "2028-12-22",
+   "kalshi_ticker": "KXITALYPM-27DEC22-GMEL",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.55 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Warren Petersen (R)",
+   "poly_event_title": "Arizona Attorney General Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x4ddaa5da3fa6930838be4a02f680c914c4966b1e09b213fc06dd6c44bf2b5c69",
+   "kalshi_title": "Will the Republican party win the Attorney General race in Arizona? Warren Petersen",
+   "kalshi_event_title": "Arizona Attorney General winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXATTYGENAZ-26-R",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.69 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Jim Chalmers",
+   "poly_event_title": "Who will be the next Prime Minister of Australia after the next election? ",
+   "poly_close": "2028-09-23",
+   "poly_id": "0x3b9322ab96ce7e7f60997b3169d30d300f7f87c2dd8c1abb1178f5ce93785e79",
+   "kalshi_title": "Will Jim Chalmers become Prime Minister of Australia following the next Australian federal election for the House of Representatives?",
+   "kalshi_event_title": "Prime Minister of Australia after the next election? ",
+   "kalshi_close": "2029-09-23",
+   "kalshi_ticker": "KXAUSTPM-28SEP23-JCHA",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.54 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Monika Pi\u0105tkowska",
+   "poly_event_title": "Krak\u00f3w Mayoral Election Winner",
+   "poly_close": "2026-09-27",
+   "poly_id": "0x7954fd8bb4383697fb6831c153842b07bc51670ca2790e25c288869d63c13844",
+   "kalshi_title": "Will Monika Pi\u0105tkowska win the 2026 special election for Mayor of Krak\u00f3w?",
+   "kalshi_event_title": "Krak\u00f3w mayoral election winner?",
+   "kalshi_close": "2027-09-27",
+   "kalshi_ticker": "KXKRAKOWMAYOR-26SEP27-MPIA",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.80 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Mike Derry",
+   "poly_event_title": "Calgary-Shaw Provincial By-Election Winner",
+   "poly_close": "2026-09-14",
+   "poly_id": "0xd1c9d05136d93c08cbc545b8a9eb9c164f38030987aa684b2b7000fdab7ddfcc",
+   "kalshi_title": "Will Mike Derry win the 2026 Calgary-Shaw provincial by-election?",
+   "kalshi_event_title": "Calgary-Shaw provincial by-election winner?",
+   "kalshi_close": "2027-09-14",
+   "kalshi_ticker": "KXCALGARYSHAWBY-26SEP14-MDER",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 1.00 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Adriana Guzm\u00e1n Fralick (R)",
+   "poly_event_title": "Nevada Attorney General Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x77c24977e94ac33c65aa0ba4fc9937c3f6a9263487da97133e186af8ac926239",
+   "kalshi_title": "Will the Republican party win the Attorney General race in Nevada? Adriana Guzm\u00e1n Fralick",
+   "kalshi_event_title": "Nevada Attorney General winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXATTYGENNV-26-R",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.71 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Carole Delga",
+   "poly_event_title": "Next French Presidential Election",
+   "poly_close": "2027-04-30",
+   "poly_id": "0xcd050c1af02067e33e03861ff6f67c1c85def8bf4bd196256e6d2b178509533b",
+   "kalshi_title": "Will Carole Delga win the 2027 French presidential election?",
+   "kalshi_event_title": "Next French presidential election winner?",
+   "kalshi_close": "2028-05-30",
+   "kalshi_ticker": "KXFRENCHPRES-27-CDEL",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.89 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Lee Shu-chuan",
+   "poly_event_title": "New Taipei Mayor Election Winner",
+   "poly_close": "2027-06-30",
+   "poly_id": "0x0ff4131bebd7e76a8d4e10951cf22ed92616ed2b5631d71e80721e7afd94f6ed",
+   "kalshi_title": "Will Lee Shu-chuan win the 2026 New Taipei mayoral election?",
+   "kalshi_event_title": "New Taipei mayoral election winner?",
+   "kalshi_close": "2027-11-28",
+   "kalshi_ticker": "KXNEWTAIPEIMAYOR-26NOV28-LSCH",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Daria Gosek-Popio\u0142ek",
+   "poly_event_title": "Krak\u00f3w Mayoral Election Winner",
+   "poly_close": "2026-09-27",
+   "poly_id": "0xc5c402abc3d90334af8d7ba1678fd0d0db7379a48e1270b4b3510d90190c5068",
+   "kalshi_title": "Will Daria Gosek-Popio\u0142ek win the 2026 special election for Mayor of Krak\u00f3w?",
+   "kalshi_event_title": "Krak\u00f3w mayoral election winner?",
+   "kalshi_close": "2027-09-27",
+   "kalshi_ticker": "KXKRAKOWMAYOR-26SEP27-DGOS",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.82 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Glenn Youngkin",
+   "poly_event_title": "Republican VP Nominee 2028",
+   "poly_close": "2028-08-14",
+   "poly_id": "0x185f1998cfba54cc536aea9242e05d88f817e3b8e1ef170acd35aa7becc56ae0",
+   "kalshi_title": "Will Glenn Youngkin be the nominee for the Vice Presidency for the Republican party?",
+   "kalshi_event_title": "2028 Republican VP nominee",
+   "kalshi_close": "2028-11-07",
+   "kalshi_ticker": "KXVPRESNOMR-28-GY",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.70 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Fran\u00e7ois Hollande",
+   "poly_event_title": "Next French Presidential Election: who will advance to the 2nd round?",
+   "poly_close": "2027-04-30",
+   "poly_id": "0x331b7ac2692ea005a79d3aad927899038d4adb4608301d5f8f84dc60a8de2418",
+   "kalshi_title": "Will Fran\u00e7ois Hollande qualify for the runoff in the 2027 French presidential election?",
+   "kalshi_event_title": "French presidential election: who will advance?",
+   "kalshi_close": "2028-04-17",
+   "kalshi_ticker": "KXFRPRESADVANCE-26APR18-FHOL",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.46 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Josh Shapiro",
+   "poly_event_title": "Democratic VP Nominee 2028",
+   "poly_close": "2028-08-10",
+   "poly_id": "0x319590e658173604cb05be56afe4dd4e8001afb4be138461c783c2d3f6fb70f6",
+   "kalshi_title": "Will Josh Shapiro be the nominee for the Vice Presidency for the Democratic party?",
+   "kalshi_event_title": "2028 Democratic VP nominee",
+   "kalshi_close": "2028-11-07",
+   "kalshi_ticker": "KXVPRESNOMD-28-JS",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.70 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Jean Castex",
+   "poly_event_title": "Next French Presidential Election",
+   "poly_close": "2027-04-30",
+   "poly_id": "0x8c1faa77d8ded9f94ffef7fe6326421a9890efd769ddcfd17808985c4a4ba93a",
+   "kalshi_title": "Will Jean Castex win the 2027 French presidential election?",
+   "kalshi_event_title": "Next French presidential election winner?",
+   "kalshi_close": "2028-05-30",
+   "kalshi_ticker": "KXFRENCHPRES-27-JCAS",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.89 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Elise Stefanik",
+   "poly_event_title": "Republican VP Nominee 2028",
+   "poly_close": "2028-08-14",
+   "poly_id": "0x0786213c4d06a2bb0c6fcf657b09242c39bfb5684779ac7e6f35bb946af047bd",
+   "kalshi_title": "Will Elise Stefanik be the nominee for the Vice Presidency for the Republican party?",
+   "kalshi_event_title": "2028 Republican VP nominee",
+   "kalshi_close": "2028-11-07",
+   "kalshi_ticker": "KXVPRESNOMR-28-ES",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.70 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "J\u00e9r\u00f4me Guedj",
+   "poly_event_title": "2027 French Presidential Election: who will be on the ballot?",
+   "poly_close": "2027-04-17",
+   "poly_id": "0xf68b70ff2188b785d49fb999046a72d1071c38fb279ed31a3cb3dcee87306b27",
+   "kalshi_title": "Will J\u00e9r\u00f4me Guedj appear on the official candidate list for the first round of the 2027 French presidential election?",
+   "kalshi_event_title": "2027 French Presidential Election: who will be on the ballot?",
+   "kalshi_close": "2027-06-30",
+   "kalshi_ticker": "KXFRPRESBALLOT-27JUN30-JGUE",
+   "category": "election",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.54 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Kevin Hern (R)",
+   "poly_event_title": "Oklahoma Senate Election Winner",
+   "poly_close": "",
+   "poly_id": "0xc1e1d5a2814a6abf40e304c00a43cfd05519caa11b04665c709b0a94d8c34d05",
+   "kalshi_title": "Will Republicans win the Senate race in Oklahoma? Kevin Hern",
+   "kalshi_event_title": "Oklahoma Senate winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "SENATEOK-26-R",
+   "category": "political",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.80 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "John Ratcliffe",
+   "poly_event_title": "Who will leave Trump Administration before 2027?",
+   "poly_close": "2027-01-01",
+   "poly_id": "0xc3bbe4f2c5da7562443c176bb95590a33ae534111d6f1682e35aafa4add68213",
+   "kalshi_title": "Will John Ratcliffe leaves Director of the CIA in before 2027?",
+   "kalshi_event_title": "Who will leave their role in the Trump administration in 2026?",
+   "kalshi_close": "2027-01-01",
+   "kalshi_ticker": "KXTRUMPADMINLEAVE-26DEC31-JRAT",
+   "category": "political",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.55 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Kurt Alme (R) ",
+   "poly_event_title": "Montana Senate Election Winner",
+   "poly_close": "",
+   "poly_id": "0xd103195d48bf6183e28c4140bd374dd3e907e8f8d411374cb4d2d124ec4c216d",
+   "kalshi_title": "Will Republicans win the Senate race in Montana? Kurt Alme",
+   "kalshi_event_title": "Montana Senate winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "SENATEMT-26-R",
+   "category": "political",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.80 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Kim Jong Un",
+   "poly_event_title": "Who will Trump meet with in 2026?",
+   "poly_close": "2027-01-01",
+   "poly_id": "0xb5395470c9b87f5ae8ffc719c1376aa89b493adf083e01cb8064e683fbaa18fc",
+   "kalshi_title": "Will Donald Trump meet in person Kim Jong Un before Jan 1, 2027?",
+   "kalshi_event_title": "Who will Donald Trump meet in 2026?",
+   "kalshi_close": "2027-01-01",
+   "kalshi_ticker": "KXTRUMPMEETING-27JAN01-NKJU",
+   "category": "political",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.55 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Will the US reopen its embassy in Iran in 2026?",
+   "poly_event_title": "Will the US reopen its embassy in Iran in 2026?",
+   "poly_close": "2027-01-01",
+   "poly_id": "0x91467d5c49b5e06a68d101c3ea2e227ffd76215060d93381aca203ee26cf2d06",
+   "kalshi_title": "Will the US reopen its embassy in Iran before Jan 1, 2027? Before 2027",
+   "kalshi_event_title": "Will the US reopen its embassy in Iran?",
+   "kalshi_close": "2027-01-01",
+   "kalshi_ticker": "KXIRANEMBASSY-27",
+   "category": "political",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.50 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Kyren Williams",
+   "poly_event_title": "Pro Football: 2026-27 AP Offensive Player of the Year Winner",
+   "poly_close": "2027-02-11",
+   "poly_id": "0x24c9505cb4d9aa6ed714bf575a037a945c9ef681a175e0a1130cc054cca1b6e2",
+   "kalshi_title": "Will Kyren Williams win the Offensive Player of the Year?",
+   "kalshi_event_title": "Offensive Player of the Year Winner?",
+   "kalshi_close": "2028-02-08",
+   "kalshi_ticker": "KXNFLOPOTY-27-KWIL",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.47 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "David Pan (R)",
+   "poly_event_title": "CA-46 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x544f00d1660aa786d5c535fb0c217246062d70274cbd8bcfddd64703206ab2eb",
+   "kalshi_title": "Will Republican win the House race for CA-46? David Pan",
+   "kalshi_event_title": "CA-46 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-CA46-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Travis Kelce",
+   "poly_event_title": "People's Sexiest Man Alive 2026",
+   "poly_close": "2027-01-01",
+   "poly_id": "0xb3c6d6bebd3c37d19b66a2c26fe2110506313ec7b095e0740a68031d0c09732a",
+   "kalshi_title": "Who will be People's Sexiest Man Alive in 2026? Travis Kelce",
+   "kalshi_event_title": "People's Sexiest Man Alive for 2026",
+   "kalshi_close": "2027-01-01",
+   "kalshi_ticker": "KXSEXYMAN-26-TRA",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.88 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "David Jolly (D)",
+   "poly_event_title": "Florida Governor Election Winner",
+   "poly_close": "",
+   "poly_id": "0x22492ab0d5c936a0c8b24e241bcbe959ee4d7e52f227a8d128d38a025316eb85",
+   "kalshi_title": "Will the Democratic party win the governorship in Florida David Jolly",
+   "kalshi_event_title": "Florida Governor winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "GOVPARTYFL-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.46 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "D'Andre Swift",
+   "poly_event_title": "Fantasy Football: 2026-27 Week 1 RB Points Leader (PPR)",
+   "poly_close": "2026-09-15",
+   "poly_id": "0x601a0d3c8b83dac7d22c36e0680cd65ba87664443a075169bfb91aff5913cfa2",
+   "kalshi_title": "D'Andre Swift: Leader RB in fantasy points for Week 1?",
+   "kalshi_event_title": "RB Fantasy Football Week 1 Leader?",
+   "kalshi_close": "2026-09-15",
+   "kalshi_ticker": "KXNFLFFWEEKLEAD-2026W1RB-DSWIFT4",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.56 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "50-51\u00b0F",
+   "poly_event_title": "Lowest temperature in Seattle on September 14?",
+   "poly_close": "2026-09-14",
+   "poly_id": "0xf77f9d34b10d5d70af46c62db62f416ec20c5e8ad89b159d1477954a4bf99ba3",
+   "kalshi_title": "Will the minimum temperature be 50-51\u00b0 on Sep 14, 2026? 50\u00b0 to 51\u00b0",
+   "kalshi_event_title": "Lowest temperature in Seattle on Sep 14, 2026?",
+   "kalshi_close": "2026-09-15",
+   "kalshi_ticker": "KXLOWTSEA-26SEP14-B50.5",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.55 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "George Whitesides (D)",
+   "poly_event_title": "CA-27 House Election Winner",
+   "poly_close": "2026-11-04",
+   "poly_id": "0xa3a67d6cd09d2b3af055b057ef25742dd3806cddb861b2e32cd1e76639266a4f",
+   "kalshi_title": "Will Democratic win the House race for CA-27? George Whitesides",
+   "kalshi_event_title": "CA-27 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "HOUSECA27-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Michael Baumgartner (R)",
+   "poly_event_title": "WA-05 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x40f70bef37f290b26f6d67a31f56a474aa04d5e0eaea2355c967b675bf6e2e2b",
+   "kalshi_title": "Will Republican win the House race for WA-05? Michael Baumgartner",
+   "kalshi_event_title": "WA-05 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-WA05-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Richard Grenell",
+   "poly_event_title": "Venezuela leader end of 2026?",
+   "poly_close": "2026-12-31",
+   "poly_id": "0x831493dce463d9adcad78c492f2cbec6ecdac31f4e8c5a894fdac68c130549d4",
+   "kalshi_title": "Will Richard Grenell be the head of state of Venezuela on Dec 31, 2026?",
+   "kalshi_event_title": "Who will officially lead Venezuela at the end of 2026?",
+   "kalshi_close": "2026-12-31",
+   "kalshi_ticker": "KXVENEZUELALEADER-26DEC31-RGRE",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.42 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Scott Fitzgerald (R)",
+   "poly_event_title": "WI-05 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0xb4b73fad181afe8bce36e741bff0979694b0d68491243b2700931fe331004456",
+   "kalshi_title": "Will Republican win the House race for WI-05? Scott Fitzgerald",
+   "kalshi_event_title": "WI-05 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-WI05-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Anna Golladay (D)",
+   "poly_event_title": "TN-03 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x6cf0f56174985b475438e939363015a599c491d904e5bccc0b80009c88243f0f",
+   "kalshi_title": "Will Democratic win the House race for TN-03? Anna Golladay",
+   "kalshi_event_title": "TN-03 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-TN03-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Mike Levin (D)",
+   "poly_event_title": "CA-49 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0xa93d709843b6463ca80fcefde6e17f1c4674c28a81e62d72ba84067dc77bbe20",
+   "kalshi_title": "Will a Democrat win the House race for CA-49? Mike Levin",
+   "kalshi_event_title": "CA-49 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "HOUSECA49-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.54 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "50-51\u00b0F",
+   "poly_event_title": "Lowest temperature in San Francisco on September 14?",
+   "poly_close": "2026-09-14",
+   "poly_id": "0xc9bf32ac72acf06d13c5fc289945a1455e47c32ac0f5a58aad4f7419f9c6c230",
+   "kalshi_title": "Will the minimum temperature be 50-51\u00b0 on Sep 14, 2026? 50\u00b0 to 51\u00b0",
+   "kalshi_event_title": "Lowest temperature in San Francisco on Sep 14, 2026?",
+   "kalshi_close": "2026-09-15",
+   "kalshi_ticker": "KXLOWTSFO-26SEP14-B50.5",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.58 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Those Who Wish Me Dead",
+   "poly_event_title": "What will be the top US Netflix movie this week?",
+   "poly_close": "2026-09-15",
+   "poly_id": "0x87d7896bff61994e9a8850b9039d252ef3877698915cf0f1ba899cc7403e8ab5",
+   "kalshi_title": "Will Those Who Wish Me Dead be Top US Netflix Movie on Sep 14, 2026?",
+   "kalshi_event_title": "Top US Netflix Movie this week?",
+   "kalshi_close": "2026-09-15",
+   "kalshi_ticker": "KXNETFLIXRANKMOVIE-26SEP14-THO",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.75 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Rebecca Bennett (D)",
+   "poly_event_title": "NJ-07 House Election Winner",
+   "poly_close": "2026-11-04",
+   "poly_id": "0xdf4512f9c4cdcddd0296b17f54807db88d33685d3142e877f616191f39a3848a",
+   "kalshi_title": "Will Democratic win the House race for NJ-7? Rebecca Bennett",
+   "kalshi_event_title": "NJ-07 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "HOUSENJ7-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.62 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Newcastle United",
+   "poly_event_title": "English Premier League Top 6 Finishers (2026-27)",
+   "poly_close": "2027-05-30",
+   "poly_id": "0x0a942c609f32d2f94c312ec714251a105de7ba31cbe3626eb409d1e589bb6e72",
+   "kalshi_title": "Will Newcastle United finish in the top 6 in the 2026-27 EPL season?",
+   "kalshi_event_title": "EPL Top 6 Finishers",
+   "kalshi_close": "2027-06-14",
+   "kalshi_ticker": "KXEPLTOP-27TOP6-NEW",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.69 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Jalen Smith",
+   "poly_event_title": "NCAA Football: 2026 Big Ten Receiving Yards Leader",
+   "poly_close": "2026-12-06",
+   "poly_id": "0x79333436ea362d80521d93879c7a6b187276abb83ab3ca19f85a6f6b1f53872b",
+   "kalshi_title": "Jalen Smith records the most receiving yards in the Big Ten",
+   "kalshi_event_title": "Big Ten: Receiving Yards Leader",
+   "kalshi_close": "2027-01-07",
+   "kalshi_ticker": "KXNCAAFBIGTENLEADER-26RECYDS-MINNJSMI",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.58 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Las Vegas Raiders",
+   "poly_event_title": "Pro Football: 2027 Champion",
+   "poly_close": "2027-03-31",
+   "poly_id": "0xc771628162ee0100dc74e1c71c14ed067c3cc0f90e85e9f2c1038a33967c52a5",
+   "kalshi_title": "Will Las Vegas win the 2027 Pro Football Championship?",
+   "kalshi_event_title": "2027 Pro Football Champion",
+   "kalshi_close": "2029-02-13",
+   "kalshi_ticker": "KXSB-27-LV",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.73 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Cincinnati Bengals",
+   "poly_event_title": "Pro Football: 2026-27 AFC #1 Seed",
+   "poly_close": "2027-01-10",
+   "poly_id": "0x240c261561e9405b03e86563981002fcb121a4b5a5862caca4ddd9f9af220a81",
+   "kalshi_title": "Will Cincinnati be the AFC 1 Seed?",
+   "kalshi_event_title": "Pro Football: AFC #1 Seed",
+   "kalshi_close": "2027-01-18",
+   "kalshi_ticker": "KXNFL1SEED-AFC26-CIN",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.50 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Ethan Baker (R)",
+   "poly_event_title": "MI-11 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x39fd1c70b7d65566ea72d6d8f24c81d954463b86915699434481752fa04dddaf",
+   "kalshi_title": "Will Republican win the House race for MI-11? Ethan Baker",
+   "kalshi_event_title": "MI-11 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-MI11-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Jaden Craig",
+   "poly_event_title": "NCAA Football: 2026 Big 12 Passing Yards Leader",
+   "poly_close": "2026-12-06",
+   "poly_id": "0x43648c4e6f84661d296dd4a3dc36c5c3c6646d5e2bddf74d28c12602df00bb96",
+   "kalshi_title": "Jaden Craig records the most passing yards in the Big 12",
+   "kalshi_event_title": "Big 12: Passing Yards Leader",
+   "kalshi_close": "2027-01-07",
+   "kalshi_ticker": "KXNCAAFBIG12LEADER-26PASSYDS-TCUJCRA",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.58 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Josh Allen",
+   "poly_event_title": "Pro Football: 2026-27 3,500+ Passing Yards",
+   "poly_close": "2027-01-12",
+   "poly_id": "0x0c4eb85e0810961ee0c82cfb58109e74bed8297e85ee3a337429ada67a9e7fb6",
+   "kalshi_title": "Will Josh Allen record 3500+ passing yards during 2026-27 Pro Football regular season?",
+   "kalshi_event_title": "Pro Football: 3500+ Passing Yards Season",
+   "kalshi_close": "2027-02-02",
+   "kalshi_ticker": "KXNFLSEASONPASSYDS-27C3500-JALLEN17",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.79 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Pro Football: Aaron Donald to Play Week 1?",
+   "poly_event_title": "Pro Football: Aaron Donald to Play Week 1?",
+   "poly_close": "2026-09-14",
+   "poly_id": "0xfcbbe9ffd54219f6e63555e80698f42a764702b417bdfc239b43ac625b9a8c8c",
+   "kalshi_title": "Aaron Donald to compete in the Pro Football Game in 2026-27 season?",
+   "kalshi_event_title": "Aaron Donald to play in a Pro Football game this season",
+   "kalshi_close": "2027-02-22",
+   "kalshi_ticker": "KXNFLCOMPETE-ADON27FEB-Y",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.42 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Cristian Morales (R)",
+   "poly_event_title": "CA-43 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x3ac16ee10c4b69cb550f8a3224025240582510fc11f2791f8197b97c19cd9c7e",
+   "kalshi_title": "Will Republican win the House race for CA-43? Cristian Morales",
+   "kalshi_event_title": "CA-43 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-CA43-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "KJ Jackson",
+   "poly_event_title": "NCAA Football: 2026 SEC Passing Yards Leader",
+   "poly_close": "2026-12-06",
+   "poly_id": "0x7a3c3abc7aac1f7b39a138a74078eaae47c9346fdb47f7837891fb1d6932e0d2",
+   "kalshi_title": "KJ Jackson records the most passing yards in the SEC",
+   "kalshi_event_title": "SEC: Passing Yards Leader",
+   "kalshi_close": "2027-01-07",
+   "kalshi_ticker": "KXNCAAFSECLEADER-26PASSYDS-ARKKJAC",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.55 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Napheesa Collier",
+   "poly_event_title": "WNBA: 2026 MVP",
+   "poly_close": "2026-09-25",
+   "poly_id": "0x8396243da6f1e4e9b1f7fe2290e87c1f24a8923f7ec5a8b8ab4abb6cba28ab48",
+   "kalshi_title": "Will Napheesa Collier win MVP?",
+   "kalshi_event_title": "Women's Pro Basketball MVP Winner",
+   "kalshi_close": "2027-12-01",
+   "kalshi_ticker": "KXWNBAMVP-26-NCOL",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.36 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Ipswich Town",
+   "poly_event_title": "EPL: 2026-27 Top 2 Finishers",
+   "poly_close": "2027-05-30",
+   "poly_id": "0xe90a8f03773797f07c7b879c054b7044993e593419d34b5eb7a3b7052011183c",
+   "kalshi_title": "Will Ipswich Town finish in the top 2 in the 2026-27 EPL season?",
+   "kalshi_event_title": "EPL Top 2 Finishers",
+   "kalshi_close": "2027-06-14",
+   "kalshi_ticker": "KXEPLTOP-27TOP2-IPS",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.77 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Vladimir Putin",
+   "poly_event_title": "#1 Searched Person on Google 2026?",
+   "poly_close": "2026-12-31",
+   "poly_id": "0xc08317cb87419add79e986c57ed99015b41c813891996f01e3285cafeacf07ba",
+   "kalshi_title": "Will Vladimir Putin be the #1 rank on Google\u2019s Year in Search 2026 Global \u2013 People?",
+   "kalshi_event_title": "#1 searched person on Google in 2026",
+   "kalshi_close": "2026-12-31",
+   "kalshi_ticker": "KXRANKLISTGOOGLESEARCH-26DEC-VLA",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Yoseph Theolifus Taher",
+   "poly_event_title": "Titled Tuesday Top 8: September 15",
+   "poly_close": "2026-09-30",
+   "poly_id": "0x6790a29396e53558ee134bb9272301f7cb4dbf9bdb38331ba44442df73c31742",
+   "kalshi_title": "Will Yoseph Theolifus Taher finish top 8 in the Titled Tuesday chess competition on Sep 15, 2026?",
+   "kalshi_event_title": "Titled Tuesday Top 8: Sep 15",
+   "kalshi_close": "2026-09-29",
+   "kalshi_ticker": "KXTITLEDTUESTOP-26SEP15T8-YTAH",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.64 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Emilia Sykes (D)",
+   "poly_event_title": "OH-13 House Election Winner",
+   "poly_close": "2026-11-04",
+   "poly_id": "0xc528b5c384832a754585eeb005f96efd2842db3db1ebfd574bc3c8235a6dbae0",
+   "kalshi_title": "Will Democratic win the House race for OH-13? Emilia Sykes",
+   "kalshi_event_title": "OH-13 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "HOUSEOH13-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Terry McLaurin",
+   "poly_event_title": "Pro Football: 2026-27 10+ Receiving Touchdowns",
+   "poly_close": "2027-01-12",
+   "poly_id": "0xd9265552854a7f18586c128220321abac7d4da1312a5ffd965eb182f86a036d4",
+   "kalshi_title": "Will Terry McLaurin record 10+ receiving touchdowns during the 2026-27 Pro Football regular season?",
+   "kalshi_event_title": "Pro Football: 10+ Receiving Touchdowns Season",
+   "kalshi_close": "2027-02-02",
+   "kalshi_ticker": "KXNFLSEASONRECTD-27C10-TMCLAURIN17",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.79 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Dina Titus (D)",
+   "poly_event_title": "NV-01 House Election Winner",
+   "poly_close": "2026-11-04",
+   "poly_id": "0x6bc9531fff87196aa1ced85050c8532b1bf75ac18e14a2949180b7d19171256a",
+   "kalshi_title": "Will a Democrat win the House race for NV-1? Dina Titus",
+   "kalshi_event_title": "NV-01 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "HOUSENV1-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.50 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Rick Devens",
+   "poly_event_title": "Big Brother Season 28 Winner",
+   "poly_close": "2026-10-01",
+   "poly_id": "0x4b4a211a698f338e20311a60ec4e0f0455e3cf20ea08304514f589a541328160",
+   "kalshi_title": "Will Rick Devens win Big Brother Season 28?",
+   "kalshi_event_title": "Big Brother Season 28 \u00b7 Winner",
+   "kalshi_close": "2027-01-07",
+   "kalshi_ticker": "KXBIGBROTHER-26DEC31-RIC",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 1.00 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Dmitry Andreikin",
+   "poly_event_title": "Titled Tuesday Top 5: September 15",
+   "poly_close": "2026-09-30",
+   "poly_id": "0x7eb0bd1b95effd0f25e8f7f0c81f7494167bc2f4b052cfb4af164ad8440c5423",
+   "kalshi_title": "Will Dmitry Andreikin finish top 5 in the Titled Tuesday chess competition on Sep 15, 2026?",
+   "kalshi_event_title": "Titled Tuesday Top 5: Sep 15",
+   "kalshi_close": "2026-09-29",
+   "kalshi_ticker": "KXTITLEDTUESTOP-26SEP15T5-DAND",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.62 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Orlando Magic",
+   "poly_event_title": "NBA: Kawhi Leonard Next Team",
+   "poly_close": "2026-10-31",
+   "poly_id": "0x62add943c1322117b3bc0dc880ec8c07f46de45aee92e2dcda77a8840f14c017",
+   "kalshi_title": "What will be Kawhi Leonard's next team? Orlando",
+   "kalshi_event_title": "Kawhi Leonard's Next Team",
+   "kalshi_close": "2026-10-21",
+   "kalshi_ticker": "KXNEXTTEAMNBA-26KLEONARD2-ORL",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.50 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Lindsay James (D)",
+   "poly_event_title": "IA-02 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0xf4051fc690cc6d64fb5132f0d1a50b864a41820ebf2bc82192858628d4015430",
+   "kalshi_title": "Will Democratic win the House race for IA-02? Lindsay James",
+   "kalshi_event_title": "IA-02 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-IA02-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "50-51\u00b0F",
+   "poly_event_title": "Lowest temperature in Chicago on September 14?",
+   "poly_close": "2026-09-14",
+   "poly_id": "0x968901537d18415f376c273b7f67be131f6dfb13898ae624404460beeb0a8005",
+   "kalshi_title": "Will the minimum temperature be 50-51\u00b0 on Sep 14, 2026? 50\u00b0 to 51\u00b0",
+   "kalshi_event_title": "Lowest temperature in Chicago on Sep 14, 2026?",
+   "kalshi_close": "2026-09-15",
+   "kalshi_ticker": "KXLOWTCHI-26SEP14-B50.5",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.55 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "New Orleans Pelicans",
+   "poly_event_title": "NBA Free Agency: Jalen Duren Next Team",
+   "poly_close": "2026-10-31",
+   "poly_id": "0xbf04df484e77137d92b8428bd3855914a3c969fbb6568335e40c847e291e5ea7",
+   "kalshi_title": "What will be Jalen Duren's next team? New Orleans",
+   "kalshi_event_title": "Jalen Duren's Next Team",
+   "kalshi_close": "2026-10-21",
+   "kalshi_ticker": "KXNEXTTEAMNBA-26JDUREN0-NOP",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.46 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Taylor Swift",
+   "poly_event_title": "TIME Person of the Year 2026",
+   "poly_close": "2026-12-31",
+   "poly_id": "0xa44f29126cefb6c4f51b98043e94faec39e90d1e12d0eb310937b6c81e3fa869",
+   "kalshi_title": "Will Taylor Swift be Time Person of the Year in 2026?",
+   "kalshi_event_title": "Time's Person of the Year for 2026",
+   "kalshi_close": "2027-01-01",
+   "kalshi_ticker": "KXTIME-26-TS",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 1.00 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Eli Crane (R)",
+   "poly_event_title": "AZ-02 House Election Winner",
+   "poly_close": "2026-11-04",
+   "poly_id": "0xbd353d44ec152e7bb9061883baed937386a50b3e3b6358c5d47ef9a572381f8b",
+   "kalshi_title": "Will Republican win the House race for AZ-2? Eli Crane",
+   "kalshi_event_title": "AZ-02 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "HOUSEAZ2-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.62 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Nick Walker",
+   "poly_event_title": "Mr. Olympia 2026: Men\u2019s Open Winner",
+   "poly_close": "2026-09-26",
+   "poly_id": "0x12c20f3a806a91f5cfc143775df1b36fcf5175f3910fb217803237fbd3f55208",
+   "kalshi_title": "Will Nick Walker win the 2026 Mr. Olympia (Men's Open)?",
+   "kalshi_event_title": "2026 Mr. Olympia (Men's Open)",
+   "kalshi_close": "2026-10-11",
+   "kalshi_ticker": "KXMROLYMPIA-26-NWAL",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.89 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Iberia 1999",
+   "poly_event_title": "UEFA Conference League: 2027 Champion",
+   "poly_close": "2027-06-16",
+   "poly_id": "0xa781861ab497f0cf763e93f7abd308e2266cffd0ad76ab8d374f15a6416f9606",
+   "kalshi_title": "Will Iberia win the UEFA Conference League?",
+   "kalshi_event_title": "UEFA Conference League Champion",
+   "kalshi_close": "2027-06-16",
+   "kalshi_ticker": "KXUECL-27-IBE",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.55 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Newcastle United",
+   "poly_event_title": "English Premier League Top 4 Finishers (2026-27)",
+   "poly_close": "2027-05-30",
+   "poly_id": "0xfaf224e8d7b887fe992fcda997c9aebc9fbf025d7d47e725b22c557acc62685b",
+   "kalshi_title": "Will Newcastle United finish in the top 4 in the 2026-27 EPL season?",
+   "kalshi_event_title": "EPL Top 4 Finishers",
+   "kalshi_close": "2027-06-14",
+   "kalshi_ticker": "KXEPLTOP-27TOP4-NEW",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.69 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Zack Wheeler",
+   "poly_event_title": "MLB: 2026 NL Cy Young Winner",
+   "poly_close": "2026-11-12",
+   "poly_id": "0xadcaa4e67d620dddaf25517d745e99ada18b3a907431985e6b1c788dda9415d1",
+   "kalshi_title": "Will Zack Wheeler win NL Cy Young?",
+   "kalshi_event_title": "NL Cy Young Winner?",
+   "kalshi_close": "2026-12-08",
+   "kalshi_ticker": "KXMLBNLCY-26-ZWHE",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.70 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "John Croisant (D)",
+   "poly_event_title": "OK-01 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x9e0ac81d2dd87b38dbd5ea087850ee35f597326d3f800ec9190ea79a499c7f7e",
+   "kalshi_title": "Will Democratic win the House race for OK-01? John Croisant",
+   "kalshi_event_title": "OK-01 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-OK01-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Republican Party",
+   "poly_event_title": "MA-02 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x034341c948e36836242f23998e50ce3c64d931da00b5eaa264baaa8c15f51690",
+   "kalshi_title": "Will Republican win the House race for MA-02? Republican party",
+   "kalshi_event_title": "MA-02 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-MA02-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.70 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Will a dLLM be the top AI model before 2027?",
+   "poly_event_title": "Will a dLLM be the top AI model before 2027?",
+   "poly_close": "2027-01-01",
+   "poly_id": "0x17e50040be61ebe2b83afe0eb66a4dd26446b49472c95b51d3ad245003f1d61a",
+   "kalshi_title": "Will Z.ai have a top-ranked AI model before 2027?",
+   "kalshi_event_title": "Which companies will have a top-ranked AI model this year?",
+   "kalshi_close": "2027-01-01",
+   "kalshi_ticker": "KXTOPAI-27-JAN01-ZAI",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.50 >= 0.3"
+   ],
+   "label": "different",
+   "reason_class": "different_subject"
+  },
+  {
+   "poly_title": "Sonny Gray",
+   "poly_event_title": "MLB: 2026 AL Cy Young Winner",
+   "poly_close": "2026-11-12",
+   "poly_id": "0x8a9a60747c20c1efee814a8979aeeafe8d5df64cf016168a51104d0b09c55a71",
+   "kalshi_title": "Will Sonny Gray win AL Cy Young?",
+   "kalshi_event_title": "AL Cy Young Winner?",
+   "kalshi_close": "2026-12-08",
+   "kalshi_ticker": "KXMLBALCY-26-SGRA",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.70 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Republican Party",
+   "poly_event_title": "LA-04 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x25ee7d421555ebb6ed08f1197312ea75d68671f0838d3808734e1e4c8d194923",
+   "kalshi_title": "Will Republican win the House race for LA-04? Republican party",
+   "kalshi_event_title": "LA-04 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-LA04-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.70 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Dallas Cowboys",
+   "poly_event_title": "Pro Football: 2026-27 NFC #1 Seed",
+   "poly_close": "2027-01-10",
+   "poly_id": "0xc7e16600e196500e8e76489149be7ff4be1db42b9a52e764194477c13e36426e",
+   "kalshi_title": "Will Dallas be the NFC 1 Seed?",
+   "kalshi_event_title": "Pro Football: NFC #1 Seed",
+   "kalshi_close": "2027-01-18",
+   "kalshi_ticker": "KXNFL1SEED-NFC26-DAL",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.50 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Waldo Fern\u00e1ndez Gonz\u00e1lez",
+   "poly_event_title": "Nuevo Le\u00f3n Governor Election Winner",
+   "poly_close": "2027-06-06",
+   "poly_id": "0x63ac62e9673a52597d9c97e288f6bc97b9dd499dc06191bd762d31b13400414e",
+   "kalshi_title": "Will Waldo Fern\u00e1ndez Gonz\u00e1lez win the 2027 Nuevo Le\u00f3n gubernatorial election?",
+   "kalshi_event_title": "Nuevo Le\u00f3n Governor winner?",
+   "kalshi_close": "2028-06-06",
+   "kalshi_ticker": "KXNUEVOLEONGOV-27JUN06-WFGO",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.91 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Gerrit Cole",
+   "poly_event_title": "MLB: AL Comeback Player of the Year",
+   "poly_close": "2026-12-19",
+   "poly_id": "0xea5c226f31fd65268e27025c202f0815f0f97330970fe4699e6e9f0809836c6a",
+   "kalshi_title": "Will Gerrit Cole win AL CPOTY?",
+   "kalshi_event_title": "AL Comeback Player of the Year Winner?",
+   "kalshi_close": "2026-12-08",
+   "kalshi_ticker": "KXMLBALCPOTY-26-GCOL",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.58 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Mike Trout",
+   "poly_event_title": "MLB: 2026 AL MVP ",
+   "poly_close": "2026-11-13",
+   "poly_id": "0x4dcca2fd8ff5ef94e2d994de35c8172e9a13bd274807f95eecb5b48281d7316a",
+   "kalshi_title": "Will Mike Trout win AL MVP?",
+   "kalshi_event_title": "AL MVP Winner?",
+   "kalshi_close": "2026-12-08",
+   "kalshi_ticker": "KXMLBALMVP-26-MTRO",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.45 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Jayden Maiava",
+   "poly_event_title": "NCAA Football: 2026 Big Ten Passing Yards Leader",
+   "poly_close": "2026-12-06",
+   "poly_id": "0xd4dafd36eef9a3bb3eb36df605635b377640e5f14244dc5004e76682edc010d4",
+   "kalshi_title": "Jayden Maiava records the most passing yards in the Big Ten",
+   "kalshi_event_title": "Big Ten: Passing Yards Leader",
+   "kalshi_close": "2027-01-07",
+   "kalshi_ticker": "KXNCAAFBIGTENLEADER-26PASSYDS-USCJMAI",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.58 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Bijan Robinson",
+   "poly_event_title": "Fantasy Football: 2026-27 Week 1 RB Points Leader (PPR)",
+   "poly_close": "2026-09-15",
+   "poly_id": "0x0cb8a7eeab2e7ef5dda6318dadf1ab7db87516adf576d2291d4c73e2ea223b3e",
+   "kalshi_title": "Bijan Robinson: Leader RB in fantasy points for Week 1?",
+   "kalshi_event_title": "RB Fantasy Football Week 1 Leader?",
+   "kalshi_close": "2026-09-15",
+   "kalshi_ticker": "KXNFLFFWEEKLEAD-2026W1RB-BROBINSON7",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.56 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Mailza Assis",
+   "poly_event_title": "Acre Governor Election Winner",
+   "poly_close": "2026-10-04",
+   "poly_id": "0xaa06d447b3ae5e98e0f3d3b182bde3520a58b744fd85bfdd6a68164597b47d90",
+   "kalshi_title": "Will Mailza Assis win the 2026 Acre gubernatorial election?",
+   "kalshi_event_title": "Acre Governor winner?",
+   "kalshi_close": "2027-10-04",
+   "kalshi_ticker": "KXACREGOV-26OCT04-MASS",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 1.00 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Humberto Ambriz Delgadillo",
+   "poly_event_title": "Aguascalientes Governor Election Winner",
+   "poly_close": "2027-06-06",
+   "poly_id": "0x4d2dc4d04322f73f8273d301f614e259f56f78e29b8340fed36e3060036a7b9c",
+   "kalshi_title": "Will Humberto Ambriz Delgadillo win the 2027 Aguascalientes gubernatorial election?",
+   "kalshi_event_title": "Aguascalientes Governor winner?",
+   "kalshi_close": "2028-06-06",
+   "kalshi_ticker": "KXAGUASCALIENTESGOV-27JUN06-HAMB",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.90 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Tarc\u00edsio de Freitas",
+   "poly_event_title": "S\u00e3o Paulo Governor Election Winner",
+   "poly_close": "2026-10-04",
+   "poly_id": "0x7fad7ba14804a90a2c45352bd52689be4703013123772044badbcf688b79bcee",
+   "kalshi_title": "Will Tarc\u00edsio de Freitas win the 2026 S\u00e3o Paulo gubernatorial election?",
+   "kalshi_event_title": "S\u00e3o Paulo Governor winner?",
+   "kalshi_close": "2027-10-04",
+   "kalshi_ticker": "KXSPGOV-26OCT04-TFRE",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 1.00 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Dawson Pough",
+   "poly_event_title": "NCAA Football: 2026 ACC Receiving Yards Leader",
+   "poly_close": "2026-12-06",
+   "poly_id": "0x1fb6a88e93f4678b6dd2bd5ba3f7f0c559187df70852442ff3b505ffffd3dc26",
+   "kalshi_title": "Dawson Pough records the most receiving yards in the ACC",
+   "kalshi_event_title": "ACC: Receiving Yards Leader",
+   "kalshi_close": "2027-01-07",
+   "kalshi_ticker": "KXNCAAFACCLEADER-26RECYDS-BCDPOU",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.55 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Luke Bronin (D)",
+   "poly_event_title": "CT-01 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x40249d25f830ea7e88f01d5a41a118f1982adf9786588002a823b38cb3f24d80",
+   "kalshi_title": "Will Democratic win the House race for CT-01? Luke Bronin",
+   "kalshi_event_title": "CT-01 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-CT01-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Praggnanandhaa Rameshbabu",
+   "poly_event_title": "Titled Tuesday Top 5: September 15",
+   "poly_close": "2026-09-30",
+   "poly_id": "0x9cbc496c396a85797c17b60aec2210ef376651b5f7710cc28207da1e3fdf39d9",
+   "kalshi_title": "Will Praggnanandhaa Rameshbabu finish top 5 in the Titled Tuesday chess competition on Sep 15, 2026?",
+   "kalshi_event_title": "Titled Tuesday Top 5: Sep 15",
+   "kalshi_close": "2026-09-29",
+   "kalshi_ticker": "KXTITLEDTUESTOP-26SEP15T5-PRAM",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.62 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Nolan McLean",
+   "poly_event_title": "MLB: NL Rookie of the Year",
+   "poly_close": "2026-12-19",
+   "poly_id": "0x03a35ed9f0fbf82b2f9bf8d069366e0ad6e4942e7de6e22ca11e01384e37fbd5",
+   "kalshi_title": "Will Nolan McLean win NL ROTY?",
+   "kalshi_event_title": "NL Rookie of the Year Winner?",
+   "kalshi_close": "2026-12-08",
+   "kalshi_ticker": "KXMLBNLROTY-26-NMCL",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.55 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Moises Ballesteros",
+   "poly_event_title": "MLB: NL Rookie of the Year",
+   "poly_close": "2026-12-19",
+   "poly_id": "0x9e03b82afb7654f4a2c6db3cc4bf6f1f74b53547ea3600001dac127decb34a23",
+   "kalshi_title": "Will Moises Ballesteros win NL ROTY?",
+   "kalshi_event_title": "NL Rookie of the Year Winner?",
+   "kalshi_close": "2026-12-08",
+   "kalshi_ticker": "KXMLBNLROTY-26-MBAL",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.55 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Deb Haaland (D)",
+   "poly_event_title": "New Mexico Governor Election Winner",
+   "poly_close": "",
+   "poly_id": "0x5eb660082d749c35ec496dae4c1f52e3950487b4d3c63215d2e27910dab38819",
+   "kalshi_title": "Will the Democratic party win the governorship in New Mexico Deb Haaland",
+   "kalshi_event_title": "New Mexico Governor winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "GOVPARTYNM-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.50 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Ethan Shine",
+   "poly_event_title": "NCAA Football: 2026 ACC Rushing Yards Leader",
+   "poly_close": "2026-12-06",
+   "poly_id": "0x70305b5aa167e1c7b3d21da106decef0e5c07961c9880e84a09a3bd96d92c09b",
+   "kalshi_title": "Ethan Shine records the most rushing yards in the ACC",
+   "kalshi_event_title": "ACC: Rushing Yards Leader",
+   "kalshi_close": "2027-01-07",
+   "kalshi_ticker": "KXNCAAFACCLEADER-26RSHYDS-PITTESHI",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.55 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Michaela Barnett (D)",
+   "poly_event_title": "TN-02 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x788597d4ad1a52349235384ce5b1306a8332004c359b14fa08e85684303d1747",
+   "kalshi_title": "Will Democratic win the House race for TN-02? Michaela Barnett",
+   "kalshi_event_title": "TN-02 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-TN02-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Bo Nix",
+   "poly_event_title": "Fantasy Football: 2026-27 Week 1 QB Points Leader",
+   "poly_close": "2026-09-15",
+   "poly_id": "0x50248f362eb14f1f6d42cf00d2262536ffc751919bf8a0de16121cd373c37ab0",
+   "kalshi_title": "Bo Nix: Leader QB in fantasy points for Week 1?",
+   "kalshi_event_title": "QB Fantasy Football Week 1 Leader?",
+   "kalshi_close": "2026-09-15",
+   "kalshi_ticker": "KXNFLFFWEEKLEAD-2026W1QB-BNIX10",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.60 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Josh Jacobs",
+   "poly_event_title": "Pro Football: 2026-27 1,000+ Rushing Yards",
+   "poly_close": "2027-01-12",
+   "poly_id": "0xa27ce076c45417951c532745d52de2a161cfa601d968f5936f0caec4e5163f04",
+   "kalshi_title": "Will Josh Jacobs record 1000+ rushing yards during 2026-27 Pro Football regular season?",
+   "kalshi_event_title": "Pro Football: 1000+ Rushing Yards Season",
+   "kalshi_close": "2027-02-02",
+   "kalshi_ticker": "KXNFLSEASONRSHYDS-27C1000-JJACOBS8",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.79 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Mike Carey (R)",
+   "poly_event_title": "OH-15 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0xcd912e61715d3701403a2a5a0b741dd18026b158513866da42d737b894ed410d",
+   "kalshi_title": "Will Republican win the House race for OH-15? Mike Carey",
+   "kalshi_event_title": "OH-15 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-OH15-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "UNRWA",
+   "poly_event_title": "Nobel Peace Prize Winner 2026",
+   "poly_close": "2026-10-10",
+   "poly_id": "0xb3fefe9667acca5ca31a8e330219dc67a01b374331d9bf4875357655a5508815",
+   "kalshi_title": "Who will win the Nobel Peace Prize? UNRWA",
+   "kalshi_event_title": "2026 Nobel Peace Prize winner",
+   "kalshi_close": "2027-01-01",
+   "kalshi_ticker": "KXNOBELPEACE-27-UNRWA",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 1.00 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Will Daylight Savings Time become permanent in the US in 2026?",
+   "poly_event_title": "Will Daylight Savings Time become permanent in the US in 2026?",
+   "poly_close": "2026-12-31",
+   "poly_id": "0xe340267dad17273a96ecf22d2225152ac8e24ae33338e8b406329393caae70d7",
+   "kalshi_title": "Will permanent daylight savings become law before Jan 1, 2027?",
+   "kalshi_event_title": "Will Daylight Saving Time become permanent?",
+   "kalshi_close": "2027-01-01",
+   "kalshi_ticker": "KXDST-27JAN01",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.42 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Parker Washington",
+   "poly_event_title": "Pro Football: 2026-27 1,000+ Receiving Yards",
+   "poly_close": "2027-01-12",
+   "poly_id": "0xa41b1eca3f1e12cd44a9d7e177831dde92181c0c048ff9a2c11873175e63cf27",
+   "kalshi_title": "Will Parker Washington record 1000+ receiving yards during 2026-27 Pro Football regular season?",
+   "kalshi_event_title": "Pro Football: 1000+ Receiving Yards Season",
+   "kalshi_close": "2027-02-02",
+   "kalshi_ticker": "KXNFLSEASONRECYDS-27C1000-PWASHINGTON11",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.79 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Matt Van Epps (R)",
+   "poly_event_title": "TN-07 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x25bb72b2889af65cebf573aaba1d824b13c0663d2a87ead3f1ffc1d09a4455d1",
+   "kalshi_title": "Will Republican win the House race for TN-07? Matt Van Epps",
+   "kalshi_event_title": "TN-07 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-TN07-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.69 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "James Comer (R)",
+   "poly_event_title": "KY-01 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x36a21174cd64c5b2d202d5ce7a8345f65e7064adbac48c09dff21c5417cd969f",
+   "kalshi_title": "Will Republican win the House race for KY-01? James Comer",
+   "kalshi_event_title": "KY-01 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-KY01-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "60+",
+   "poly_event_title": "\"Runner\" Rotten Tomatoes Score?",
+   "poly_close": "2026-09-14",
+   "poly_id": "0x101bce64776776450de3ee1cd7b099ba0d672db6f2b2ad18fecbadb3776c8205",
+   "kalshi_title": "Runner Rotten Tomatoes score? Above 60",
+   "kalshi_event_title": "Runner \u00b7 Rotten Tomatoes score",
+   "kalshi_close": "2026-09-14",
+   "kalshi_ticker": "KXRT-RUN-60",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.62 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Why Did I Get Married Again?",
+   "poly_event_title": "What will be the top US Netflix movie this week?",
+   "poly_close": "2026-09-15",
+   "poly_id": "0x566366778ce48d59fc7003df1a071101d8b1b76a3519e393c46db5707df37b3f",
+   "kalshi_title": "Will Why Did I Get Married Again? be Top US Netflix Movie on Sep 14, 2026?",
+   "kalshi_event_title": "Top US Netflix Movie this week?",
+   "kalshi_close": "2026-09-15",
+   "kalshi_ticker": "KXNETFLIXRANKMOVIE-26SEP14-WHY",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.75 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "80+",
+   "poly_event_title": "\"The Uprising\" Rotten Tomatoes Score?",
+   "poly_close": "2026-09-14",
+   "poly_id": "0x1c368c8bda1fd09125e85b175da2088b928725c0448ce051d87422ad5f978dbc",
+   "kalshi_title": "The Uprising Rotten Tomatoes score? Above 80",
+   "kalshi_event_title": "The Uprising \u00b7 Rotten Tomatoes score",
+   "kalshi_close": "2026-09-14",
+   "kalshi_ticker": "KXRT-UPR-80",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.62 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Russell Fry (R)",
+   "poly_event_title": "SC-07 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0xa6dcf4a15de9b25d12fe24019a64b996f6e0c1eacd39d656f4d915429a46be56",
+   "kalshi_title": "Will Republican win the House race for SC-07? Russell Fry",
+   "kalshi_event_title": "SC-07 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-SC07-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Clayton McCullough",
+   "poly_event_title": "MLB: NL Manager of the Year",
+   "poly_close": "2026-12-19",
+   "poly_id": "0x23dae02624e2eac0ab4d7e452cdf29959646c6154afa33f40c20a1ac38a1914c",
+   "kalshi_title": "Will Clayton McCullough win NL MOTY?",
+   "kalshi_event_title": "NL Manager of the Year Winner?",
+   "kalshi_close": "2026-12-08",
+   "kalshi_ticker": "KXMLBNLMOTY-26-CMCC",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.60 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Ashton Jeanty",
+   "poly_event_title": "Pro Football: 2026-27 AP Offensive Player of the Year Winner",
+   "poly_close": "2027-02-11",
+   "poly_id": "0x390ad97fc85a7bd571fdf5e2263bbdf19a7e65d6e903408166423569e708b397",
+   "kalshi_title": "Will Ashton Jeanty win the Offensive Player of the Year?",
+   "kalshi_event_title": "Offensive Player of the Year Winner?",
+   "kalshi_close": "2028-02-08",
+   "kalshi_ticker": "KXNFLOPOTY-27-AJEA",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.47 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Quentin Johnston",
+   "poly_event_title": "Fantasy Football: 2026-27 Week 1 WR Points Leader (PPR)",
+   "poly_close": "2026-09-15",
+   "poly_id": "0xc6bf8b7c05779a6875238ec8dfb2fe0c961e0b8b96c36178360ee10982daab08",
+   "kalshi_title": "Quentin Johnston: Leader WR in fantasy points for Week 1?",
+   "kalshi_event_title": "WR Fantasy Football Week 1 Leader?",
+   "kalshi_close": "2026-09-15",
+   "kalshi_ticker": "KXNFLFFWEEKLEAD-2026W1WR-QJOHNSTON1",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.56 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Jamaica",
+   "poly_event_title": "Concacaf 2027 Gold Cup Winner",
+   "poly_close": "2027-07-12",
+   "poly_id": "0x9cc025903fc6cbad60c42ac92ed8edf4158c5835908cc552ec44b8caf55a12ee",
+   "kalshi_title": "Will Jamaica win the 2027 CONCACAF Gold Cup?",
+   "kalshi_event_title": "2027 CONCACAF Gold Cup Champion",
+   "kalshi_close": "2027-08-15",
+   "kalshi_ticker": "KXCONCACAFGC-27-JAM",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.75 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Bryan Woo",
+   "poly_event_title": "MLB: 2026 AL Cy Young Winner",
+   "poly_close": "2026-11-12",
+   "poly_id": "0x62a30708b1960bd54ac2891b0ef65dcc3675375fd8f6b3a0641d7e2607fd392b",
+   "kalshi_title": "Will Bryan Woo win AL Cy Young?",
+   "kalshi_event_title": "AL Cy Young Winner?",
+   "kalshi_close": "2026-12-08",
+   "kalshi_ticker": "KXMLBALCY-26-BWOO",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.70 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Jimmy Patronis (R)",
+   "poly_event_title": "FL-01 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x1cbd2d35ecfbb6a2dede1e1718febb3fdf8d5accab524cec16af0505f78737ca",
+   "kalshi_title": "Will Republican win the House race for FL-01? Jimmy Patronis",
+   "kalshi_event_title": "FL-01 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-FL01-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Thomas Kean Jr. (R)",
+   "poly_event_title": "NJ-07 House Election Winner",
+   "poly_close": "2026-11-04",
+   "poly_id": "0x8e55594f3856badd772cbc1354b3c234848092dd030ee38f9b0de7c2ee82a232",
+   "kalshi_title": "Will Republican win the House race for NJ-7? Thomas Kean Jr.",
+   "kalshi_event_title": "NJ-07 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "HOUSENJ7-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.64 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Javonte Williams",
+   "poly_event_title": "Pro Football: 2026-27 1,000+ Rushing Yards",
+   "poly_close": "2027-01-12",
+   "poly_id": "0x1c12ae7ec1079d864c5e868c950a39c82f205fc1823036194f67c48a7e023509",
+   "kalshi_title": "Will Javonte Williams record 1000+ rushing yards during 2026-27 Pro Football regular season?",
+   "kalshi_event_title": "Pro Football: 1000+ Rushing Yards Season",
+   "kalshi_close": "2027-02-02",
+   "kalshi_ticker": "KXNFLSEASONRSHYDS-27C1000-JWILLIAMS33",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.79 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Rob Wittman (R)",
+   "poly_event_title": "VA-01 House Election Winner",
+   "poly_close": "2026-11-04",
+   "poly_id": "0xb47f229515c8720ca5ab0bb536f6e6b3fc2041e587179551358503741a1820db",
+   "kalshi_title": "Will Republican win the House race for VA-1? Rob Wittman",
+   "kalshi_event_title": "VA-01 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "HOUSEVA1-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.62 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Kevin Riley",
+   "poly_event_title": "NCAA Football: 2026 SEC Rushing Yards Leader",
+   "poly_close": "2026-12-06",
+   "poly_id": "0x12b04d260b3cb93ae3439518d42d939a7472f949e30d3e161d98922cf602374c",
+   "kalshi_title": "Kevin Riley records the most rushing yards in the SEC",
+   "kalshi_event_title": "SEC: Rushing Yards Leader",
+   "kalshi_close": "2027-01-07",
+   "kalshi_ticker": "KXNCAAFSECLEADER-26RSHYDS-ALAKRIL",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.55 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Maurice Mercer (D)",
+   "poly_event_title": "AL-06 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0xe5be5a680ede1cf42c207688a878504277448d1bd845156d929e6828258598e8",
+   "kalshi_title": "Will Democratic win the House race for AL-06? Maurice Mercer",
+   "kalshi_event_title": "AL-06 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-AL06-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Jahana Hayes (D)",
+   "poly_event_title": "CT-05 House Election Winner",
+   "poly_close": "2026-11-04",
+   "poly_id": "0x40b2475e802d01b929cddd1124b8199d04989f1678bcf41d53fa75d7d917333d",
+   "kalshi_title": "Will a Democrat win the House race for CT-5? Jahana Hayes",
+   "kalshi_event_title": "CT-05 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "HOUSECT5-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.50 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Trey McBride",
+   "poly_event_title": "Fantasy Football: 2026-27 Week 1 TE Points Leader (PPR)",
+   "poly_close": "2026-09-15",
+   "poly_id": "0x42853b53f479b830dc963dc6ee1f3bbc6b14dce1b11f8402b3598fdabaf3b876",
+   "kalshi_title": "Trey McBride: Leader TE in fantasy points for Week 1?",
+   "kalshi_event_title": "TE Fantasy Football Week 1 Leader?",
+   "kalshi_close": "2026-09-15",
+   "kalshi_ticker": "KXNFLFFWEEKLEAD-2026W1TE-TMCBRIDE85",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.56 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Don Cheadle as James Rhodes / War Machine",
+   "poly_event_title": "Which characters will appear in Avengers: Doomsday?",
+   "poly_close": "2026-12-18",
+   "poly_id": "0x6fe9f26e476b3db70ddda41e130dae8afe499cb78ef247daaf3336217366ebde",
+   "kalshi_title": "Will Don Cheadle perform as James Rhodes / War Machine in Avengers: Doomsday? Don Cheadle as James Rhodes / War Machine?",
+   "kalshi_event_title": "Avengers: Doomsday: Cast",
+   "kalshi_close": "2028-01-01",
+   "kalshi_ticker": "KXROLEINPRODUCTIONDOOMSDAY-DON",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Mark DeSaulnier (D)",
+   "poly_event_title": "CA-10 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x82c5486009f212e611188228baf880b7bfeecc45c8bed288b2e8fd02c7a53e9a",
+   "kalshi_title": "Will Democratic win the House race for CA-10? Mark DeSaulnier",
+   "kalshi_event_title": "CA-10 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-CA10-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Maria Rodriguez (R)",
+   "poly_event_title": "KY-03 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0xbea470992cfdea3ca5c7ee54d1155c6577f09b4431c27102102bef291d7ed1f1",
+   "kalshi_title": "Will Republican win the House race for KY-03? Maria Rodriguez",
+   "kalshi_event_title": "KY-03 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-KY03-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Wayshawn Parker",
+   "poly_event_title": "NCAA Football: 2026 Big 12 Rushing Yards Leader",
+   "poly_close": "2026-12-06",
+   "poly_id": "0x5806d8279a8103b000cd5793990cafe0aa29ff661f0f28cae8b9f4323bb62219",
+   "kalshi_title": "Wayshawn Parker records the most rushing yards in the Big 12",
+   "kalshi_event_title": "Big 12: Rushing Yards Leader",
+   "kalshi_close": "2027-01-07",
+   "kalshi_ticker": "KXNCAAFBIG12LEADER-26RSHYDS-UTAHWPAR",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.58 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Bryce Miller",
+   "poly_event_title": "MLB: 2026 AL Cy Young Winner",
+   "poly_close": "2026-11-12",
+   "poly_id": "0x9ea1c527ab53d483fdc34f9fcf3d2931f48c6df1dff651d56d482b95e512a18b",
+   "kalshi_title": "Will Bryce Miller win AL Cy Young?",
+   "kalshi_event_title": "AL Cy Young Winner?",
+   "kalshi_close": "2026-12-08",
+   "kalshi_ticker": "KXMLBALCY-26-BMIL",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.70 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Allisha Gray",
+   "poly_event_title": "WNBA: 2026 MVP",
+   "poly_close": "2026-09-25",
+   "poly_id": "0xd929b4d098cb1030aef86e16615fc81a3bb43a1383574cc71de8733eab658567",
+   "kalshi_title": "Will Allisha Gray win MVP?",
+   "kalshi_event_title": "Women's Pro Basketball MVP Winner",
+   "kalshi_close": "2027-12-01",
+   "kalshi_ticker": "KXWNBAMVP-26-AGRA",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.36 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Robby Snelling",
+   "poly_event_title": "MLB: NL Rookie of the Year",
+   "poly_close": "2026-12-19",
+   "poly_id": "0xacbc037b7d35467eec5a08230ebb8f27a81f5ec76dd67d8955073f2f5c3e1030",
+   "kalshi_title": "Will Robby Snelling win NL ROTY?",
+   "kalshi_event_title": "NL Rookie of the Year Winner?",
+   "kalshi_close": "2026-12-08",
+   "kalshi_ticker": "KXMLBNLROTY-26-RSNE",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.55 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Lee Jae-myung out as president of South Korea in 2026?",
+   "poly_event_title": "Lee Jae-myung out as president of South Korea in 2026?",
+   "poly_close": "2027-01-01",
+   "poly_id": "0xf4c72ff42c3f1ee9f25e835e62ca52d71a9cafbcc11f93c01af709af8ee5ff09",
+   "kalshi_title": "Will Lee Jae Myung leave President of South Korea before Jan 1, 2027?",
+   "kalshi_event_title": "Which leaders will leave office in 2026?",
+   "kalshi_close": "2027-01-02",
+   "kalshi_ticker": "KXLEADERSOUT-27JAN01-LJMKOR",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.50 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Bob Smith (R)",
+   "poly_event_title": "CA-24 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0xca3165f5d7e4ad28df1f3fc8a6ceeb619fbc8500aab6ec0893104d5924e680f6",
+   "kalshi_title": "Will Republican win the House race for CA-24? Bob Smith",
+   "kalshi_event_title": "CA-24 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-CA24-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Mallory Dittmer (D)",
+   "poly_event_title": "SC-05 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x86d4b3a30e93df114c143b66986c0172024902945eef11b04ee6b6fc8eb5ad74",
+   "kalshi_title": "Will Democratic win the House race for SC-05? Mallory Dittmer",
+   "kalshi_event_title": "SC-05 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-SC05-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Robert Murray (R)",
+   "poly_event_title": "VA-04 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x356d92a8c40e3033cca07ffca41c9628bdf6d509796c3f3060c87590934e2be4",
+   "kalshi_title": "Will Republican win the House race for VA-04? Robert Murray",
+   "kalshi_event_title": "VA-04 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-VA04-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Brie Larson as Captain Marvel",
+   "poly_event_title": "Which characters will appear in Avengers: Doomsday?",
+   "poly_close": "2026-12-18",
+   "poly_id": "0x7560d17de8eba126e67e2d32e88faf61b0fa558d88b258accaf097e43a0382c5",
+   "kalshi_title": "Will Brie Larson perform as Captain Marvel in Avengers: Doomsday? Brie Larson as Captain Marvel?",
+   "kalshi_event_title": "Avengers: Doomsday: Cast",
+   "kalshi_close": "2028-01-01",
+   "kalshi_ticker": "KXROLEINPRODUCTIONDOOMSDAY-BRI",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.60 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Bryce Harper",
+   "poly_event_title": "MLB: 2026 NL MVP",
+   "poly_close": "2026-11-13",
+   "poly_id": "0x4cc0f894a2dcec0800bddec43a13b64ec7b6d7df6a74b28a5107756cf08a388f",
+   "kalshi_title": "Will Bryce Harper win NL MVP?",
+   "kalshi_event_title": "NL MVP Winner?",
+   "kalshi_close": "2026-12-08",
+   "kalshi_ticker": "KXMLBNLMVP-26-BHAR",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.45 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Zuhdi Jasser (R)",
+   "poly_event_title": "AZ-04 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0xb5464dc0eb3be267ae75a119dccc9f0504cf51e1491e25a5f02c11f132a151aa",
+   "kalshi_title": "Will Republican win the House race for AZ-04? Zuhdi Jasser",
+   "kalshi_event_title": "AZ-04 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-AZ04-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Aaron Judge",
+   "poly_event_title": "MLB: 2026 AL MVP ",
+   "poly_close": "2026-11-13",
+   "poly_id": "0x6f685174c7b5f11a8b7cd7bc7d2d368e634a0ca9016434d323b4cd8c9d8c71b7",
+   "kalshi_title": "Will Aaron Judge win AL MVP?",
+   "kalshi_event_title": "AL MVP Winner?",
+   "kalshi_close": "2026-12-08",
+   "kalshi_ticker": "KXMLBALMVP-26-AJUD",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.45 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Lucas Ribeiro",
+   "poly_event_title": "Para\u00edba Governor Election Winner",
+   "poly_close": "2026-10-05",
+   "poly_id": "0x6f3cf63a0b1ba889cec2b3badff115c420d7ca418cd479f47b7a340369b7ecad",
+   "kalshi_title": "Will Lucas Ribeiro win the 2026 Para\u00edba gubernatorial election?",
+   "kalshi_event_title": "Para\u00edba Governor winner?",
+   "kalshi_close": "2027-10-04",
+   "kalshi_ticker": "KXPARAIBAGOV-26OCT04-LRIB",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.78 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Sarah Elfreth (D)",
+   "poly_event_title": "MD-03 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x3b3b4bcf3fa30f52c8d7cebad405e26f43dd77d7c2d1d37d927c048ab4d222f4",
+   "kalshi_title": "Will Democratic win the House race for MD-03? Sarah Elfreth",
+   "kalshi_event_title": "MD-03 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-MD03-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Republican Party",
+   "poly_event_title": "LA-02 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0xd6b91637657a2e5bd80f96f1faa5f639f201ee25d88b34b30208dfed5779937b",
+   "kalshi_title": "Will Republican win the House race for LA-02? Republican party",
+   "kalshi_event_title": "LA-02 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-LA02-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.70 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Joseph Morelle (D)",
+   "poly_event_title": "NY-25 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x70931a3261479d383ed2b808e8ea209f29676264712e7584a9bc8427420d1f2e",
+   "kalshi_title": "Will Democratic win the House race for NY-25? Joseph Morelle",
+   "kalshi_event_title": "NY-25 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-NY25-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "56-57\u00b0F",
+   "poly_event_title": "Lowest temperature in San Francisco on September 14?",
+   "poly_close": "2026-09-14",
+   "poly_id": "0x162f75152b82c9b9ad2b3938b7904a7d5faa1cd566a77a16c3c40792f425fe48",
+   "kalshi_title": "Will the minimum temperature be 56-57\u00b0 on Sep 14, 2026? 56\u00b0 to 57\u00b0",
+   "kalshi_event_title": "Lowest temperature in San Francisco on Sep 14, 2026?",
+   "kalshi_close": "2026-09-15",
+   "kalshi_ticker": "KXLOWTSFO-26SEP14-B56.5",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.58 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Ashley Trail",
+   "poly_event_title": "Big Brother Season 28: 3rd Place",
+   "poly_close": "2026-10-01",
+   "poly_id": "0xfe31cdaac56147877ac3c189d63de226c9f7ea7052f76b7b816f51dbd5a5edf2",
+   "kalshi_title": "Will Ashley Trail finish in 3 place in Big Brother Season 28?",
+   "kalshi_event_title": "Big Brother Season 28 \u00b7 3rd place ",
+   "kalshi_close": "2026-12-31",
+   "kalshi_ticker": "KXBIGBROTHERRANK-26DEC31R3-ASH",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Europe",
+   "poly_event_title": "2027 Ryder Cup Winner",
+   "poly_close": "2027-09-19",
+   "poly_id": "0x9ee0a0833cdabd3c9cca010bd9951b978ac3606b935feef8b098a89222d58b17",
+   "kalshi_title": "Will Team Europe win the Ryder Cup?",
+   "kalshi_event_title": "2027 Ryder Cup Winner",
+   "kalshi_close": "2027-10-03",
+   "kalshi_ticker": "KXPGARYDER-RC27-EUR",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 1.00 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "1st hottest",
+   "poly_event_title": "September 2026 1st, 2nd, or 3rd hottest on record?",
+   "poly_close": "2026-10-01",
+   "poly_id": "0x82de02eaf046cd3f44b8e52eab5e9934af75c442225f5c88b24d122dee1a4230",
+   "kalshi_title": "Will  Sep 2026 be the hottest Sep ever? Hottest ever",
+   "kalshi_event_title": "This Sep 2026 is the hottest September ever?",
+   "kalshi_close": "2026-10-16",
+   "kalshi_ticker": "KXHMONTH-26SEP",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.33 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Jaron-Keawe Sagapolutele",
+   "poly_event_title": "NCAA Football: 2026 ACC Passing Yards Leader",
+   "poly_close": "2026-12-06",
+   "poly_id": "0x2f4b910e062a2cefa0f01e668f50752c570e1df24a0e6e8fe496e112f12d4c4d",
+   "kalshi_title": "Jaron-Keawe Sagapolutele records the most passing yards in the ACC",
+   "kalshi_event_title": "ACC: Passing Yards Leader",
+   "kalshi_close": "2027-01-07",
+   "kalshi_ticker": "KXNCAAFACCLEADER-26PASSYDS-CALJSAG",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.58 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Patri Guijarro",
+   "poly_event_title": "Women's Ballon d'Or Winner 2026",
+   "poly_close": "2026-10-27",
+   "poly_id": "0xfff835a52fb79abdfba6d66d83816309ad4255662cbd688a50c92156e8b74a0c",
+   "kalshi_title": "Patri Guijarro wins Women's Ballon d'Or for the 2025-26 season (2026 award)?",
+   "kalshi_event_title": "Women's Ballon d'Or Winner 2026",
+   "kalshi_close": "2026-11-03",
+   "kalshi_ticker": "KXBALLONDORAWARD-26WBAL-PGUI",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.50 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Te P\u0101ti M\u0101ori",
+   "poly_event_title": "Which parties will be part of the next government of New Zealand?",
+   "poly_close": "2026-11-07",
+   "poly_id": "0x252b6a054fa7bac3a2db0df1f09dbe971b91a3882dda80a0c63df171ff789c48",
+   "kalshi_title": "Will Te P\u0101ti M\u0101ori be a part of the next government in New Zealand?",
+   "kalshi_event_title": "Who will be a part of the next government of New Zealand?",
+   "kalshi_close": "2027-03-15",
+   "kalshi_ticker": "KXNZGOVT-27MAR15-TPM",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.89 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Oliver Marmol",
+   "poly_event_title": "MLB: NL Manager of the Year",
+   "poly_close": "2026-12-19",
+   "poly_id": "0x42acc24abc6719af63729e181a726b3480cf2d312ba545cd1d7e053a70a0cbb6",
+   "kalshi_title": "Will Oliver Marmol win NL MOTY?",
+   "kalshi_event_title": "NL Manager of the Year Winner?",
+   "kalshi_close": "2026-12-08",
+   "kalshi_ticker": "KXMLBNLMOTY-26-OMAR",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.60 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Ceretta Smith (D)",
+   "poly_event_title": "GA-12 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0xe0cfc4f75bc903d74f5502ffebf8767f38afb11ae6f828798ed3904ba7de8b87",
+   "kalshi_title": "Will Democratic win the House race for GA-12? Ceretta Smith",
+   "kalshi_event_title": "GA-12 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-GA12-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Jos\u00e9 Ram\u00edrez",
+   "poly_event_title": "MLB: 2026 AL Hank Aaron Winner",
+   "poly_close": "2026-11-13",
+   "poly_id": "0x6359895f8a3da37cb8c9568b40fc418e7b7c8fc5365a605ce5275fda5aaf44d7",
+   "kalshi_title": "Will Jos\u00e9 Ram\u00edrez win AL Hank Aaron Award?",
+   "kalshi_event_title": "AL Hank Aaron Award Winner?",
+   "kalshi_close": "2026-12-08",
+   "kalshi_ticker": "KXMLBALHAARON-26-JRAM",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Professora Maria do Carmo",
+   "poly_event_title": "Amazonas Governor Election Winner",
+   "poly_close": "2026-10-04",
+   "poly_id": "0x406375a40bd4b0da4a137604517f2ffb5ac49558dfb2eef4e289cf79091cefb2",
+   "kalshi_title": "Will Professora Maria do Carmo win the 2026 Amazonas gubernatorial election?",
+   "kalshi_event_title": "Amazonas Governor winner?",
+   "kalshi_close": "2027-10-04",
+   "kalshi_ticker": "KXAMAZONASGOV-26OCT04-MCAR",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 1.00 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Phoenix Suns",
+   "poly_event_title": "NBA: Kawhi Leonard Next Team",
+   "poly_close": "2026-10-31",
+   "poly_id": "0xc67ec935e7ab46d47320fa08d4dfac45081944c862fff13b4bcf54cbce8d8f37",
+   "kalshi_title": "What will be Kawhi Leonard's next team? Phoenix",
+   "kalshi_event_title": "Kawhi Leonard's Next Team",
+   "kalshi_close": "2026-10-21",
+   "kalshi_ticker": "KXNEXTTEAMNBA-26KLEONARD2-PHX",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.50 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Sabrina Ionescu",
+   "poly_event_title": "WNBA: 2026 MVP",
+   "poly_close": "2026-09-25",
+   "poly_id": "0x7b872e230d04e3f6a7979a0e32b9eaf5925ea90969a2e0c3431522dc1ad6883a",
+   "kalshi_title": "Will Sabrina Ionescu win MVP?",
+   "kalshi_event_title": "Women's Pro Basketball MVP Winner",
+   "kalshi_close": "2027-12-01",
+   "kalshi_ticker": "KXWNBAMVP-26-SION",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.36 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Sawyer Seidl",
+   "poly_event_title": "NCAA Football: 2026 ACC Rushing Yards Leader",
+   "poly_close": "2026-12-06",
+   "poly_id": "0x4204aa2216c6c0e49c2afbf564ee4765cdb618b7088c603f6108284bd896b0be",
+   "kalshi_title": "Sawyer Seidl records the most rushing yards in the ACC",
+   "kalshi_event_title": "ACC: Rushing Yards Leader",
+   "kalshi_close": "2027-01-07",
+   "kalshi_ticker": "KXNCAAFACCLEADER-26RSHYDS-WAKESSEI",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.55 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Big 12",
+   "poly_event_title": "NCAA Football: Conference of Heisman Winner",
+   "poly_close": "",
+   "poly_id": "0xa8905e6adaf725f664ae9a2ba649d70f2487e9b49b13a464ca480738399bbe63",
+   "kalshi_title": "Will the 2026 Heisman Trophy winner be a player from the Big 12 college football conference?",
+   "kalshi_event_title": "Conference of Heisman Trophy Winner",
+   "kalshi_close": "2027-01-07",
+   "kalshi_ticker": "KXHEISMANSPECIAL-26CONF-BIG12",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.75 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Jacquon Gibson",
+   "poly_event_title": "NCAA Football: 2026 ACC Receiving Yards Leader",
+   "poly_close": "2026-12-06",
+   "poly_id": "0xf1763d885a23f4f0bad3ec6480e74096215c32a3aa162a763da7369633d401de",
+   "kalshi_title": "Jacquon Gibson records the most receiving yards in the ACC",
+   "kalshi_event_title": "ACC: Receiving Yards Leader",
+   "kalshi_close": "2027-01-07",
+   "kalshi_ticker": "KXNCAAFACCLEADER-26RECYDS-UVAJGIB",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.55 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Will any player break the NFL single-season rushing yards record in the 2026-27 season?",
+   "poly_event_title": "Will any player break the NFL single-season rushing yards record in the 2026-27 season?",
+   "poly_close": "2027-01-12",
+   "poly_id": "0x3dd6a91de014056b4bedcae583d368224bd61de0a800230dd8c60c65a871d149",
+   "kalshi_title": "Will the single season rushing yards record be broken? Over 2105 rushing yards",
+   "kalshi_event_title": "Single Season Rushing Yards Record Broken",
+   "kalshi_close": "2027-01-18",
+   "kalshi_ticker": "KXNFLSZNRECORD-27RSHYDS-Y",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.38 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Dau Khuong Duy",
+   "poly_event_title": "Titled Tuesday Top 3: September 15",
+   "poly_close": "2026-09-30",
+   "poly_id": "0xf8a0598e9725640fe168657b9a04ef992563c078f1391c3898636e087edd92f0",
+   "kalshi_title": "Will Dau Khuong Duy finish top 3 in the Titled Tuesday chess competition on Sep 15, 2026?",
+   "kalshi_event_title": "Titled Tuesday Top 3: Sep 15",
+   "kalshi_close": "2026-09-29",
+   "kalshi_ticker": "KXTITLEDTUESTOP-26SEP15T3-DDUY",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.64 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Mark Kotsay",
+   "poly_event_title": "MLB: AL Manager of the Year",
+   "poly_close": "2026-12-19",
+   "poly_id": "0x83e172b49694e68a94ab66003f94b5d84057f762138c9bd08090c2f09a4b1c6b",
+   "kalshi_title": "Will Mark Kotsay win AL MOTY?",
+   "kalshi_event_title": "AL Manager of the Year Winner?",
+   "kalshi_close": "2026-12-08",
+   "kalshi_ticker": "KXMLBALMOTY-26-MKOT",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.60 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Bobby Scott (D)",
+   "poly_event_title": "VA-03 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x2f37e846fa71461907124f542976ca52eb2bf619dbe80fbb06df92ddb3d730cc",
+   "kalshi_title": "Will Democratic win the House race for VA-03? Bobby Scott",
+   "kalshi_event_title": "VA-03 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-VA03-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Rosie Pino (R)",
+   "poly_event_title": "NJ-09 House Election Winner",
+   "poly_close": "2026-11-04",
+   "poly_id": "0x77803bf3f3509539554e06435dbdc94c5eabc4dca7987e83107a03c219a096ea",
+   "kalshi_title": "Will Republican win the House race for NJ-9? Rosie Pino",
+   "kalshi_event_title": "NJ-09 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "HOUSENJ9-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.62 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Beau Pribula",
+   "poly_event_title": "NCAA Football: 2026 ACC Passing Yards Leader",
+   "poly_close": "2026-12-06",
+   "poly_id": "0xf2534d4920c57cc54506c68a149743c399ec401d8f64a05a77b215e69fd62c1b",
+   "kalshi_title": "Beau Pribula records the most passing yards in the ACC",
+   "kalshi_event_title": "ACC: Passing Yards Leader",
+   "kalshi_close": "2027-01-07",
+   "kalshi_ticker": "KXNCAAFACCLEADER-26PASSYDS-UVABPRI",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.55 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "James Walkinshaw (D)",
+   "poly_event_title": "VA-11 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x987353ac24f5e3164099f2d24d52a8ceae44a7c308986f9d67d69c80f7657b31",
+   "kalshi_title": "Will Democratic win the House race for VA-11? James Walkinshaw",
+   "kalshi_event_title": "VA-11 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-VA11-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Adley Rutschman",
+   "poly_event_title": "MLB: AL Comeback Player of the Year",
+   "poly_close": "2026-12-19",
+   "poly_id": "0x51bfdc3f81a755b64b34adaf8dafafe5126e7d7c45a6b14546084b9c299f9e2e",
+   "kalshi_title": "Will Adley Rutschman win AL CPOTY?",
+   "kalshi_event_title": "AL Comeback Player of the Year Winner?",
+   "kalshi_close": "2026-12-08",
+   "kalshi_ticker": "KXMLBALCPOTY-26-ARUT",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.58 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Ethan Grunkemeyer",
+   "poly_event_title": "NCAA Football: 2026 ACC Passing Yards Leader",
+   "poly_close": "2026-12-06",
+   "poly_id": "0x429d844f80f33285473cda2270ec173339a68cdd48f168d91fafc7d05a221baa",
+   "kalshi_title": "Ethan Grunkemeyer records the most passing yards in the ACC",
+   "kalshi_event_title": "ACC: Passing Yards Leader",
+   "kalshi_close": "2027-01-07",
+   "kalshi_ticker": "KXNCAAFACCLEADER-26PASSYDS-VTEGRU",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.55 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Los Angeles Chargers",
+   "poly_event_title": "Pro Football: 2026-27 AFC #1 Seed",
+   "poly_close": "2027-01-10",
+   "poly_id": "0x1f388fa2566ea1bfbde244b285b5efd3f843b9c270df6c86d1ed453baee08482",
+   "kalshi_title": "Will Los Angeles C be the AFC 1 Seed?",
+   "kalshi_event_title": "Pro Football: AFC #1 Seed",
+   "kalshi_close": "2027-01-18",
+   "kalshi_ticker": "KXNFL1SEED-AFC26-LAC",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.54 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Mohammad-Bagher Ghalibaf",
+   "poly_event_title": "TIME Person of the Year 2026",
+   "poly_close": "2026-12-31",
+   "poly_id": "0xf9defdfbc645a8a06734f250fbfb37269b43ac50fbc03ff5dc260d90fffa3d22",
+   "kalshi_title": "Will Mohammad-Bagher Ghalibaf be Time Person of the Year in 2026?",
+   "kalshi_event_title": "Time's Person of the Year for 2026",
+   "kalshi_close": "2027-01-01",
+   "kalshi_ticker": "KXTIME-26-MOH",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 1.00 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Peter Oberacker (R)",
+   "poly_event_title": "NY-19 House Election Winner",
+   "poly_close": "2026-11-04",
+   "poly_id": "0xf0e2374e59f471eee1ee40d64dc1ae7c8dde26c0c32eb638078466699ef2d82c",
+   "kalshi_title": "Will Republican win the House race for NY-19? Peter Oberacker",
+   "kalshi_event_title": "NY-19 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "HOUSENY19-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Josh Allen",
+   "poly_event_title": "Pro Football: 2026-27 AP Offensive Player of the Year Winner",
+   "poly_close": "2027-02-11",
+   "poly_id": "0xe71d77b57da349ec3392f39913c5e6bb61609237b8132467d072e38fc7c805e5",
+   "kalshi_title": "Will Josh Allen win the Offensive Player of the Year?",
+   "kalshi_event_title": "Offensive Player of the Year Winner?",
+   "kalshi_close": "2028-02-08",
+   "kalshi_ticker": "KXNFLOPOTY-27-JALL",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.47 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Katy Tyndell (D)",
+   "poly_event_title": "KS-04 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0x9fd583124c36dea90250bff9c805852b4d14e07029ed41f3bae80733a610690f",
+   "kalshi_title": "Will Democratic win the House race for KS-04? Katy Tyndell",
+   "kalshi_event_title": "KS-04 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-KS04-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Mike Beltran (R)",
+   "poly_event_title": "FL-14 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0xe3d41b3bb1f838d2dc30606cc70a1ae7eda2fc7ccf6ee2235586a6490950b8eb",
+   "kalshi_title": "Will Republican win the House race for FL-14? Mike Beltran",
+   "kalshi_event_title": "FL-14 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-FL14-26-R",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Dee Valladares",
+   "poly_event_title": "Big Brother Season 28 Winner",
+   "poly_close": "2026-10-01",
+   "poly_id": "0x263302721d85473bf5df08659444363e8a95dbaa63fda11435b2d5c674c49e1e",
+   "kalshi_title": "Will Dee Valladares win Big Brother Season 28?",
+   "kalshi_event_title": "Big Brother Season 28 \u00b7 Winner",
+   "kalshi_close": "2027-01-07",
+   "kalshi_ticker": "KXBIGBROTHER-26DEC31-DEE",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 1.00 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "DK Metcalf",
+   "poly_event_title": "Fantasy Football: 2026-27 Week 1 WR Points Leader (PPR)",
+   "poly_close": "2026-09-15",
+   "poly_id": "0x359c9d2301b4b130c785b01628cb42845a5d36a3992610657e4356eeb6d435b8",
+   "kalshi_title": "DK Metcalf: Leader WR in fantasy points for Week 1?",
+   "kalshi_event_title": "WR Fantasy Football Week 1 Leader?",
+   "kalshi_close": "2026-09-15",
+   "kalshi_ticker": "KXNFLFFWEEKLEAD-2026W1WR-DMETCALF4",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.56 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Dario Amodei",
+   "poly_event_title": "TIME Person of the Year 2026",
+   "poly_close": "2026-12-31",
+   "poly_id": "0x2ec3186c25af8ca0e431db6fee3513489f6eddd7242c42eee59931b483d766ce",
+   "kalshi_title": "Will Dario Amodei be Time Person of the Year in 2026?",
+   "kalshi_event_title": "Time's Person of the Year for 2026",
+   "kalshi_close": "2027-01-01",
+   "kalshi_ticker": "KXTIME-26-DAR",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 1.00 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Oliver Gilbert (D)",
+   "poly_event_title": "FL-24 House Election Winner",
+   "poly_close": "2026-11-03",
+   "poly_id": "0xd841e73247a572b927c3a721f32021df04b09838fdec05d11e61cc675568a2a9",
+   "kalshi_title": "Will Democratic win the House race for FL-24? Oliver Gilbert",
+   "kalshi_event_title": "FL-24 House winner?",
+   "kalshi_close": "2027-11-03",
+   "kalshi_ticker": "KXHOUSERACE-FL24-26-D",
+   "category": "pop",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.67 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Matthew Rhys \u2013 \u201cThe Beast In Me\u201d",
+   "poly_event_title": "Emmys 2026: Outstanding lead actor in a limited or anthology series or movie",
+   "poly_close": "2026-09-14",
+   "poly_id": "0xb75b3c8f9d428af07722bac0cc4c3a714ed72f086c22c569e52841c9c43b5c3a",
+   "kalshi_title": "Will Matthew Rhys win Movie/Limited Actor at the Emmy Awards?",
+   "kalshi_event_title": "Emmy Winner: Outstanding Lead Actor in a Limited or Anthology Series or Movie",
+   "kalshi_close": "2027-09-14",
+   "kalshi_ticker": "KXEMMYLIMITEDACTO-26SEP14-MAT",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.59 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Louisville",
+   "poly_event_title": "2027 Men's College Basketball National Champion",
+   "poly_close": "2027-04-05",
+   "poly_id": "0xdc00b165e368e4bc31f3f716192e35638a7f52715d4bc0e95fdceb4b3d9df370",
+   "kalshi_title": "Will Louisville win the College Basketball National Championship?",
+   "kalshi_event_title": "Men's 2027 College Basketball Champion",
+   "kalshi_close": "2027-04-27",
+   "kalshi_ticker": "KXMARMAD-27-LOU",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.90 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Lanto Griffin",
+   "poly_event_title": "PGA Tour: Biltmore Championship Asheville First Round Leader",
+   "poly_close": "2026-09-20",
+   "poly_id": "0x216dda5f1b0deb8cf152af72685d9b8e57ff2c5ca6c7fe138937f9f19ef18867",
+   "kalshi_title": "Lanto Griffin leads at the end of Round 1",
+   "kalshi_event_title": "Biltmore Championship Asheville End of Round 1 Leader",
+   "kalshi_close": "2026-10-04",
+   "kalshi_ticker": "KXPGAR1LEAD-BICA26-LGRI",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.44 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Jacob Bridgeman",
+   "poly_event_title": "PGA Tour: Biltmore Championship Asheville First Round Leader",
+   "poly_close": "2026-09-20",
+   "poly_id": "0x6824e3daa936297aa80367ee4db0b6e11fc237c7321a25112de06770b770ed54",
+   "kalshi_title": "Jacob Bridgeman leads at the end of Round 1",
+   "kalshi_event_title": "Biltmore Championship Asheville End of Round 1 Leader",
+   "kalshi_close": "2026-10-04",
+   "kalshi_ticker": "KXPGAR1LEAD-BICA26-JBRI",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.44 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Isack Hadjar",
+   "poly_event_title": "F1 Drivers' Champion",
+   "poly_close": "2026-12-06",
+   "poly_id": "0x80971af8befc488bbdd6dcc075d388793851a0ea1c46f7ffd353b190691c7199",
+   "kalshi_title": "Will Isack Hadjar win the F1 Drivers Championship?",
+   "kalshi_event_title": "F1 Drivers Champion",
+   "kalshi_close": "2026-12-22",
+   "kalshi_ticker": "KXF1-26-IH",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.62 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Milwaukee Bucks",
+   "poly_event_title": "NBA: Steph Curry Next Team",
+   "poly_close": "2027-02-11",
+   "poly_id": "0xca9c68d342b580734523bc2425d27effab59db38cda0ee20c7a51f40ac59b2d8",
+   "kalshi_title": "What will be Steph Curry's next team? Milwaukee",
+   "kalshi_event_title": "Steph Curry's Next Team",
+   "kalshi_close": "2026-10-21",
+   "kalshi_ticker": "KXNEXTTEAMNBA-26SCUR-MIL",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.71 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "New Mexico United",
+   "poly_event_title": "USL Championship: 2026 Runner-Up",
+   "poly_close": "2027-01-01",
+   "poly_id": "0x1f8e549226e3a4f3c63e304ef41bb97459401b612e56fd7c76ba9e4e867040c6",
+   "kalshi_title": "Will New Mexico United win the USL Championship?",
+   "kalshi_event_title": "USL Championship Champion",
+   "kalshi_close": "2026-12-30",
+   "kalshi_ticker": "KXUSL-26-NEW",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.50 >= 0.3"
+   ],
+   "label": "different",
+   "reason_class": "scope_mismatch"
+  },
+  {
+   "poly_title": "Max Greyserman",
+   "poly_event_title": "PGA Tour: Biltmore Championship Asheville Winner",
+   "poly_close": "2026-09-20",
+   "poly_id": "0x479d9a03daa20429d158efb630cfa020e4f519dde882001b562c2bd7bb139cfd",
+   "kalshi_title": "Will Max Greyserman win the Biltmore Championship Asheville?",
+   "kalshi_event_title": "Biltmore Championship Asheville Winner",
+   "kalshi_close": "2026-10-04",
+   "kalshi_ticker": "KXPGATOUR-BICA26-MGRE",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.70 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Joel Dahmen",
+   "poly_event_title": "PGA Tour: Biltmore Championship Asheville First Round Leader",
+   "poly_close": "2026-09-20",
+   "poly_id": "0xc2a84de6655fb81214b179609b5666b270551a7b75015605e138ae938a960507",
+   "kalshi_title": "Joel Dahmen leads at the end of Round 1",
+   "kalshi_event_title": "Biltmore Championship Asheville End of Round 1 Leader",
+   "kalshi_close": "2026-10-04",
+   "kalshi_ticker": "KXPGAR1LEAD-BICA26-JDAH",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.44 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Christian Eckes",
+   "poly_event_title": "NASCAR Craftsman Truck Series Champion (2026)",
+   "poly_close": "2026-11-06",
+   "poly_id": "0x58d73c17fb08f09cf6a3d3dfc27f85cb3203719ec1463354f66e0cf58cddbfd6",
+   "kalshi_title": "Will Christian Eckes be the NASCAR Truck Series Champion?",
+   "kalshi_event_title": "NASCAR Truck Series Champion",
+   "kalshi_close": "2026-11-08",
+   "kalshi_ticker": "KXNASCARTRUCKSERIES-NTS26-CECK",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.60 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Doug Ghim",
+   "poly_event_title": "PGA Tour: Biltmore Championship Asheville Winner",
+   "poly_close": "2026-09-20",
+   "poly_id": "0x58485127812d335dfb564c730f238404c50d6e19fa4a3bcef98495c57c63bf9f",
+   "kalshi_title": "Will Doug Ghim win the Biltmore Championship Asheville?",
+   "kalshi_event_title": "Biltmore Championship Asheville Winner",
+   "kalshi_close": "2026-10-04",
+   "kalshi_ticker": "KXPGATOUR-BICA26-DGHI",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.70 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Western Michigan Broncos",
+   "poly_event_title": "NCAA Football 2026 MAC Conference: Winner",
+   "poly_close": "",
+   "poly_id": "0xac0a7e7748d9c5932751e23c76be63844dd70d6bc297ee530f681a9a10ffc292",
+   "kalshi_title": "Will Western Michigan win the College Football Mid-American Conference Championship?",
+   "kalshi_event_title": "College Football MAC Championship Winner",
+   "kalshi_close": "2027-01-03",
+   "kalshi_ticker": "KXNCAAFMAC-26-WMU",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.57 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Nick Hardy",
+   "poly_event_title": "PGA Tour: Biltmore Championship Asheville Winner",
+   "poly_close": "2026-09-20",
+   "poly_id": "0xf9936d50a5b9383fb98af940828178038c2d1eacd33a4c4db0b50f70e2cbbafd",
+   "kalshi_title": "Will Nick Hardy win the Biltmore Championship Asheville?",
+   "kalshi_event_title": "Biltmore Championship Asheville Winner",
+   "kalshi_close": "2026-10-04",
+   "kalshi_ticker": "KXPGATOUR-BICA26-NHAR",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.70 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "New Mexico Lobos",
+   "poly_event_title": "NCAA Football 2026 Mountain West Conference: Winner",
+   "poly_close": "",
+   "poly_id": "0x1946874936c419017969fb0495a36adf3a0385824177a791a976c11535a8036f",
+   "kalshi_title": "Will New Mexico win the College Football Mountain West Championship?",
+   "kalshi_event_title": "College Football Mountain West Championship Winner",
+   "kalshi_close": "2027-01-03",
+   "kalshi_ticker": "KXNCAAFMWC-26-UNM",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.62 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Chad Ramey",
+   "poly_event_title": "PGA Tour: Biltmore Championship Asheville Winner",
+   "poly_close": "2026-09-20",
+   "poly_id": "0xfdc92605e1a341f15840a97d3e09983d2736638fbc0a29723579ef7c74464064",
+   "kalshi_title": "Will Chad Ramey win the Biltmore Championship Asheville?",
+   "kalshi_event_title": "Biltmore Championship Asheville Winner",
+   "kalshi_close": "2026-10-04",
+   "kalshi_ticker": "KXPGATOUR-BICA26-CRAM",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.70 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Tyler Duncan",
+   "poly_event_title": "PGA Tour: Biltmore Championship Asheville First Round Leader",
+   "poly_close": "2026-09-20",
+   "poly_id": "0xa06dec89b62a063f3e9242a6fb114d7102e75db5891d94a1f99c26f884143faa",
+   "kalshi_title": "Tyler Duncan leads at the end of Round 1",
+   "kalshi_event_title": "Biltmore Championship Asheville End of Round 1 Leader",
+   "kalshi_close": "2026-10-04",
+   "kalshi_ticker": "KXPGAR1LEAD-BICA26-TDUN",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.44 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Charleston Battery",
+   "poly_event_title": "USL Championship: 2026 Runner-Up",
+   "poly_close": "2027-01-01",
+   "poly_id": "0xeb2679c4bbf52a192c576b4b9b7e7b87f7bdb9db4f48b84b0ee435cd9d5402ac",
+   "kalshi_title": "Will Charleston Battery win the USL Championship?",
+   "kalshi_event_title": "USL Championship Champion",
+   "kalshi_close": "2026-12-30",
+   "kalshi_ticker": "KXUSL-26-CHA",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.44 >= 0.3"
+   ],
+   "label": "different",
+   "reason_class": "scope_mismatch"
+  },
+  {
+   "poly_title": "Max Verstappen",
+   "poly_event_title": "F1 Drivers' Champion",
+   "poly_close": "2026-12-06",
+   "poly_id": "0x696576c9b20d20a71e0acd6f84d215f129fa361ed544b0df14f1ae540d84059f",
+   "kalshi_title": "Will Max Verstappen win the F1 Drivers Championship?",
+   "kalshi_event_title": "F1 Drivers Champion",
+   "kalshi_close": "2026-12-22",
+   "kalshi_ticker": "KXF1-26-MV",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.62 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Chandler Blanchet",
+   "poly_event_title": "PGA Tour: Biltmore Championship Asheville Winner",
+   "poly_close": "2026-09-20",
+   "poly_id": "0x0a814b76fb4bc8bc57dae0444b452ac57446881ccc392b19dd76e6a60f3530c9",
+   "kalshi_title": "Will Chandler Blanchet win the Biltmore Championship Asheville?",
+   "kalshi_event_title": "Biltmore Championship Asheville Winner",
+   "kalshi_close": "2026-10-04",
+   "kalshi_ticker": "KXPGATOUR-BICA26-CBLA",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.70 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Toronto Raptors",
+   "poly_event_title": "NBA: Steph Curry Next Team",
+   "poly_close": "2027-02-11",
+   "poly_id": "0x590fd36e4f1b13b51f72fe3b1901a3f20d5864132cdf4c90b675592ac2e5fb12",
+   "kalshi_title": "What will be Steph Curry's next team? Toronto",
+   "kalshi_event_title": "Steph Curry's Next Team",
+   "kalshi_close": "2026-10-21",
+   "kalshi_ticker": "KXNEXTTEAMNBA-26SCUR-TOR",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.71 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Eric Cole",
+   "poly_event_title": "PGA Tour: Biltmore Championship Asheville Winner",
+   "poly_close": "2026-09-20",
+   "poly_id": "0xf3f3b299f54a2ed9022e8b6e59b7ea8e2d0f3ccf0927b899834fcdac16a0ff5b",
+   "kalshi_title": "Will Eric Cole win the Biltmore Championship Asheville?",
+   "kalshi_event_title": "Biltmore Championship Asheville Winner",
+   "kalshi_close": "2026-10-04",
+   "kalshi_ticker": "KXPGATOUR-BICA26-ECOL",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.70 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Colorado Springs Switchbacks FC",
+   "poly_event_title": "USL Championship: 2026 Runner-Up",
+   "poly_close": "2027-01-01",
+   "poly_id": "0xa4cb219f60109fe270bca515cafdc30772fe5023452d94bc4d067a211692fe16",
+   "kalshi_title": "Will Colorado Springs Switchbacks FC win the USL Championship?",
+   "kalshi_event_title": "USL Championship Champion",
+   "kalshi_close": "2026-12-30",
+   "kalshi_ticker": "KXUSL-26-CSS",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.55 >= 0.3"
+   ],
+   "label": "different",
+   "reason_class": "scope_mismatch"
+  },
+  {
+   "poly_title": "UConn",
+   "poly_event_title": "2027 Men's College Basketball National Champion",
+   "poly_close": "2027-04-05",
+   "poly_id": "0xbbd254c124a2706cb95608abb5e2b33a2e5d3b79640af99a98a50a7aca7ba2cd",
+   "kalshi_title": "Will UConn win the College Basketball National Championship?",
+   "kalshi_event_title": "Men's 2027 College Basketball Champion",
+   "kalshi_close": "2027-04-27",
+   "kalshi_ticker": "KXMARMAD-27-CONN",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.90 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Providence",
+   "poly_event_title": "2027 Men's College Basketball National Champion",
+   "poly_close": "2027-04-05",
+   "poly_id": "0x83ac80647dde1405922d38478daefabf9167c44800ce88486478e6bf7905d605",
+   "kalshi_title": "Will Providence win the College Basketball National Championship?",
+   "kalshi_event_title": "Men's 2027 College Basketball Champion",
+   "kalshi_close": "2027-04-27",
+   "kalshi_ticker": "KXMARMAD-27-PROV",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.90 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Missouri",
+   "poly_event_title": "2027 Men's College Basketball National Champion",
+   "poly_close": "2027-04-05",
+   "poly_id": "0x0638a05c9224b5b7650552fcf4afbfc3031efe012b18ed06aeead94d05a70a65",
+   "kalshi_title": "Will Missouri win the College Basketball National Championship?",
+   "kalshi_event_title": "Men's 2027 College Basketball Champion",
+   "kalshi_close": "2027-04-27",
+   "kalshi_ticker": "KXMARMAD-27-MIZZ",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.90 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  },
+  {
+   "poly_title": "Bayern Munich",
+   "poly_event_title": "Bundesliga: 2027 Champion",
+   "poly_close": "",
+   "poly_id": "0xb31e96c9ddc423b8c07549a23d35f326796c7d1e9c1336e9686f61ff9c4124da",
+   "kalshi_title": "Will Bayern Munich win the 2026-27 Bundesliga?",
+   "kalshi_event_title": "Bundesliga Champion",
+   "kalshi_close": "2027-06-06",
+   "kalshi_ticker": "KXBUNDESLIGA-27-BMU",
+   "category": "sports",
+   "v2_match_baseline": true,
+   "v2_reasons_baseline": [
+    "token similarity 0.75 >= 0.3"
+   ],
+   "label": "same",
+   "reason_class": "ok"
+  }
+ ]
+}
