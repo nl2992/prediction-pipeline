@@ -97,17 +97,17 @@ for _stream in (sys.stdout, sys.stderr):
 
 # Adaptive ingestion cap. Run 11 (docs/history/MATCHER_VALIDATION_LOG.md) showed the old
 # fixed cap of 200 Kalshi events silently dropped ~178 true pairs that live in
-# events ranked >200. Each scan now targets at least TARGET_SURVIVABLE positive
-# net-of-fees ("survivable") arbs, progressively widening the event cap through
-# CAP_LADDER until the target is met or the last rung (1500) is reached.
-# Event cap 200 -> 500 (run 30) -> 1500 (run 38, operator decision). Run-38 recall
-# probe showed cap=500 missed ~1775 real diverse pairs (OPEC/Bitcoin-gold/Messi/
-# BTTS) living in events ranked 500-1500. Precision fixes (runs 13-37) made the
-# guarded top mostly-real, so 1500 is now safe for coverage. To keep the inbox
-# sane, emails are capped to the TOP_N richest (see signals_to_send). Re-check
+# events ranked >200. Event caps went 200 -> 500 (run 30) -> 1500 (run 38) as
+# recall probes kept finding real pairs beyond each cap. discover() now ingests
+# the FULL Kalshi and Polymarket open-market catalogs by default (100% coverage,
+# see discover.ingest_kalshi / ingest_polymarket) — CAP_LADDER=(None,) means "no
+# Kalshi event cap" so adaptive_scan's single rung already sees everything; it
+# stays a tuple/ladder shape (and target-based early-stop) so a caller can still
+# pass explicit int caps (e.g. for a fast smoke scan). To keep the inbox sane,
+# emails are capped to the TOP_N richest (see signals_to_send). Re-check
 # docs/history/MATCHER_VALIDATION_LOG.md (runs 12, 30, 38) before changing.
 TARGET_SURVIVABLE = 50
-CAP_LADDER = (1500,)
+CAP_LADDER = (None,)
 # Email only the N richest (by net-of-fees edge) per cycle — full-catalog scans
 # surface ~335 survivable arbs; the operator wants the richest, not all of them.
 TOP_N = 50
@@ -209,6 +209,46 @@ def _poly_url(p: dict) -> str:
     return f"https://polymarket.com/event/{slug}" if slug else ""
 
 
+def _executable_edge(p: dict, book_direction: str, qty: float) -> dict | None:
+    """Depth-walked VWAP net edge for filling ``qty`` contracts on both legs
+    of ``book_direction`` (``"poly_yes__kalshi_no"`` / ``"kalshi_yes__poly_no"``),
+    using the pair's full order-book ladders (``poly_book``/``kalshi_book`` —
+    up to 30 levels/side, see discover.py). Returns ``None`` when the depth
+    can't actually fill ``qty`` on both legs, so the caller can treat that
+    exactly like the old top-of-book ``min_size`` miss.
+
+    Falls back to a synthetic single-level book built from the pair's
+    top-of-book bid/ask + size fields when ``poly_book``/``kalshi_book`` are
+    absent (a caller that hasn't been updated to attach full ladders) — this
+    degrades gracefully to exactly the old top-of-book-only ``min_size``
+    check rather than refusing to evaluate the pair at all.
+    """
+    pb_raw, kb_raw = p.get("poly_book"), p.get("kalshi_book")
+    if not pb_raw or not kb_raw:
+        pb_raw = {
+            "bids": [[p["poly_bid"], p.get("poly_bid_size") or 0]] if p.get("poly_bid") is not None else [],
+            "asks": [[p["poly_ask"], p.get("poly_ask_size") or 0]] if p.get("poly_ask") is not None else [],
+        }
+        kb_raw = {
+            "bids": [[p["kalshi_bid"], p.get("kalshi_bid_size") or 0]] if p.get("kalshi_bid") is not None else [],
+            "asks": [[p["kalshi_ask"], p.get("kalshi_ask_size") or 0]] if p.get("kalshi_ask") is not None else [],
+        }
+    try:
+        from arb_charts import _ob
+        from book_arb import executable_edge_at_size
+        res = executable_edge_at_size(_ob(pb_raw), _ob(kb_raw), book_direction, qty)
+    except Exception:
+        return None
+    if res is None:
+        return None
+    poly_first = book_direction == "poly_yes__kalshi_no"
+    return {
+        "net": res["net"],
+        "vwap_poly": res["vwap_a"] if poly_first else res["vwap_b"],
+        "vwap_kalshi": res["vwap_b"] if poly_first else res["vwap_a"],
+    }
+
+
 def compute_signals(pairs: list[dict], min_edge: float,
                     require_v2: bool = True, max_edge: float = 0.25,
                     min_size: float = 0.0) -> list[dict]:
@@ -216,8 +256,10 @@ def compute_signals(pairs: list[dict], min_edge: float,
 
     Both directions, both fee models. ``net_accurate`` (Kalshi's real
     0.07·p·(1−p) taker fee on the Kalshi leg; Polymarket CLOB is fee-free)
-    drives the alert decision; the flat worst-case 7% figure rides along for
-    context.
+    rides along at TOP-OF-BOOK for display/context; the alert DECISION
+    (min_edge / max_edge) is driven by the depth-walked executable edge at
+    the ``min_size`` quantity when ``min_size > 0`` (see below) — the flat
+    worst-case 7% figure (``net_flat7``) is always top-of-book, for context.
 
     Precision guards (added after run-12: widening the scan to 1500 events
     surfaced ~600 phantom "arbs" — e.g. "Cody Gakpo" matched to "Cody Gakpo:
@@ -228,11 +270,30 @@ def compute_signals(pairs: list[dict], min_edge: float,
       * ``max_edge`` — a net edge above this (default 25c) between two identical
         binary contracts on liquid venues does not exist; it is the signature of
         a mismatch or a one-sided/stale book, so it is dropped.
-      * ``min_size`` — minimum best-level depth (shares/contracts) on BOTH legs
-        actually executed in a direction. 0 (default) disables it; >0 drops
-        illiquid/one-sided books whose "edge" is unexecutable. Buying PM YES
-        takes the PM ask; buying Kalshi NO hits the Kalshi YES bid; buying Kalshi
-        YES takes the Kalshi ask; buying PM NO hits the PM YES bid.
+      * ``min_size`` — minimum quantity (shares/contracts) actually executed on
+        BOTH legs of a direction. 0 (default) disables it entirely — behaviour
+        is then byte-for-byte the pre-iteration-4 top-of-book-only economics
+        (no book_arb call is made). When ``min_size > 0``, iteration 4 changed
+        this from a top-level-only depth check to a full depth walk (via
+        ``book_arb.executable_edge_at_size``) over the pair's up-to-30-level
+        books: the VWAP to fill exactly ``min_size`` contracts on each leg
+        (walking multiple levels if the top one alone isn't deep enough),
+        with the Kalshi taker fee computed off that VWAP rather than the
+        top-of-book price. Both ``min_edge`` and ``max_edge`` are then
+        evaluated against THIS executable figure, not the top-of-book one —
+        a thin top level (e.g. 1 contract at a stale price) can no longer
+        create a phantom >max_edge signal, or satisfy min_size, by itself.
+        The signal's ``net_accurate``/``gross``/``net_flat7`` fields stay
+        top-of-book (for display); the executable figure is additionally
+        recorded as ``exec_net``/``exec_vwap_poly``/``exec_vwap_kalshi`` when
+        computed. If a pair has no live books (``poly_book``/``kalshi_book``
+        absent) while ``min_size > 0``, the depth walk can't run and the
+        direction is dropped (unexecutable-depth is unknown, so it is not
+        assumed executable) — every v2-endorsed pair carries full books as of
+        iteration 3, so this only affects pairs enriched by an older caller.
+        Buying PM YES takes the PM ask; buying Kalshi NO hits the Kalshi YES
+        bid; buying Kalshi YES takes the Kalshi ask; buying PM NO hits the PM
+        YES bid.
     """
     signals: list[dict] = []
     for p in pairs:
@@ -240,37 +301,50 @@ def compute_signals(pairs: list[dict], min_edge: float,
             continue  # independent referee does not confirm same contract
         pb, pa = p.get("poly_bid"), p.get("poly_ask")
         kb, ka = p.get("kalshi_bid"), p.get("kalshi_ask")
-        pbs, pas = p.get("poly_bid_size"), p.get("poly_ask_size")
-        kbs, kas = p.get("kalshi_bid_size"), p.get("kalshi_ask_size")
-        best = None
-        if (pa is not None and kb is not None
-                and (pas or 0) >= min_size and (kbs or 0) >= min_size):
+
+        candidates = []
+        if pa is not None and kb is not None:
             k_no = round(1.0 - kb, 6)
             gross = round(1.0 - (pa + k_no), 6)
-            cand = {
+            candidates.append({
                 "direction": "buy YES on Polymarket + buy NO on Kalshi",
                 "legs": f"PM YES @ {pa}  |  Kalshi NO @ {k_no}",
+                "book_direction": "poly_yes__kalshi_no",
                 "gross": gross,
                 "net_accurate": round(gross - kalshi_taker_fee(k_no), 6),
                 "net_flat7": round(gross - FLAT_FEE, 6),
-            }
-            best = cand
-        if (ka is not None and pb is not None
-                and (kas or 0) >= min_size and (pbs or 0) >= min_size):
+            })
+        if ka is not None and pb is not None:
             p_no = round(1.0 - pb, 6)
             gross = round(1.0 - (ka + p_no), 6)
-            cand = {
+            candidates.append({
                 "direction": "buy YES on Kalshi + buy NO on Polymarket",
                 "legs": f"Kalshi YES @ {ka}  |  PM NO @ {p_no}",
+                "book_direction": "kalshi_yes__poly_no",
                 "gross": gross,
                 "net_accurate": round(gross - kalshi_taker_fee(ka), 6),
                 "net_flat7": round(gross - FLAT_FEE, 6),
-            }
-            if best is None or cand["net_accurate"] > best["net_accurate"]:
-                best = cand
-        if best is None or best["net_accurate"] < min_edge:
+            })
+
+        best = None
+        best_gate = None
+        for cand in candidates:
+            if min_size > 0:
+                exec_res = _executable_edge(p, cand["book_direction"], min_size)
+                if exec_res is None:
+                    continue  # can't fill min_size on both legs -> not executable
+                cand["exec_net"] = exec_res["net"]
+                cand["exec_vwap_poly"] = exec_res["vwap_poly"]
+                cand["exec_vwap_kalshi"] = exec_res["vwap_kalshi"]
+                gate = exec_res["net"]
+            else:
+                gate = cand["net_accurate"]
+            if best is None or gate > best_gate:
+                best, best_gate = cand, gate
+
+        if best is None or best_gate < min_edge:
             continue
-        if best["net_accurate"] > max_edge:
+        if best_gate > max_edge:
             continue  # implausible edge => mismatch / one-sided book (phantom)
         signals.append({
             "ts": datetime.now(timezone.utc).isoformat(),
@@ -732,10 +806,15 @@ def _alert_operator(cfg: dict, reason: str, state: dict | None = None) -> None:
 # ---------------------------------------------------------------------------
 
 def adaptive_scan(min_edge: float, target: int = TARGET_SURVIVABLE,
-                  caps: tuple[int, ...] = CAP_LADDER,
-                  min_size: float = MIN_DEPTH) -> tuple[list, list, int]:
+                  caps: tuple[int | None, ...] = CAP_LADDER,
+                  min_size: float = MIN_DEPTH) -> tuple[list, list, int | None]:
     """Scan, progressively widening the Kalshi event cap until at least ``target``
     survivable (positive net-of-fees) arbs are found, or the last cap is reached.
+
+    ``caps`` defaults to ``(None,)`` — no Kalshi event cap and no horizon —
+    since discover() now ingests the full open-market catalog on both venues
+    by default (100% coverage). A caller can still pass explicit int caps
+    (e.g. ``(1000, 1500)``) for a bounded/faster scan.
 
     Returns ``(pairs, signals, cap_used)``. Higher caps are supersets, so the
     last scan's results are the richest; we stop early at the first cap that
@@ -746,8 +825,9 @@ def adaptive_scan(min_edge: float, target: int = TARGET_SURVIVABLE,
     signals: list = []
     cap_used = caps[-1]
     for cap in caps:
-        pairs = discover(category="all", days=730, min_sim=0.30, show_prices=True,
-                         max_events_to_search=cap, catalog_cache_ttl=1200)
+        pairs = discover(category="all", days=None, min_sim=0.30, show_prices=True,
+                         max_events_to_search=cap,
+                         market_sweep=True, sweep_cache_ttl=3600)
         signals = compute_signals(pairs, min_edge=min_edge, min_size=min_size)
         survivable = sum(1 for s in signals if s["net_accurate"] > 0)
         cap_used = cap
@@ -793,10 +873,17 @@ def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False,
         print(f"[alerter] SIGNAL net={s['net_accurate']*100:.2f}c  {s['poly_title'][:40]!r} <-> {s['kalshi_title'][:40]!r}{flag}")
 
     subject, html, images = build_email(to_email, labels, min_net=min_net)
-    delivered = True   # also True for dry_run / not-configured (avoid re-log spam)
+    # dry_run must NEVER touch the audit log (alert_signals.jsonl) or the realert
+    # state (alert_state.json) — a dry run against the production data dir would
+    # otherwise suppress real emails for realert_hours and pollute the audit trail
+    # that signal_report.py reads. "not configured" still counts as delivered
+    # (see #84/#86 below) since nothing was actually sent either way, but the
+    # signal has genuinely been "recorded" as seen — only dry_run is a pure preview.
+    delivered = not dry_run
     if dry_run:
         print(f"[alerter] DRY RUN — would email {cfg['recipients']}: {subject} "
-              f"({len(to_email)} pairs, {len(images)} charts)")
+              f"({len(to_email)} pairs, {len(images)} charts) — NOT appending to "
+              f"{SIGNALS_FILE.name} or updating realert state")
     elif email_configured(cfg):
         try:
             send_email(cfg, subject, html, images)
@@ -828,7 +915,10 @@ def run_cycle(min_edge: float, realert_hours: float, dry_run: bool = False,
 def main() -> None:
     ap = argparse.ArgumentParser(description="Scheduled full-scan arb email alerter")
     ap.add_argument("--interval", type=int, default=300,
-                    help="seconds between scans (default 300; catalogs are cached 20 min, quotes always fresh)")
+                    help="seconds between scans (default 300; catalogs are always walked "
+                         "fresh each cycle — only the Polymarket orphan-sweep subset is "
+                         "cached, 1h, via sweep_cache_ttl; live quotes are always fetched "
+                         "fresh)")
     ap.add_argument("--min-edge", type=float, default=0.0001,
                     help="min net edge (accurate fee) to alert, in $ per $1 payout "
                          "(default 0.0001 = any strictly positive edge after fees)")

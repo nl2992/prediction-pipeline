@@ -63,13 +63,14 @@ def _load_signals(n: int = 200, _block: int = 1_000_000) -> list[dict]:
     return out
 
 
-# Interactive scans must stay bounded: an unbounded horizon (days=None) lets
-# thousands of events through the filter, which overflows discover()'s
-# per-event blocking limit and falls back to crawling the ENTIRE Kalshi
-# catalog (>750k rows — minutes-to-never on a dashboard request). Defaults
-# below keep a full scan in the ~90s range; pass explicit params to widen.
-_DEFAULT_SCAN_DAYS = 730
-_DEFAULT_MAX_EVENTS = 200
+# discover() ingests the full Kalshi/Polymarket open-market catalogs by
+# default (100% coverage — see discover.ingest_kalshi / ingest_polymarket),
+# each in a handful of seconds via cursor pagination, so no event cap or
+# horizon is needed here. market_sweep=False below skips the ~290s Polymarket
+# orphan sweep for interactive dashboard requests; run discover.py directly
+# (or the alerter, which caches the sweep) to include the ~480 orphan markets.
+_DEFAULT_SCAN_DAYS = None
+_DEFAULT_MAX_EVENTS = None
 
 
 def _run_scan(
@@ -88,6 +89,7 @@ def _run_scan(
             min_sim=min_sim,
             show_prices=show_prices,
             max_events_to_search=max_events,
+            market_sweep=False,
         )
     except Exception as exc:
         return {"error": str(exc), "pairs": [], "elapsed": 0}

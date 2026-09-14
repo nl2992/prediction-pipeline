@@ -214,6 +214,7 @@ class KalshiClient:
         event_ticker: str | None = None,
         series_ticker: str | None = None,
         status: str | None = None,
+        mve_filter: str | None = None,
     ) -> dict:
         """
         List markets (public endpoint).
@@ -232,6 +233,10 @@ class KalshiClient:
           often contains very recently created (illiquid) markets.
           Use ``series_ticker`` or ``event_ticker`` to target specific markets.
         - ``limit`` max is 1000 per request.
+        - ``mve_filter`` (e.g. ``"exclude"``) controls whether multi-variable-
+          event (parlay) markets are included; used by the ground-truth /
+          orphan-sweep walk in discover.py to match
+          ``/markets?status=open&mve_filter=exclude`` exactly.
         """
         params: dict[str, Any] = {"limit": limit}
         if cursor:
@@ -242,6 +247,8 @@ class KalshiClient:
             params["series_ticker"] = series_ticker
         if status:
             params["status"] = status
+        if mve_filter:
+            params["mve_filter"] = mve_filter
         return self._get("/markets", params=params)
 
     def get_all_markets(
@@ -251,6 +258,7 @@ class KalshiClient:
         series_ticker: str | None = None,
         event_ticker: str | None = None,
         status: str = "open",
+        mve_filter: str | None = None,
     ) -> list[dict]:
         """
         Paginate through markets until the API cursor is exhausted.
@@ -270,6 +278,7 @@ class KalshiClient:
                 series_ticker=series_ticker,
                 event_ticker=event_ticker,
                 status=status,
+                mve_filter=mve_filter,
             )
             batch = resp.get("markets", [])
             all_markets.extend(batch)
@@ -319,19 +328,32 @@ class KalshiClient:
         status: str | None = None,
         with_nested_markets: bool = False,
     ) -> list[dict]:
-        """Paginate through events until exhausted, unless ``max_pages`` caps it."""
+        """Paginate through events until exhausted, unless ``max_pages`` caps it.
+
+        Sets ``self.last_scan_complete`` to False when a page fetch raises
+        (after ``_get``'s own retries) and returns the events collected so
+        far instead of propagating the exception, so callers can report a
+        partial catalog rather than losing the whole scan to one bad page.
+        """
         all_events: list[dict] = []
         cursor: str | None = None
         seen_cursors: set[str] = set()
         pages = 0
+        self.last_scan_complete = True
         while max_pages is None or pages < max_pages:
-            resp = self.get_events(
-                limit=page_size,
-                cursor=cursor,
-                series_ticker=series_ticker,
-                status=status,
-                with_nested_markets=with_nested_markets,
-            )
+            try:
+                resp = self.get_events(
+                    limit=page_size,
+                    cursor=cursor,
+                    series_ticker=series_ticker,
+                    status=status,
+                    with_nested_markets=with_nested_markets,
+                )
+            except Exception as exc:
+                logger.warning("get_all_events: fetch failed after %d events: %s",
+                               len(all_events), exc)
+                self.last_scan_complete = False
+                break
             batch = resp.get("events", [])
             all_events.extend(batch)
             cursor = resp.get("cursor")
@@ -341,6 +363,26 @@ class KalshiClient:
                 break
             seen_cursors.add(cursor)
         return all_events
+
+    def get_event(self, event_ticker: str, with_nested_markets: bool = False) -> dict:
+        """
+        Fetch a single event by ticker (public endpoint).
+
+        Used by discover.py's Kalshi orphan sweep to recover an event's
+        title/series_ticker when the event itself never appears in ANY
+        ``/events`` listing (a live, hours-persistent /events-vs-/markets
+        inconsistency — see discover.py's module docstring) even though
+        ``GET /events/{event_ticker}`` works fine and its markets are active.
+
+        Unwraps the ``{"event": {...}}`` envelope if present so callers get
+        the event dict directly, matching the shape of rows returned by
+        ``get_events``/``get_all_events``.
+        """
+        params: dict[str, Any] = {}
+        if with_nested_markets:
+            params["with_nested_markets"] = "true"
+        data = self._get(f"/events/{event_ticker}", params=params or None)
+        return data.get("event", data) if isinstance(data, dict) else data
 
     def get_series_list(self, limit: int = 100) -> list[dict]:
         """
@@ -391,6 +433,86 @@ class KalshiClient:
         if depth > 0:
             params["depth"] = depth
         return self._get(path, params=params or None, authenticated=False)
+
+    MAX_ORDERBOOKS_PER_REQUEST = 100
+
+    def get_orderbooks(self, tickers: list[str], depth: int = 0) -> dict[str, dict]:
+        """
+        Fetch full order books for many tickers at once (public endpoint).
+
+        ``GET /markets/orderbooks`` takes the ``tickers`` query param
+        REPEATED once per ticker (``?tickers=A&tickers=B``) — a single
+        comma-joined value is treated as one (nonexistent) ticker and comes
+        back with an empty book. ``requests`` produces the repeated form
+        naturally when a param value is a list, which is what's used here.
+
+        Kalshi caps this endpoint at 100 tickers per request (101 raises
+        HTTP 400; a few hundred raises 414 URI-too-long from the joined
+        query string), so ``tickers`` is chunked into groups of
+        ``MAX_ORDERBOOKS_PER_REQUEST`` and one request is issued per chunk.
+
+        Verified live against ``GET /markets/{ticker}/orderbook``: the batch
+        response's ``orderbook_fp`` is byte-identical (same shape, same
+        depth, no truncation) to the single-ticker endpoint, so each
+        returned item can be fed straight into
+        ``pipeline._parse_kalshi_full_book`` exactly like a single-ticker
+        response.
+
+        Parameters
+        ----------
+        tickers : list[str]
+            Market tickers to fetch. Duplicates and empty strings are
+            dropped; order is not preserved in the return value (it's a
+            dict).
+        depth : int
+            Number of price levels per side, 0 (default) = all levels.
+
+        Returns
+        -------
+        dict[str, dict]
+            Mapping of ticker -> raw per-ticker orderbook dict (the same
+            shape as ``get_orderbook`` returns for one ticker, i.e.
+            ``{"ticker": ..., "orderbook_fp": {...}}`` or at least
+            containing ``orderbook_fp``). Tickers that a chunk failed to
+            return (chunk request raised, or the venue simply omitted them)
+            are absent from the result — callers should fall back to
+            ``get_orderbook`` per-ticker for anything missing.
+
+        Raises
+        ------
+        Nothing: a failed chunk is skipped (its tickers are just missing
+        from the result) rather than raising, so one bad chunk doesn't
+        block books for every other chunk. Use the returned dict's
+        completeness to decide whether to fall back.
+        """
+        seen: set[str] = set()
+        clean: list[str] = []
+        for t in tickers:
+            if t and t not in seen:
+                seen.add(t)
+                clean.append(t)
+
+        out: dict[str, dict] = {}
+        for i in range(0, len(clean), self.MAX_ORDERBOOKS_PER_REQUEST):
+            chunk = clean[i : i + self.MAX_ORDERBOOKS_PER_REQUEST]
+            params: dict[str, Any] = {"tickers": chunk}
+            if depth > 0:
+                params["depth"] = depth
+            try:
+                resp = self._get(
+                    "/markets/orderbooks", params=params, authenticated=False
+                )
+            except Exception:
+                logger.warning(
+                    "get_orderbooks: chunk of %d tickers failed, skipping "
+                    "(caller should fall back per-ticker)", len(chunk)
+                )
+                continue
+            for row in resp.get("orderbooks", []) or []:
+                ticker = row.get("ticker")
+                if ticker:
+                    out[ticker] = row
+        return out
 
     # ------------------------------------------------------------------
     # Convenience: parse bid/ask from market object (no extra API call)

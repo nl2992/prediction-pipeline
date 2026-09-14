@@ -40,9 +40,9 @@ def _key(r: dict) -> tuple:
 
 def run(prod_cap: int = 200, wide_cap: int = 500) -> dict:
     prod = discover(category="all", days=730, min_sim=0.30, show_prices=False,
-                    max_events_to_search=prod_cap, catalog_cache_ttl=1200)
+                    max_events_to_search=prod_cap)
     wide = discover(category="all", days=730, min_sim=0.30, show_prices=False,
-                    max_events_to_search=wide_cap, catalog_cache_ttl=1200)
+                    max_events_to_search=wide_cap)
 
     prod_keys = {_key(r) for r in prod}
     new_only = [r for r in wide if _key(r) not in prod_keys]

@@ -162,6 +162,75 @@ class PolymarketClient:
         data = self._get(GAMMA_BASE, "/markets", params=params)
         return data if isinstance(data, list) else data.get("markets", data)
 
+    def get_markets_keyset(
+        self,
+        limit: int = 500,
+        after_cursor: str | None = None,
+        closed: bool = False,
+    ) -> tuple[list[dict], str | None]:
+        """One page of Gamma ``/markets/keyset``: ``(markets, next_cursor)``.
+
+        Unlike ``/events/keyset``, each row here is a bare market (no embedded
+        event markets list) but carries an ``events`` list (id/slug/title) for
+        its parent — this is the only way to reach "orphan" markets whose
+        parent event is archived/inactive and therefore omitted from
+        ``/events/keyset`` entirely.
+        """
+        params: dict[str, Any] = {"limit": limit, "closed": str(closed).lower()}
+        if after_cursor:
+            params["after_cursor"] = after_cursor
+        data = self._get(GAMMA_BASE, "/markets/keyset", params=params)
+        if isinstance(data, list):
+            return data, None
+        return data.get("markets") or [], data.get("next_cursor")
+
+    def get_all_markets_keyset(
+        self,
+        closed: bool = False,
+        page_size: int = 500,
+        max_markets: int | None = None,
+    ) -> list[dict]:
+        """Walk the full Gamma market catalog via ``/markets/keyset``.
+
+        Mirrors ``get_all_events``: dedups by conditionId (falling back to
+        id), stops on an empty page / missing cursor / a page that adds
+        nothing new / a repeating cursor, and sets
+        ``self.last_scan_complete = False`` when a page fetch fails so callers
+        know the returned list is partial. Gamma caps this endpoint at ~100
+        rows/page regardless of the requested ``limit``, so a full scan
+        (~166k open markets) takes several minutes — callers should run it in
+        a background thread.
+        """
+        markets: list[dict] = []
+        seen_ids: set[str] = set()
+        seen_cursors: set[str] = set()
+        cursor: str | None = None
+        self.last_scan_complete = True
+        while max_markets is None or len(markets) < max_markets:
+            try:
+                batch, next_cursor = self.get_markets_keyset(
+                    limit=page_size, after_cursor=cursor, closed=closed,
+                )
+            except Exception as exc:
+                logger.warning("get_all_markets_keyset: keyset fetch failed after %d markets: %s",
+                               len(markets), exc)
+                self.last_scan_complete = False
+                break
+            new = 0
+            for m in batch:
+                mid = str(m.get("conditionId") or m.get("id") or "")
+                if mid in seen_ids:
+                    continue
+                seen_ids.add(mid)
+                markets.append(m)
+                new += 1
+            # End of catalog, or a cursor/page that stopped advancing (#67/#68).
+            if not batch or not next_cursor or new == 0 or next_cursor in seen_cursors:
+                break
+            seen_cursors.add(next_cursor)
+            cursor = next_cursor
+        return markets if max_markets is None else markets[:max_markets]
+
     def search_markets(
         self,
         keywords: list[str],

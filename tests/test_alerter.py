@@ -116,6 +116,88 @@ class LiquidityFilter(unittest.TestCase):
         self.assertEqual(len(compute_signals([pair(0.38, 0.40, 0.65, 0.68)], min_edge=0.005)), 1)
 
 
+class DepthAwareEconomics(unittest.TestCase):
+    """Iteration 4: min_edge/max_edge are evaluated on the depth-walked
+    executable edge at the min_size quantity (book_arb), not a top-of-book
+    figure — a thin top level should neither create a phantom max_edge trip
+    nor satisfy min_size by itself."""
+
+    def _books(self, poly_ask_levels, kalshi_bid_levels, poly_bid_levels=(), kalshi_ask_levels=()):
+        return {
+            "poly_book": {"bids": list(poly_bid_levels), "asks": list(poly_ask_levels)},
+            "kalshi_book": {"bids": list(kalshi_bid_levels), "asks": list(kalshi_ask_levels)},
+        }
+
+    def test_thin_top_level_rescued_by_deeper_liquidity(self) -> None:
+        # Top-of-book alone (1 contract) fails the old min_size=20 gate, but
+        # the book actually holds 30 contracts across two levels at a price
+        # only slightly worse -> depth-walked VWAP should pass min_size.
+        books = self._books(
+            poly_ask_levels=[(0.40, 1), (0.41, 40)],       # PM YES ask
+            kalshi_bid_levels=[(0.65, 1), (0.64, 40)],     # Kalshi YES bid (-> NO ask)
+        )
+        p = pair(0.38, 0.40, 0.65, 0.68,
+                 poly_ask_size=1, kalshi_bid_size=1, poly_bid_size=100, kalshi_ask_size=100,
+                 **books)
+        sigs = compute_signals([p], min_edge=0.005, min_size=20)
+        self.assertEqual(len(sigs), 1)
+        s = sigs[0]
+        self.assertIn("exec_net", s)
+        # Executable net should be computed off the walked VWAP, worse than
+        # the (unrealistic) top-of-book net_accurate.
+        self.assertLess(s["exec_net"], s["net_accurate"])
+        # Display fields stay top-of-book.
+        self.assertAlmostEqual(s["poly_ask"], 0.40)
+
+    def test_thin_top_level_phantom_dropped_by_max_edge_on_exec_net(self) -> None:
+        # Top-of-book looks like an enormous (implausible) edge, but it's a
+        # single stale contract; real depth is priced back to no-edge. The
+        # executable check at min_size must drop it via max_edge/min_edge,
+        # even though the top-of-book net_accurate alone would have passed
+        # (and would have satisfied the OLD top-level-only min_size, since
+        # top size here is deliberately >= min_size).
+        books = self._books(
+            poly_ask_levels=[(0.05, 25), (0.60, 100)],     # PM YES ask: stale cheap level then real price
+            kalshi_bid_levels=[(0.65, 25), (0.10, 100)],   # Kalshi YES bid: stale then real
+        )
+        p = pair(0.05, 0.05, 0.65, 0.65,
+                 poly_ask_size=25, kalshi_bid_size=25, poly_bid_size=100, kalshi_ask_size=100,
+                 **books)
+        # Sanity: top-of-book alone would report a huge (phantom) net edge
+        # (max_edge raised here just to observe the raw top-of-book figure).
+        top_level_only = compute_signals([p], min_edge=0.005, min_size=0, max_edge=1.0)
+        self.assertEqual(len(top_level_only), 1)
+        self.assertGreater(top_level_only[0]["net_accurate"], 0.25)
+        # Depth-walked at min_size=25 must not pass -- real execution price
+        # crosses back over break-even (net <= 0 once levels 2 kick in enough
+        # to matter, well under the max_edge phantom threshold too).
+        depth_walked = compute_signals([p], min_edge=0.005, min_size=25, max_edge=0.25)
+        self.assertEqual(depth_walked, [])
+
+    def test_min_size_without_books_falls_back_to_top_level_synthetic_book(self) -> None:
+        # No poly_book/kalshi_book at all (older caller) -> falls back to a
+        # synthetic single-level book from the top-of-book size fields,
+        # exactly reproducing the pre-iteration-4 top-level-only min_size gate.
+        thin = pair(0.38, 0.40, 0.65, 0.68, poly_ask_size=2, kalshi_bid_size=2,
+                    poly_bid_size=2, kalshi_ask_size=2)
+        self.assertEqual(compute_signals([thin], min_edge=0.005, min_size=20), [])
+        deep = pair(0.38, 0.40, 0.65, 0.68, poly_ask_size=100, kalshi_bid_size=100,
+                    poly_bid_size=100, kalshi_ask_size=100)
+        sigs = compute_signals([deep], min_edge=0.005, min_size=20)
+        self.assertEqual(len(sigs), 1)
+        # With a full top-level fill, exec VWAP == top-of-book price exactly.
+        self.assertAlmostEqual(sigs[0]["exec_net"], sigs[0]["net_accurate"])
+
+    def test_min_size_zero_never_calls_book_arb(self) -> None:
+        # min_size=0 must be byte-for-byte the pre-iteration-4 behaviour: no
+        # book_arb call, no exec_* fields, even when books ARE present.
+        books = self._books(poly_ask_levels=[(0.40, 1)], kalshi_bid_levels=[(0.65, 1)])
+        p = pair(0.38, 0.40, 0.65, 0.68, **books)
+        sigs = compute_signals([p], min_edge=0.005, min_size=0)
+        self.assertEqual(len(sigs), 1)
+        self.assertNotIn("exec_net", sigs[0])
+
+
 class SignalsToSend(unittest.TestCase):
     """Trigger on change, but email EVERY positive-net pair."""
 
@@ -193,6 +275,30 @@ class AdaptiveScan(unittest.TestCase):
         self.assertEqual(cap, 1500)
         self.assertEqual(calls, [1000, 1500])    # escalated to last rung
         self.assertEqual(len(sigs), 6)
+
+    def test_default_caps_pass_none_for_full_coverage(self) -> None:
+        # discover() now ingests the full open-market catalog by default, so
+        # adaptive_scan's default CAP_LADDER must pass max_events_to_search=None
+        # (no Kalshi event cap) and days=None (no horizon) — not the old fixed
+        # caps that silently dropped true pairs beyond the cap.
+        import alerter
+        import discover as discmod
+        captured = {}
+
+        def fake_discover(**kw):
+            captured.update(kw)
+            return []
+
+        orig = discmod.discover
+        discmod.discover = fake_discover
+        self.addCleanup(lambda: setattr(discmod, "discover", orig))
+
+        alerter.adaptive_scan(min_edge=0.005)
+
+        self.assertEqual(alerter.CAP_LADDER, (None,))
+        self.assertIsNone(captured["max_events_to_search"])
+        self.assertIsNone(captured["days"])
+        self.assertTrue(captured.get("market_sweep"))
 
 
 class AnnualisedRanking(unittest.TestCase):
@@ -478,6 +584,67 @@ class RunCycleNoEmailBranches(unittest.TestCase):
         n, send = self._run(([], sigs, 1500), gate=lambda to_email, cfg: [])   # gate drops all
         self.assertEqual(n, 0)
         send.assert_not_called()
+
+
+class DryRunDoesNotPersist(unittest.TestCase):
+    """A dry-run cycle must never touch the audit log or realert state — running
+    dry_run=True against the production data dir must not suppress real emails
+    for realert_hours nor pollute alert_signals.jsonl (task 1 regression)."""
+    _cfg = {"recipients": ["a@b.com"], "from_addr": "x@y.com", "smtp_host": "h",
+            "smtp_port": 1, "smtp_user": "u", "smtp_pass": "p"}
+
+    def test_dry_run_leaves_signals_log_and_state_untouched(self):
+        import os, pathlib, tempfile
+        import alerter
+        p = pair(0.38, 0.40, 0.65, 0.68)            # ~24c net -> well above >3%
+        sigs = compute_signals([p], min_edge=0.005)
+        self.assertTrue(sigs)
+        sfd, sp = tempfile.mkstemp(suffix=".jsonl"); os.close(sfd)
+        stfd, stp = tempfile.mkstemp(suffix=".json"); os.close(stfd); os.unlink(stp)
+        try:
+            before_signals = pathlib.Path(sp).read_bytes()
+            with patch("alerter.adaptive_scan", return_value=([p], sigs, 1500)), \
+                 patch("alerter.send_email") as send, \
+                 patch("alerter.load_config", return_value=self._cfg), \
+                 patch("alerter.SIGNALS_FILE", pathlib.Path(sp)), \
+                 patch("alerter.STATE_FILE", pathlib.Path(stp)), \
+                 patch("ai_verify.resolve_api_key", return_value=None):
+                n = alerter.run_cycle(min_edge=0.0001, realert_hours=6.0, dry_run=True)
+            self.assertGreaterEqual(n, 1)
+            send.assert_not_called()                                  # dry run never sends
+            self.assertEqual(pathlib.Path(sp).read_bytes(), before_signals)  # byte-identical (empty)
+            self.assertFalse(os.path.exists(stp))                     # state file never created
+        finally:
+            for q in (sp, stp):
+                if os.path.exists(q):
+                    os.unlink(q)
+
+    def test_dry_run_then_real_cycle_still_delivers_and_alerts(self):
+        """A prior dry run must not suppress the SAME signal's real email on the
+        next real cycle (no realert-state pollution from the dry run)."""
+        import os, pathlib, tempfile
+        import alerter
+        p = pair(0.38, 0.40, 0.65, 0.68)
+        sigs = compute_signals([p], min_edge=0.005)
+        sfd, sp = tempfile.mkstemp(suffix=".jsonl"); os.close(sfd)
+        stfd, stp = tempfile.mkstemp(suffix=".json"); os.close(stfd); os.unlink(stp)
+        try:
+            with patch("alerter.adaptive_scan", return_value=([p], sigs, 1500)), \
+                 patch("alerter.send_email") as send, \
+                 patch("alerter.load_config", return_value=self._cfg), \
+                 patch("alerter.SIGNALS_FILE", pathlib.Path(sp)), \
+                 patch("alerter.STATE_FILE", pathlib.Path(stp)), \
+                 patch("ai_verify.resolve_api_key", return_value=None):
+                alerter.run_cycle(min_edge=0.0001, realert_hours=6.0, dry_run=True)
+                n = alerter.run_cycle(min_edge=0.0001, realert_hours=6.0, dry_run=False)
+            self.assertGreaterEqual(n, 1)
+            send.assert_called_once()                                 # real cycle actually emails
+            self.assertIn(sigs[0]["key"], pathlib.Path(stp).read_text(encoding="utf-8"))
+            self.assertIn(sigs[0]["key"], pathlib.Path(sp).read_text(encoding="utf-8"))
+        finally:
+            for q in (sp, stp):
+                if os.path.exists(q):
+                    os.unlink(q)
 
 
 class SendEmail(unittest.TestCase):

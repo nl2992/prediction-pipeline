@@ -51,7 +51,7 @@ def run(production: float = 0.30, relaxed: float = 0.20,
         max_events: int = 200) -> dict:
     out = discover(category="all", days=730, min_sim=production,
                    show_prices=False, max_events_to_search=max_events,
-                   catalog_cache_ttl=1200, return_pools=True)
+                   return_pools=True)
     _results, k_snaps, p_snaps = out
 
     # Same production matcher discover uses, at two gates over one fetched pool set.
