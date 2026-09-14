@@ -211,6 +211,112 @@ class FormatHealth(unittest.TestCase):
         self.assertIn("verifier idle", out)
 
 
+_KALSHI_100 = ("      [coverage] Kalshi: 105,895/105,895 open markets ingested "
+               "(100.0%, incl. 18 orphans) · held out of matching: stats_only=1,129 "
+               "multi_leg=8 · excluded: closed=200 · sweep=fresh")
+_POLY_100 = ("      [coverage] Polymarket: 166,203/166,203 open markets ingested "
+             "(100.0%, incl. 442 orphans) · excluded: closed=22,000 · sweep=fresh")
+
+
+class CoverageSLO(unittest.TestCase):
+    """discover.py's per-venue "[coverage]" lines (iteration 3, task D):
+    health.py must parse the most recent cycle's lines and report DEGRADED on
+    < 100% ingestion, a partial catalog, or a partial/failed sweep — while an
+    old-format log with no coverage lines must stay "n/a", not degraded."""
+
+    def test_full_coverage_both_venues_is_ok(self):
+        s = health.summarize_log([
+            "[alerter] scan done in 800s — 100 survivable arb(s)",
+            _KALSHI_100,
+            _POLY_100,
+        ])
+        self.assertFalse(s["coverage_degraded"])
+        self.assertEqual(s["coverage_by_venue"]["Kalshi"]["pct"], 100.0)
+        self.assertEqual(s["coverage_by_venue"]["Polymarket"]["pct"], 100.0)
+        self.assertTrue(health.overall_ok(s))
+        out = health.format_health(s, 1, "t")
+        self.assertIn("coverage: Kalshi 105,895/105,895 (100.0%, sweep=fresh)", out)
+        self.assertIn("Polymarket 166,203/166,203 (100.0%, sweep=fresh)", out)
+
+    def test_missing_coverage_lines_reports_na_not_degraded(self):
+        # Old log format, predating the [coverage] lines.
+        s = health.summarize_log([
+            "[alerter] scan done in 800s — 100 survivable arb(s)",
+            "[alerter] AI verify: mode=enforce, key=present, 9 checked, 9 confirmed, 0 flagged",
+            "[alerter] EMAILED ['a@b.com']: [Pred-Arb] 9 arbs (9 pairs)",
+        ])
+        self.assertFalse(s["coverage_degraded"])
+        self.assertEqual(s["coverage_by_venue"], {})
+        self.assertTrue(health.overall_ok(s))
+        self.assertIn("coverage: n/a", health.format_health(s, 1, "t"))
+
+    def test_below_100pct_ingestion_is_degraded(self):
+        low_kalshi = ("      [coverage] Kalshi: 90,000/105,895 open markets ingested "
+                      "(85.0%, incl. 18 orphans) · held out of matching: none · "
+                      "excluded: none · sweep=fresh")
+        s = health.summarize_log([low_kalshi, _POLY_100])
+        self.assertTrue(s["coverage_degraded"])
+        self.assertFalse(health.overall_ok(s))
+        self.assertIn("STATUS: DEGRADED", health.format_health(s, 1, "t"))
+
+    def test_partial_catalog_tag_is_degraded(self):
+        partial = ("      [coverage] Polymarket: 166,203/166,203 open markets ingested "
+                   "(100.0%, incl. 442 orphans) · excluded: none · sweep=fresh  [PARTIAL CATALOG]")
+        s = health.summarize_log([_KALSHI_100, partial])
+        self.assertTrue(s["coverage_degraded"])
+        self.assertFalse(health.overall_ok(s))
+
+    def test_partial_sweep_is_degraded(self):
+        partial_sweep = ("      [coverage] Polymarket: 166,203/166,203 open markets ingested "
+                         "(100.0%, incl. 442 orphans) · excluded: none · sweep=partial")
+        s = health.summarize_log([_KALSHI_100, partial_sweep])
+        self.assertTrue(s["coverage_degraded"])
+        self.assertFalse(health.overall_ok(s))
+
+    def test_failed_sweep_is_degraded(self):
+        failed_sweep = ("      [coverage] Kalshi: 105,895/105,895 open markets ingested "
+                        "(100.0%, incl. 18 orphans) · held out of matching: none · "
+                        "excluded: none · sweep=failed")
+        s = health.summarize_log([failed_sweep, _POLY_100])
+        self.assertTrue(s["coverage_degraded"])
+        self.assertFalse(health.overall_ok(s))
+
+    def test_sweep_off_is_ok(self):
+        off = ("      [coverage] Polymarket: 166,203/166,203 open markets ingested "
+               "(100.0%, incl. 442 orphans) · excluded: none · sweep=off")
+        s = health.summarize_log([_KALSHI_100, off])
+        self.assertFalse(s["coverage_degraded"])
+
+    def test_sweep_cached_is_ok(self):
+        cached = ("      [coverage] Polymarket: 166,203/166,203 open markets ingested "
+                  "(100.0%, incl. 442 orphans) · excluded: none · sweep=cached")
+        s = health.summarize_log([_KALSHI_100, cached])
+        self.assertFalse(s["coverage_degraded"])
+
+    def test_most_recent_cycle_wins_over_a_stale_degraded_one(self):
+        # An older DEGRADED cycle followed by a healthy one must report the
+        # LATEST state, not the worst-ever-seen one.
+        bad_then_good = [
+            ("      [coverage] Kalshi: 90,000/105,895 open markets ingested "
+             "(85.0%, incl. 18 orphans) · held out of matching: none · "
+             "excluded: none · sweep=partial"),
+            _KALSHI_100,
+        ]
+        s = health.summarize_log(bad_then_good + [_POLY_100])
+        self.assertFalse(s["coverage_degraded"])
+        self.assertEqual(s["coverage_by_venue"]["Kalshi"]["pct"], 100.0)
+
+    def test_parse_coverage_line_helper(self):
+        cov = health._parse_coverage_line(_KALSHI_100)
+        self.assertEqual(cov["venue"], "Kalshi")
+        self.assertEqual(cov["ingested"], 105895)
+        self.assertEqual(cov["open"], 105895)
+        self.assertEqual(cov["pct"], 100.0)
+        self.assertEqual(cov["sweep"], "fresh")
+        self.assertFalse(cov["partial_catalog"])
+        self.assertIsNone(health._parse_coverage_line("not a coverage line"))
+
+
 class BuildReport(unittest.TestCase):
     """The public (text, overall_ok) entry composed by ops.py + the CLI (#119)."""
 
