@@ -518,6 +518,24 @@ class KalshiOrphanSweep(unittest.TestCase):
         kc.last_scan_complete = True
         return kc
 
+    def test_standalone_call_starts_its_own_sweep_thread(self):
+        # tools/validate_coverage.py calls ingest_kalshi on its own (no
+        # _sweep_box / _sweep_thread from discover()), which takes the
+        # own-thread path. A function-local `import threading` once shadowed
+        # the module import there and crashed with UnboundLocalError.
+        k_events = [_nested_event("KXA-26", "Will A happen?", "2099-01-01T00:00:00Z",
+                                  [("Y", "Will A happen?", "active")])]
+        with patch("discover._sweep_cache_state", return_value=(False, False)), \
+             patch("discover._run_kalshi_market_sweep",
+                   return_value={"raw": [], "complete": True, "elapsed": 0.0}) as sweep:
+            cov: dict = {}
+            _filtered, k_snaps = discover.ingest_kalshi(
+                self._kc(k_events), now=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                coverage=cov, market_sweep=True)
+        sweep.assert_called_once()
+        self.assertEqual([s.market_id for s in k_snaps], ["KXA-26-Y"])
+        self.assertEqual(cov["sweep"], "fresh")
+
     def test_orphan_added_with_parent_event_title(self):
         k_events = [_nested_event("KXA-26", "Will A happen?", "2099-01-01T00:00:00Z",
                                   [("Y", "Will A happen?", "active")])]
