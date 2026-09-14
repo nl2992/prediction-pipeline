@@ -24,6 +24,15 @@ you use `--dry-run`):
 python alerter.py --once --dry-run     # scan + build email, print instead of send
 ```
 
+A dry run is side-effect free. It doesn't append to `alert_signals.jsonl` or
+write `alert_state.json`, so it never suppresses the next real email.
+
+Each scan ingests **100% of both venues' open markets** (see
+[COVERAGE.md](COVERAGE.md)). The log shows one `[coverage]` line per venue.
+Orphan sweeps are cached (1 h TTL) and served stale for up to 6 h while a
+background refresh runs, so only a process with no cache at all pays the ~260 s
+Polymarket sweep inline.
+
 ## What gets emailed
 
 - **Threshold:** only pairs with a net edge **> 3%** after fees (default `MIN_NET_EMAIL = 0.03`;
@@ -43,9 +52,14 @@ python alerter.py --once --dry-run     # scan + build email, print instead of se
 - **AI check row:** ✓ "verified identical event & settlement" (the only ones that
   survive enforce) or, in shadow mode, ⚠ the AI's caveat.
 
-Guardrails: `max_edge = 0.25` (a >25c edge between two identical binaries is a
-mismatch/stale book, dropped); `MIN_DEPTH = 20` best-level depth on both legs;
-`TOP_N = 50` richest pairs per email.
+Guardrails:
+- `max_edge = 0.25`: a > 25c edge between two identical binaries is a mismatch
+  or stale book, and is dropped.
+- `MIN_DEPTH = 20`: `min_edge` and `max_edge` are evaluated on the **depth-walked**
+  net edge for 20 contracts on both legs (VWAP across levels, Kalshi fee on the
+  walked price), not on the top level alone. A thin top level can't create a
+  phantom edge or hide real depth.
+- `TOP_N = 50` richest pairs per email.
 
 ## AI settlement-equivalence verifier (`ai_verify.py`)
 
@@ -90,6 +104,10 @@ check), recent `CYCLE ERROR`, and verdict-log freshness. **DEGRADED** only on re
 faults — verifier `key=ABSENT`, emails-without-heartbeat, a recent cycle error,
 no scan seen at all, or a **stale cron log** (mtime > 2h ⇒ the scheduled task is
 likely not firing — content checks alone can't see this); normal quiet periods stay OK.
+It also reads the latest `[coverage]` lines. It reports DEGRADED when either
+venue ingests < 100% of its open markets, a catalog is `[PARTIAL CATALOG]`, or a
+sweep is `partial` / `failed`. `off`, `cached` and `stale` are fine. Logs from
+before this change show `coverage: n/a`.
 
 ### `ai_verify_report.py` — verdict-log digest (matcher QA)
 
