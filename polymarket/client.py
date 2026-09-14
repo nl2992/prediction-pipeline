@@ -125,6 +125,26 @@ class PolymarketClient:
         data = self._get(GAMMA_BASE, "/events", params=params)
         return data if isinstance(data, list) else data.get("events", data)
 
+    def get_events_keyset(
+        self,
+        limit: int = 500,
+        after_cursor: str | None = None,
+        closed: bool = False,
+    ) -> tuple[list[dict], str | None]:
+        """One page of Gamma ``/events/keyset``: ``(events, next_cursor)``.
+
+        Offset pagination on ``/events`` is rejected past offset ~2100 (HTTP 422
+        "offset too large, use /events/keyset"), so deep catalog scans must use
+        this cursor endpoint. Each event embeds its ``markets`` list.
+        """
+        params: dict[str, Any] = {"limit": limit, "closed": str(closed).lower()}
+        if after_cursor:
+            params["after_cursor"] = after_cursor
+        data = self._get(GAMMA_BASE, "/events/keyset", params=params)
+        if isinstance(data, list):
+            return data, None
+        return data.get("events") or [], data.get("next_cursor")
+
     def get_markets(
         self,
         limit: int = 20,
@@ -213,80 +233,91 @@ class PolymarketClient:
         )
         return results
 
+    def get_all_events(
+        self,
+        closed: bool = False,
+        page_size: int = 500,
+        max_events: int | None = None,
+    ) -> list[dict]:
+        """Walk the full Gamma event catalog via ``/events/keyset``.
+
+        Sets ``self.last_scan_complete`` to False when a page fetch fails (after
+        ``_get``'s retries) and the returned catalog is therefore partial, so
+        callers can surface truncation instead of silently matching on a
+        fraction of the catalog.
+        """
+        events: list[dict] = []
+        seen_ids: set[str] = set()
+        seen_cursors: set[str] = set()
+        cursor: str | None = None
+        self.last_scan_complete = True
+        while max_events is None or len(events) < max_events:
+            try:
+                batch, next_cursor = self.get_events_keyset(
+                    limit=page_size, after_cursor=cursor, closed=closed,
+                )
+            except Exception as exc:
+                logger.warning("get_all_events: keyset fetch failed after %d events: %s",
+                               len(events), exc)
+                self.last_scan_complete = False
+                break
+            new = 0
+            for ev in batch:
+                eid = str(ev.get("id") or ev.get("slug") or "")
+                if eid in seen_ids:
+                    continue
+                seen_ids.add(eid)
+                events.append(ev)
+                new += 1
+            # End of catalog, or a cursor/page that stopped advancing (#67/#68).
+            if not batch or not next_cursor or new == 0 or next_cursor in seen_cursors:
+                break
+            seen_cursors.add(next_cursor)
+            cursor = next_cursor
+        return events if max_events is None else events[:max_events]
+
     def search_events(
         self,
         keywords: list[str],
         active: bool = True,
         closed: bool = False,
         max_offset: int | None = None,
-        page_size: int = 100,
+        page_size: int = 500,
     ) -> list[dict]:
         """
-        Paginate the Gamma /events catalog and return events whose ``title``
-        field contains any of the given keywords (case-insensitive).
+        Scan the full Gamma event catalog and return events whose ``title``
+        contains any of the given keywords (case-insensitive).
 
         Each returned event dict includes an embedded ``markets`` list — the
         individual outcome contracts for that event.  This makes it possible to
         do two-level (event → outcome) matching without extra API calls.
+
+        Uses cursor pagination (``/events/keyset``): offset pagination on
+        ``/events`` is rejected past offset ~2100, which previously ended the
+        scan silently at ~10% of the catalog.
 
         Parameters
         ----------
         keywords   : list of substring patterns to match in the event title
         active     : only return active events (default True)
         closed     : include closed events (default False)
-        max_offset : optional stop offset; None scans until the catalog ends
-        page_size  : records per API request (default 100)
+        max_offset : optional cap on events scanned; None scans the whole catalog
+        page_size  : records per API request (default 500)
         """
         kw_lower = [k.lower() for k in keywords]
         results: list[dict] = []
         seen: set[str] = set()
-
-        # Windowed parallel pagination: the Gamma catalog is offset-addressed,
-        # so W consecutive pages can be fetched concurrently. Pages are
-        # PROCESSED in strict offset order after each window completes, so
-        # dedup and result ordering are identical to the sequential scan; the
-        # window stops at the first empty/short page. Cost of the speedup: up
-        # to window-1 speculative page requests past the catalog end. Fetching
-        # goes through self.get_events so instance-level mocks/tests apply;
-        # urllib3's pool handles concurrent GETs on the shared session.
-        from concurrent.futures import ThreadPoolExecutor
-
-        window = 8
-
-        def fetch_page(off: int) -> tuple[int, list[dict] | None]:
-            try:
-                return off, self.get_events(
-                    limit=page_size, offset=off, active=active, closed=closed,
-                )
-            except Exception as exc:
-                logger.warning("search_events: fetch failed at offset=%d: %s", off, exc)
-                return off, None
-
-        offset = 0
-        done = False
-        with ThreadPoolExecutor(max_workers=window) as pool:
-            while not done and (max_offset is None or offset <= max_offset):
-                offsets = [offset + i * page_size for i in range(window)]
-                if max_offset is not None:
-                    offsets = [o for o in offsets if o <= max_offset]
-                pages = dict(pool.map(fetch_page, offsets))
-                for off in offsets:  # strict offset order, as sequential
-                    batch = pages.get(off)
-                    if not batch:  # error or empty page -> end of catalog
-                        done = True
-                        break
-                    for ev in batch:
-                        title = (ev.get("title") or "").lower()
-                        slug = ev.get("slug") or ev.get("id", "")
-                        if slug in seen:
-                            continue
-                        if any(kw in title for kw in kw_lower):
-                            results.append(ev)
-                            seen.add(slug)
-                    if len(batch) < page_size:
-                        done = True
-                        break
-                offset += window * page_size
+        for ev in self.get_all_events(closed=closed, page_size=page_size,
+                                      max_events=max_offset):
+            if active and ev.get("active") is False:
+                continue
+            title = (ev.get("title") or "").lower()
+            slug = ev.get("slug") or ev.get("id", "")
+            if slug in seen:
+                continue
+            if any(kw in title for kw in kw_lower):
+                results.append(ev)
+                seen.add(slug)
 
         logger.info(
             "search_events: found %d events for keywords %s",

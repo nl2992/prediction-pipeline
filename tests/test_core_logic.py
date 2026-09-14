@@ -1240,27 +1240,57 @@ class CoreLogicTests(unittest.TestCase):
         self.assertEqual([m["ticker"] for m in markets], ["M1", "M2"])
         self.assertEqual(client.get_markets.call_count, 2)
 
-    def test_polymarket_search_events_runs_until_empty_page(self) -> None:
-        # Windowed parallel pagination: results and ordering must be identical
-        # to a sequential scan and the scan must stop at the catalog end. Up to
-        # window-1 speculative page fetches past the end are the accepted cost
-        # of parallelism (exhausted side_effect raises StopIteration, which the
-        # fetcher treats as end-of-catalog).
+    def test_polymarket_search_events_walks_keyset_cursor(self) -> None:
+        # Gamma rejects /events offsets past ~2100 (422), which used to end the
+        # scan silently. search_events must follow /events/keyset cursors to the
+        # end of the catalog and keyword-filter across every page.
         client = PolymarketClient()
         pages = {
-            0: [{"title": "Elon Musk trillionaire", "slug": "one"}],
-            1: [{"title": "Unrelated event", "slug": "two"}],
+            None: ([{"id": "1", "title": "Elon Musk trillionaire", "slug": "one"}], "c1"),
+            "c1": ([{"id": "2", "title": "Unrelated event", "slug": "two"}], "c2"),
+            "c2": ([{"id": "3", "title": "Another trillionaire race", "slug": "three"}], None),
         }
+        client.get_events_keyset = MagicMock(
+            side_effect=lambda limit, after_cursor, closed: pages[after_cursor])
 
-        def fake_get_events(limit, offset, active, closed):
-            return pages.get(offset, [])
+        events = client.search_events(["trillionaire"])
 
-        client.get_events = MagicMock(side_effect=fake_get_events)
+        self.assertEqual([e["slug"] for e in events], ["one", "three"])
+        self.assertEqual(client.get_events_keyset.call_count, 3)
+        self.assertTrue(client.last_scan_complete)
 
-        events = client.search_events(["trillionaire"], max_offset=None, page_size=1)
+    def test_polymarket_get_all_events_flags_partial_catalog(self) -> None:
+        client = PolymarketClient()
+        client.get_events_keyset = MagicMock(side_effect=[
+            ([{"id": "1", "title": "A"}], "c1"),
+            RuntimeError("boom"),
+        ])
 
-        self.assertEqual([e["slug"] for e in events], ["one"])
-        self.assertGreaterEqual(client.get_events.call_count, 3)
+        events = client.get_all_events()
+
+        self.assertEqual([e["id"] for e in events], ["1"])
+        self.assertFalse(client.last_scan_complete)
+
+    def test_polymarket_get_all_events_stops_on_repeating_cursor(self) -> None:
+        client = PolymarketClient()
+        client.get_events_keyset = MagicMock(side_effect=[
+            ([{"id": "1"}], "same"),
+            ([{"id": "2"}], "same"),
+            ([{"id": "3"}], "same"),
+        ])
+
+        events = client.get_all_events()
+
+        self.assertEqual([e["id"] for e in events], ["1", "2"])
+
+    def test_polymarket_get_all_events_respects_max_events(self) -> None:
+        client = PolymarketClient()
+        client.get_events_keyset = MagicMock(side_effect=[
+            ([{"id": "1"}, {"id": "2"}], "c1"),
+            ([{"id": "3"}, {"id": "4"}], None),
+        ])
+
+        self.assertEqual([e["id"] for e in client.get_all_events(max_events=3)], ["1", "2", "3"])
 
     @patch("kalshi.client.KalshiClient")
     def test_verify_kalshi_clob_checks_derived_yes_ask(self, client_cls: MagicMock) -> None:

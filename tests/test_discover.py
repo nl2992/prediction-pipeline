@@ -7,11 +7,12 @@ import time
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 import discover
 from discover import (
     _parse_dt, _is_parlay, _is_parlay_market, _category, _derive_keywords,
-    _apply_event_cap, _event_series, _p_snap, _p_snap_from_event,
+    _apply_event_cap, _event_series, _p_snap, _p_snap_from_event, _event_close,
 )
 
 
@@ -245,6 +246,86 @@ class CatalogCache(unittest.TestCase):
     def test_malformed_json_returns_none(self):
         (discover._CACHE_DIR / "bad.json").write_text("not json", encoding="utf-8")
         self.assertIsNone(discover._cache_load("bad.json", 60))
+
+
+class EventClose(unittest.TestCase):
+    """Kalshi /events rows carry no close_time; the horizon filter and sort
+    depend on deriving it from nested markets."""
+
+    def test_explicit_event_field_wins(self):
+        ev = {"close_time": "2026-10-01T00:00:00Z",
+              "markets": [{"close_time": "2027-01-01T00:00:00Z"}]}
+        self.assertEqual(_event_close(ev), datetime(2026, 10, 1, tzinfo=timezone.utc))
+
+    def test_latest_nested_market_close(self):
+        ev = {"markets": [{"close_time": "2026-10-01T00:00:00Z"},
+                          {"close_time": "2026-12-01T00:00:00Z"},
+                          {"expiration_time": "2026-11-01T00:00:00Z"}]}
+        self.assertEqual(_event_close(ev), datetime(2026, 12, 1, tzinfo=timezone.utc))
+
+    def test_unknown_without_markets(self):
+        self.assertIsNone(_event_close({"title": "x"}))
+        self.assertIsNone(_event_close({"markets": [{"close_time": None}]}))
+
+
+def _nested_event(ticker, title, close, markets):
+    return {"event_ticker": ticker, "series_ticker": ticker.split("-")[0], "title": title,
+            "markets": [{"ticker": f"{ticker}-{sfx}", "event_ticker": ticker, "title": t,
+                         "status": st, "close_time": close,
+                         "yes_bid_dollars": "0.40", "yes_ask_dollars": "0.42"}
+                        for sfx, t, st in markets]}
+
+
+class DiscoverNestedIngest(unittest.TestCase):
+    """discover() builds Kalshi markets from nested rows — no per-event calls."""
+
+    def _run(self, events, **kw):
+        with patch("kalshi.client.KalshiClient.get_all_events", return_value=events) as ge, \
+             patch("kalshi.client.KalshiClient.get_all_markets") as gm, \
+             patch("polymarket.client.PolymarketClient.search_events", return_value=[]), \
+             patch("polymarket.client.PolymarketClient.search_markets", return_value=[]):
+            _rows, k_snaps, _p = discover.discover(return_pools=True, **kw)
+        return ge, gm, k_snaps
+
+    def test_requests_nested_markets_and_skips_per_event_fetch(self):
+        future = "2099-01-01T00:00:00Z"
+        ev = _nested_event("KXA-26", "Will A happen?", future,
+                           [("Y", "Will A happen?", "active")])
+        ge, gm, k_snaps = self._run([ev])
+        self.assertTrue(ge.call_args.kwargs.get("with_nested_markets"))
+        gm.assert_not_called()
+        self.assertEqual([s.market_id for s in k_snaps], ["KXA-26-Y"])
+        self.assertEqual(k_snaps[0].extra.get("event_title"), "Will A happen?")
+
+    def test_non_active_nested_markets_dropped(self):
+        future = "2099-01-01T00:00:00Z"
+        ev = _nested_event("KXB-26", "Fed ladder", future,
+                           [("T1", "Above 4%", "active"), ("T2", "Above 5%", "settled"),
+                            ("T3", "Above 6%", "closed")])
+        _ge, _gm, k_snaps = self._run([ev])
+        self.assertEqual([s.market_id for s in k_snaps], ["KXB-26-T1"])
+
+    def test_events_without_markets_key_fall_back_per_event(self):
+        ev = {"event_ticker": "KXC-26", "title": "Will C happen?"}
+        with patch("kalshi.client.KalshiClient.get_all_events", return_value=[ev]), \
+             patch("kalshi.client.KalshiClient.get_all_markets", return_value=[
+                 {"ticker": "KXC-26", "event_ticker": "KXC-26", "title": "Will C happen?",
+                  "status": "active", "close_time": "2099-01-01T00:00:00Z"}]) as gm, \
+             patch("polymarket.client.PolymarketClient.search_events", return_value=[]), \
+             patch("polymarket.client.PolymarketClient.search_markets", return_value=[]):
+            _rows, k_snaps, _p = discover.discover(return_pools=True)
+        gm.assert_called_once()
+        self.assertEqual([s.market_id for s in k_snaps], ["KXC-26"])
+
+    def test_horizon_filter_uses_nested_close(self):
+        near = _nested_event("KXN-26", "Will N happen?", "2099-01-01T00:00:00Z",
+                             [("Y", "Will N happen?", "active")])
+        past = _nested_event("KXP-26", "Will P happen?", "2000-01-01T00:00:00Z",
+                             [("Y", "Will P happen?", "active")])
+        _ge, _gm, k_snaps = self._run([near, past], days=365 * 200)
+        self.assertEqual([s.market_id for s in k_snaps], ["KXN-26-Y"])
+        _ge, _gm, k_snaps = self._run([near], days=30)
+        self.assertEqual(k_snaps, [])
 
 
 if __name__ == "__main__":
