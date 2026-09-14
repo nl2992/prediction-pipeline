@@ -1262,7 +1262,8 @@ def ingest_kalshi(
     fetched: dict[str, list[dict]] = {}
     if missing:
         # Parallel per-event fetch: events are independent (one client per thread).
-        import threading
+        # (threading is imported at module level: a local import here would make
+        # it a local name for the whole function and break the sweep thread above.)
         from concurrent.futures import ThreadPoolExecutor
 
         _tl = threading.local()
@@ -1378,7 +1379,6 @@ def ingest_kalshi(
                                    if m.get("event_ticker")})
             event_by_ticker: dict[str, dict] = {}
             if distinct_ets:
-                import threading
                 from concurrent.futures import ThreadPoolExecutor
 
                 _tl2 = threading.local()
