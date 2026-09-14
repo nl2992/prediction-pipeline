@@ -584,6 +584,7 @@ def run_discover_scan(
     clob_price_tolerance: float = 0.03,
     clob_min_depth_usd: float = 10.0,
     scan_id: str | None = None,
+    market_sweep: bool = False,
 ) -> ScanSummary:
     """
     Organic scan: run discover() to find cross-exchange pairs via the events
@@ -612,6 +613,7 @@ def run_discover_scan(
             min_sim=min_sim,
             show_prices=False,
             max_events_to_search=max_events,
+            market_sweep=market_sweep,
         )
     except Exception as exc:
         msg = f"Discovery failed: {exc}"
@@ -978,6 +980,9 @@ def _parse_args() -> argparse.Namespace:
                    help="Horizon in days for discover mode; omit for no day limit")
     p.add_argument("--discover-max-events", type=int, default=None,
                    help="Max Kalshi events to scan per discovery cycle; omit for no event limit")
+    p.add_argument("--discover-market-sweep", action="store_true",
+                   help="Include the ~290s Polymarket orphan sweep in discover mode "
+                        "(off by default for a monitor's tighter poll interval)")
     return p.parse_args()
 
 
@@ -1030,6 +1035,7 @@ def main() -> None:
                     fee_kalshi=args.fee_kalshi,
                     min_profit_pct=args.min_profit_pct,
                     verify_clob=args.verify_clob,
+                    market_sweep=args.discover_market_sweep,
                 )
             else:
                 summary = run_one_scan(

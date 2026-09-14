@@ -163,3 +163,65 @@ def executable_arb(poly_book, kalshi_book, direction: str,
         "by_budget": {b: _fill(legA, legB, kalshi_leg, b) for b in budgets},
         "ladders": (legA, legB),
     }
+
+
+def vwap_for_quantity(levels: list[tuple[float, float]], qty: float) -> tuple[float, float]:
+    """Volume-weighted average price to fill up to ``qty`` contracts, walking
+    ``levels`` (cheapest first, as returned by ``build_buy_ladder``) — used to
+    evaluate what a fill of exactly ``qty`` contracts would actually cost,
+    regardless of per-level profitability (unlike ``_fill``, which stops once
+    a level is unprofitable).
+
+    Returns ``(vwap, filled)``. ``filled < qty`` when the ladder holds fewer
+    than ``qty`` contracts in total (``vwap`` is then the VWAP of whatever WAS
+    available, still meaningful for reporting, but the caller should treat a
+    short fill as "can't execute at this size" — see ``executable_edge_at_size``).
+    """
+    remaining = qty
+    cost = 0.0
+    filled = 0.0
+    for price, size in levels:
+        if remaining <= 1e-9:
+            break
+        take = min(remaining, size)
+        cost += take * price
+        filled += take
+        remaining -= take
+    vwap = round(cost / filled, 6) if filled > 1e-9 else 0.0
+    return vwap, round(filled, 4)
+
+
+def executable_edge_at_size(poly_book, kalshi_book, direction: str, qty: float) -> dict | None:
+    """Depth-walked VWAP net edge for filling exactly ``qty`` contracts on
+    BOTH legs of ``direction`` (see ``_DIRECTIONS``) — the min_size-quantity
+    economics used by ``alerter.compute_signals`` (iteration 4) instead of a
+    top-of-book-only figure. A thin top level (e.g. 1 contract at a stale
+    price) no longer creates a phantom edge or satisfies ``min_size`` on its
+    own: the VWAP is walked across as many levels as needed to actually fill
+    ``qty``, exactly like a real order would.
+
+    Includes the Kalshi taker fee, computed off the Kalshi-side leg's VWAP
+    (rather than its top-of-book price).
+
+    Returns ``None`` when ``qty<=0`` or either leg's book cannot actually
+    fill ``qty`` contracts (thin/one-sided depth) — the caller should treat
+    that exactly like failing the old top-of-book ``min_size`` check.
+    """
+    if qty <= 0:
+        return None
+    side_a, side_b, kalshi_leg = _DIRECTIONS[direction]
+    if direction == "poly_yes__kalshi_no":
+        legA = build_buy_ladder(poly_book, side_a)     # PM YES
+        legB = build_buy_ladder(kalshi_book, side_b)   # Kalshi NO
+    else:
+        legA = build_buy_ladder(kalshi_book, side_a)   # Kalshi YES
+        legB = build_buy_ladder(poly_book, side_b)     # PM NO
+
+    vwap_a, filled_a = vwap_for_quantity(legA, qty)
+    vwap_b, filled_b = vwap_for_quantity(legB, qty)
+    if filled_a + 1e-9 < qty or filled_b + 1e-9 < qty:
+        return None
+    k_price = vwap_a if kalshi_leg == "A" else vwap_b
+    fee = kalshi_taker_fee(k_price)
+    net = round(1.0 - vwap_a - vwap_b - fee, 6)
+    return {"net": net, "vwap_a": vwap_a, "vwap_b": vwap_b}

@@ -926,8 +926,7 @@ class CoreLogicTests(unittest.TestCase):
     @patch("discover._enrich_kalshi")
     @patch("discover._enrich_polymarket")
     @patch("discover._match_groups_then_individual")
-    @patch("polymarket.client.PolymarketClient.search_markets")
-    @patch("polymarket.client.PolymarketClient.search_events")
+    @patch("polymarket.client.PolymarketClient.get_all_events")
     @patch("kalshi.client.KalshiClient.get_markets")
     @patch("kalshi.client.KalshiClient.get_all_events")
     def test_discover_fast_scan_does_not_emit_catalog_price_arbs(
@@ -935,7 +934,6 @@ class CoreLogicTests(unittest.TestCase):
         mock_events,
         mock_markets,
         mock_poly_events,
-        mock_poly_markets,
         mock_match,
         mock_enrich_poly,
         mock_enrich_kalshi,
@@ -997,10 +995,9 @@ class CoreLogicTests(unittest.TestCase):
                 ],
             }
         ]
-        mock_poly_markets.return_value = []
         mock_match.return_value = [MatchedPair(poly, kalshi, 1.0, 1.0, 0.0)]
 
-        rows = discover(show_prices=False)
+        rows = discover(show_prices=False, market_sweep=False)
 
         self.assertTrue(rows[0]["arb_eligible"])
         self.assertIsNone(rows[0]["arb_direction"])
@@ -1227,6 +1224,32 @@ class CoreLogicTests(unittest.TestCase):
         self.assertEqual([e["event_ticker"] for e in events], ["E1", "E2"])
         self.assertEqual(client.get_events.call_count, 2)
 
+    def test_kalshi_get_all_events_flags_partial_catalog(self) -> None:
+        # A page fetch that raises after _get's own retries must not blow up
+        # the whole scan — get_all_events should return what it collected so
+        # far and flag last_scan_complete=False so discover() can report a
+        # partial Kalshi catalog instead of silently matching on a fraction.
+        client = KalshiClient()
+        client.get_events = MagicMock(side_effect=[
+            {"events": [{"event_ticker": "E1"}], "cursor": "next"},
+            RuntimeError("boom"),
+        ])
+
+        events = client.get_all_events(max_pages=None, page_size=1, status="open")
+
+        self.assertEqual([e["event_ticker"] for e in events], ["E1"])
+        self.assertFalse(client.last_scan_complete)
+
+    def test_kalshi_get_all_events_complete_on_clean_exhaustion(self) -> None:
+        client = KalshiClient()
+        client.get_events = MagicMock(side_effect=[
+            {"events": [{"event_ticker": "E1"}], "cursor": ""},
+        ])
+
+        client.get_all_events(max_pages=None, page_size=1, status="open")
+
+        self.assertTrue(client.last_scan_complete)
+
     def test_kalshi_get_all_markets_runs_until_cursor_exhausted(self) -> None:
         client = KalshiClient()
         pages = [
@@ -1291,6 +1314,60 @@ class CoreLogicTests(unittest.TestCase):
         ])
 
         self.assertEqual([e["id"] for e in client.get_all_events(max_events=3)], ["1", "2", "3"])
+
+    def test_polymarket_get_all_markets_keyset_walks_cursor_and_dedups(self) -> None:
+        client = PolymarketClient()
+        client.get_markets_keyset = MagicMock(side_effect=[
+            ([{"conditionId": "1"}, {"conditionId": "2"}], "c1"),
+            ([{"conditionId": "2"}, {"conditionId": "3"}], None),  # "2" re-seen, deduped
+        ])
+
+        markets = client.get_all_markets_keyset()
+
+        self.assertEqual([m["conditionId"] for m in markets], ["1", "2", "3"])
+        self.assertTrue(client.last_scan_complete)
+
+    def test_polymarket_get_all_markets_keyset_flags_partial_on_failure(self) -> None:
+        client = PolymarketClient()
+        client.get_markets_keyset = MagicMock(side_effect=[
+            ([{"id": "a"}], "c1"),
+            RuntimeError("boom"),
+        ])
+
+        markets = client.get_all_markets_keyset()
+
+        self.assertEqual([m["id"] for m in markets], ["a"])
+        self.assertFalse(client.last_scan_complete)
+
+    def test_polymarket_get_all_markets_keyset_stops_on_repeating_cursor(self) -> None:
+        client = PolymarketClient()
+        client.get_markets_keyset = MagicMock(side_effect=[
+            ([{"id": "1"}], "same"),
+            ([{"id": "2"}], "same"),
+            ([{"id": "3"}], "same"),
+        ])
+
+        markets = client.get_all_markets_keyset()
+
+        self.assertEqual([m["id"] for m in markets], ["1", "2"])
+
+    def test_polymarket_get_all_markets_keyset_stops_on_empty_page(self) -> None:
+        client = PolymarketClient()
+        client.get_markets_keyset = MagicMock(return_value=([], None))
+
+        self.assertEqual(client.get_all_markets_keyset(), [])
+        self.assertTrue(client.last_scan_complete)
+
+    def test_polymarket_get_all_markets_keyset_respects_max_markets(self) -> None:
+        client = PolymarketClient()
+        client.get_markets_keyset = MagicMock(side_effect=[
+            ([{"id": "1"}, {"id": "2"}], "c1"),
+            ([{"id": "3"}, {"id": "4"}], None),
+        ])
+
+        markets = client.get_all_markets_keyset(max_markets=3)
+
+        self.assertEqual([m["id"] for m in markets], ["1", "2", "3"])
 
     @patch("kalshi.client.KalshiClient")
     def test_verify_kalshi_clob_checks_derived_yes_ask(self, client_cls: MagicMock) -> None:

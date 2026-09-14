@@ -8,7 +8,10 @@ from __future__ import annotations
 import unittest
 
 from pipeline import OrderBook, PriceLevel
-from book_arb import build_buy_ladder, executable_arb, cumulative_curve, _fill
+from book_arb import (
+    build_buy_ladder, executable_arb, cumulative_curve, _fill,
+    vwap_for_quantity, executable_edge_at_size,
+)
 
 
 def ob(bids, asks):
@@ -114,6 +117,72 @@ class Fill(unittest.TestCase):
         f = _fill([(0.60, 100.0)], [(0.50, 100.0)], "B", None)
         self.assertEqual(f.contracts, 0.0)
         self.assertEqual(f.profit, 0.0)
+
+
+class VwapForQuantity(unittest.TestCase):
+    """Depth-walked VWAP to fill an exact quantity (iteration 4: min_size
+    economics), as distinct from _fill's profitability-gated walk."""
+
+    def test_fills_within_top_level(self):
+        vwap, filled = vwap_for_quantity([(0.40, 100.0), (0.45, 50.0)], 20.0)
+        self.assertAlmostEqual(vwap, 0.40)
+        self.assertAlmostEqual(filled, 20.0)
+
+    def test_walks_multiple_levels(self):
+        # 10 @ 0.40 + 10 @ 0.45 -> vwap = (10*0.40 + 10*0.45)/20 = 0.425
+        vwap, filled = vwap_for_quantity([(0.40, 10.0), (0.45, 50.0)], 20.0)
+        self.assertAlmostEqual(vwap, 0.425)
+        self.assertAlmostEqual(filled, 20.0)
+
+    def test_short_fill_when_book_too_thin(self):
+        vwap, filled = vwap_for_quantity([(0.40, 10.0)], 20.0)
+        self.assertAlmostEqual(filled, 10.0)      # can't reach 20
+        self.assertAlmostEqual(vwap, 0.40)
+
+    def test_empty_book(self):
+        vwap, filled = vwap_for_quantity([], 20.0)
+        self.assertEqual(filled, 0.0)
+        self.assertEqual(vwap, 0.0)
+
+
+class ExecutableEdgeAtSize(unittest.TestCase):
+    """book_arb.executable_edge_at_size: the depth-walked economics behind
+    alerter.compute_signals' min_size gate (iteration 4)."""
+
+    def test_matches_fill_when_top_level_covers_qty(self):
+        poly = ob(bids=[(0.30, 100)], asks=[(0.40, 100)])
+        kalshi = ob(bids=[(0.50, 150)], asks=[(0.95, 100)])
+        res = executable_edge_at_size(poly, kalshi, "poly_yes__kalshi_no", 20.0)
+        self.assertIsNotNone(res)
+        # 20 contracts fully at top-of-book on both legs -> vwap == top price,
+        # and net == gross minus the Kalshi fee on that price (same as _fill's
+        # single-rung net for this book, since 20 < the 100-contract top level).
+        self.assertAlmostEqual(res["vwap_a"], 0.40)
+        self.assertAlmostEqual(res["vwap_b"], 0.50)
+        single_rung = _fill([(0.40, 20.0)], [(0.50, 20.0)], "B", None)
+        self.assertAlmostEqual(res["net"], round(single_rung.profit / single_rung.contracts, 6))
+
+    def test_none_when_depth_insufficient(self):
+        poly = ob(bids=[(0.30, 100)], asks=[(0.40, 5)])   # only 5 contracts total
+        kalshi = ob(bids=[(0.50, 150)], asks=[(0.95, 100)])
+        res = executable_edge_at_size(poly, kalshi, "poly_yes__kalshi_no", 20.0)
+        self.assertIsNone(res)
+
+    def test_thin_top_level_walks_into_worse_price(self):
+        # 1 contract at a great price, then depth at a much worse price.
+        poly = ob(bids=[(0.30, 100)], asks=[(0.05, 1), (0.60, 100)])
+        kalshi = ob(bids=[(0.65, 1), (0.10, 100)], asks=[(0.95, 100)])
+        res = executable_edge_at_size(poly, kalshi, "poly_yes__kalshi_no", 25)
+        self.assertIsNotNone(res)
+        # VWAP over 25 contracts is dominated by the deep (worse) level, not
+        # the single-contract stale top level.
+        self.assertGreater(res["vwap_a"], 0.5)
+        self.assertLess(res["net"], 0)   # no real edge once walked
+
+    def test_zero_qty_is_none(self):
+        poly = ob(bids=[(0.30, 100)], asks=[(0.40, 100)])
+        kalshi = ob(bids=[(0.50, 150)], asks=[(0.95, 100)])
+        self.assertIsNone(executable_edge_at_size(poly, kalshi, "poly_yes__kalshi_no", 0))
 
 
 if __name__ == "__main__":

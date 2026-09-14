@@ -172,5 +172,66 @@ class ParseTopOfBook(unittest.TestCase):
         self.assertIsNone(r["no_bid"])    # missing
 
 
+class MveFilterPassthrough(unittest.TestCase):
+    """mve_filter is used by discover.py's orphan sweep to match the ground-
+    truth /markets?status=open&mve_filter=exclude walk exactly (#coverage)."""
+
+    def _client(self):
+        return KalshiClient(api_key="test", private_key_path=None)
+
+    def test_get_markets_passes_mve_filter_when_set(self):
+        c = self._client()
+        c._get = MagicMock(return_value={"markets": [], "cursor": None})
+        c.get_markets(mve_filter="exclude")
+        params = c._get.call_args.kwargs["params"]
+        self.assertEqual(params["mve_filter"], "exclude")
+
+    def test_get_markets_omits_mve_filter_when_unset(self):
+        c = self._client()
+        c._get = MagicMock(return_value={"markets": [], "cursor": None})
+        c.get_markets()
+        params = c._get.call_args.kwargs["params"]
+        self.assertNotIn("mve_filter", params)
+
+    def test_get_all_markets_passes_mve_filter_through(self):
+        c = self._client()
+        c.get_markets = MagicMock(return_value={"markets": [], "cursor": None})
+        c.get_all_markets(status="open", mve_filter="exclude", page_size=1000)
+        self.assertEqual(c.get_markets.call_args.kwargs["mve_filter"], "exclude")
+
+    def test_get_all_markets_defaults_mve_filter_to_none(self):
+        c = self._client()
+        c.get_markets = MagicMock(return_value={"markets": [], "cursor": None})
+        c.get_all_markets()
+        self.assertIsNone(c.get_markets.call_args.kwargs["mve_filter"])
+
+
+class GetEvent(unittest.TestCase):
+    """Single-event fetch used by discover.py's Kalshi orphan sweep to recover
+    title/series_ticker for markets whose event is invisible to /events."""
+
+    def _client(self):
+        return KalshiClient(api_key="test", private_key_path=None)
+
+    def test_unwraps_event_envelope(self):
+        c = self._client()
+        c._get = MagicMock(return_value={"event": {"event_ticker": "KXFOO", "title": "Foo?"}})
+        ev = c.get_event("KXFOO")
+        self.assertEqual(ev, {"event_ticker": "KXFOO", "title": "Foo?"})
+        self.assertEqual(c._get.call_args.args[0], "/events/KXFOO")
+
+    def test_passes_through_bare_dict(self):
+        c = self._client()
+        c._get = MagicMock(return_value={"event_ticker": "KXFOO", "title": "Foo?"})
+        ev = c.get_event("KXFOO")
+        self.assertEqual(ev, {"event_ticker": "KXFOO", "title": "Foo?"})
+
+    def test_with_nested_markets_sets_param(self):
+        c = self._client()
+        c._get = MagicMock(return_value={"event": {}})
+        c.get_event("KXFOO", with_nested_markets=True)
+        self.assertEqual(c._get.call_args.kwargs["params"]["with_nested_markets"], "true")
+
+
 if __name__ == "__main__":
     unittest.main()

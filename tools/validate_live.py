@@ -29,8 +29,7 @@ from discover import discover
 
 def run(min_pairs: int = 20, max_events: int = 200) -> dict:
     pairs = discover(category="all", days=730, min_sim=0.30,
-                     show_prices=False, max_events_to_search=max_events,
-                     catalog_cache_ttl=1200)
+                     show_prices=False, max_events_to_search=max_events)
 
     judged, agree, disagree, unjudged, inverted = [], [], [], [], []
     for r in pairs:
