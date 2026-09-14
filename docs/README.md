@@ -8,5 +8,6 @@ Start here when navigating the repository documentation.
 - [Execution Safety](EXECUTION_SAFETY.md): live trading safety model.
 - [API Clients](API_CLIENTS.md): Kalshi and Polymarket wrapper behavior.
 - [Operations](OPERATIONS.md): the scheduled alerter, AI verifier, operator tools.
+- [Expansion Proposal](EXPANSION_PROPOSAL.md): measured recall gaps and the plan to match more pairs.
 - [history/](history/): matcher validation runs, fix logs, redesign notes, diagnosis log.
 
