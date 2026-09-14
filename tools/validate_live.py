@@ -10,13 +10,13 @@ Scope & honesty: this measures live **precision** (are the engine's returned
 pairs correct?) and polarity, using v2 as an independent referee. It does NOT
 measure live **recall** (missed matches), which would require ground-truth
 extraction independent of the engine — that remains an open backlog item in
-MATCHER_VALIDATION_LOG.md. Do not read a pass here as "no live matches were
+docs/history/MATCHER_VALIDATION_LOG.md. Do not read a pass here as "no live matches were
 missed."
 
 Usage:
-    python validate_live.py            # human summary
-    python validate_live.py --json     # machine-readable
-    python validate_live.py --min-pairs 20
+    python -m tools.validate_live            # human summary
+    python -m tools.validate_live --json     # machine-readable
+    python -m tools.validate_live --min-pairs 20
 """
 from __future__ import annotations
 

@@ -51,7 +51,7 @@ This does not eliminate leg risk. It limits it and makes failures visible in
 
 Before using `--execute --no-dry-run`:
 
-1. Run `python smoke_test.py`.
+1. Run `python -m tools.smoke_test`.
 2. Run monitor with `--execute --dry-run`.
 3. Confirm credentials are configured.
 4. Start with small `--size-contracts`.

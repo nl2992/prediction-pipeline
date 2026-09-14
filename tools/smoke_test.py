@@ -7,7 +7,7 @@ Uses KXARTEMISII (Artemis II launch date) as the Kalshi test series
 because it is a well-known, actively traded market with real bid/ask data.
 
 Run:
-    python smoke_test.py
+    python -m tools.smoke_test
 """
 
 from __future__ import annotations
