@@ -19,6 +19,24 @@ import sys
 
 _SCAN_PAIRS_RE = re.compile(r"scan done.*?,\s*(\d+)\s+pairs,")  # only the scan-done line
 
+# discover.py's per-venue "[coverage]" lines (see _print_kalshi_coverage /
+# _print_polymarket_coverage), e.g.:
+#   "      [coverage] Kalshi: 105,895/105,895 open markets ingested
+#    (100.0%, incl. 18 orphans) · held out of matching: ... · excluded: ...
+#    · sweep=fresh"
+#   "      [coverage] Polymarket: 166,203/166,203 open markets ingested
+#    (100.0%, incl. 442 orphans) · excluded: ... · sweep=fresh  [PARTIAL CATALOG]"
+# Tolerant of either venue's line shape (Kalshi has an extra "held out of
+# matching:" clause Polymarket doesn't); only the fields this module cares
+# about (ingested/open/pct/sweep/partial) are captured.
+_COVERAGE_RE = re.compile(
+    r"\[coverage\]\s+(Kalshi|Polymarket):\s*"
+    r"([\d,]+)/([\d,]+)\s+open markets ingested\s*"
+    r"\(([\d.]+%|n/a)[^)]*\).*?"
+    r"sweep=(\S+?)(?:\s*\[PARTIAL CATALOG\])?\s*$"
+)
+_SWEEP_OK = {"off", "cached", "fresh"}
+
 BASE = pathlib.Path(__file__).resolve().parent
 _LOG = BASE / "alerter_cron.log"
 _VERDICTS = BASE / "ai_verify.jsonl"
@@ -51,6 +69,43 @@ def _tail(path: pathlib.Path, n: int, block: int = 1_200_000) -> list[str]:
     return lines[-n:]
 
 
+def _parse_coverage_line(line: str) -> dict | None:
+    """Parse one discover.py "[coverage]" line into a small dict, or None if
+    the line doesn't match (old log format predating the coverage lines, or
+    an unrelated line)."""
+    m = _COVERAGE_RE.search(line)
+    if not m:
+        return None
+    venue, ingested_s, open_s, pct_s, sweep = m.groups()
+    pct = float(pct_s.rstrip("%")) if pct_s != "n/a" else None
+    return {
+        "venue": venue,
+        "ingested": int(ingested_s.replace(",", "")),
+        "open": int(open_s.replace(",", "")),
+        "pct": pct,
+        "sweep": sweep,
+        "partial_catalog": "[PARTIAL CATALOG]" in line,
+    }
+
+
+def _coverage_degraded(cov: dict) -> bool:
+    """True when a venue's coverage line signals a real gap: ingestion below
+    100% (the line's own 1-decimal rounding already gives a tiny, printed
+    tolerance — anything short of an exact "100.0%" is a real shortfall), a
+    partial catalog, or a partial/failed sweep. "off" and "cached" sweeps are
+    fine — they mean the sweep didn't need to run this cycle, not that it failed."""
+    if cov.get("partial_catalog"):
+        return True
+    # Only the documented failure states degrade; an unrecognised future sweep
+    # token is left alone rather than guessed at.
+    if cov.get("sweep") in ("partial", "failed"):
+        return True
+    pct = cov.get("pct")
+    if pct is not None and pct < 100.0:
+        return True
+    return False
+
+
 def summarize_log(lines: list[str]) -> dict:
     """Scan recent log lines for lifecycle markers. Returns a dict describing the
     most recent scan/email/heartbeat/error and counts since the last email."""
@@ -63,7 +118,14 @@ def summarize_log(lines: list[str]) -> dict:
     email_fail = None
     email_fail_idx = -1
     scan_pair_counts: list[int] = []
+    coverage_by_venue: dict[str, dict] = {}
     for i, ln in enumerate(lines):
+        if "[coverage]" in ln:
+            cov = _parse_coverage_line(ln)
+            if cov:
+                # Keep the LAST occurrence of each venue — i.e. the most
+                # recent cycle's line for that venue.
+                coverage_by_venue[cov["venue"]] = cov
         if "scan done" in ln:
             last_scan = ln.strip()
             m = _SCAN_PAIRS_RE.search(ln)
@@ -110,6 +172,11 @@ def summarize_log(lines: list[str]) -> dict:
     scan_pairs_low = (
         len(scan_pair_counts) >= 3 and scan_pairs_median >= 100
         and last_scan_pairs < 0.5 * scan_pairs_median)
+    # Coverage SLO (#iteration-3 task D): DEGRADED when a venue's most recent
+    # cycle reports < 100% ingestion, a partial catalog, or a partial/failed
+    # sweep. Missing coverage lines (old log format, or a log with no cycles
+    # yet) must NOT degrade — reported as "n/a" instead.
+    coverage_degraded = any(_coverage_degraded(c) for c in coverage_by_venue.values())
     return {
         "last_scan": last_scan,
         "last_scan_pairs": last_scan_pairs,
@@ -123,6 +190,8 @@ def summarize_log(lines: list[str]) -> dict:
         "emails_without_heartbeat": emails_without_heartbeat,
         "recent_cycle_error": recent_cycle_error if error_is_recent else None,
         "recent_email_failure": email_fail if email_fail_recent else None,
+        "coverage_by_venue": coverage_by_venue,
+        "coverage_degraded": coverage_degraded,
     }
 
 
@@ -138,6 +207,7 @@ def overall_ok(s: dict) -> bool:
                 or s.get("recent_email_failure") is not None
                 or s.get("scan_pairs_low")
                 or s.get("log_stale")
+                or s.get("coverage_degraded")
                 or s.get("last_scan") is None)
 
 
@@ -177,6 +247,19 @@ def format_health(s: dict, verdicts_count: int, verdicts_mtime: str | None) -> s
                  f"cycle errors: {s['recent_cycle_error'] or 'none recent'}")
     lines.append(f"[{mark(s.get('recent_email_failure') is None)}] "
                  f"email delivery: {'FAILED — ' + s['recent_email_failure'] if s.get('recent_email_failure') else 'ok (no recent failures)'}")
+    coverage = s.get("coverage_by_venue") or {}
+    if coverage:
+        parts = []
+        for venue in ("Kalshi", "Polymarket"):
+            c = coverage.get(venue)
+            if not c:
+                continue
+            pct = f"{c['pct']:.1f}%" if c["pct"] is not None else "n/a"
+            tag = "  [PARTIAL CATALOG]" if c["partial_catalog"] else ""
+            parts.append(f"{venue} {c['ingested']:,}/{c['open']:,} ({pct}, sweep={c['sweep']}){tag}")
+        lines.append(f"[{mark(not s.get('coverage_degraded'))}] coverage: " + " · ".join(parts))
+    else:
+        lines.append("[OK  ] coverage: n/a (no [coverage] lines in window — old log format?)")
     fresh = f"{verdicts_count} rows, last write {verdicts_mtime}" if verdicts_mtime else f"{verdicts_count} rows"
     lines.append(f"[OK  ] ai_verify.jsonl: {fresh}")
     return "\n".join(lines)
