@@ -327,6 +327,22 @@ def _apply_event_cap(filtered: list, cap: int | None) -> list:
     return kept + extra
 
 
+def _event_close(ev: dict) -> datetime | None:
+    """Close time of a Kalshi event.
+
+    ``/events`` rows carry no ``close_time``, so without nested markets the
+    horizon filter and close-time sort were silent no-ops. Prefer an explicit
+    event field; otherwise use the LATEST nested market close (the event is
+    live until its last market closes).
+    """
+    close = _parse_dt(ev.get("close_time") or ev.get("end_date"))
+    if close:
+        return close
+    closes = [c for c in (_parse_dt(m.get("close_time") or m.get("expiration_time"))
+                          for m in ev.get("markets") or []) if c]
+    return max(closes) if closes else None
+
+
 def _k_snap(m: dict, fetched_at: str, event_title: str = ""):
     from pipeline import MarketSnapshot, _parse_kalshi_top_of_book, kalshi_market_title
     ob = _parse_kalshi_top_of_book(m)
@@ -785,31 +801,26 @@ def discover(
     horizon = now + timedelta(days=days) if days is not None else None
     fetched_at = now.isoformat()
 
-    # ── 1. Kalshi event catalog ─────────────────────────────────────────────
-    print("[1/5] Fetching Kalshi event catalog…", flush=True)
+    # ── 1. Kalshi event catalog (markets nested) ────────────────────────────
+    # with_nested_markets embeds every event's market rows (incl. top-of-book),
+    # so the whole open catalog (~12k events / ~100k markets) arrives in ~60
+    # pages / ~5 s. This replaced one /markets call per event, which tripped
+    # 429 backoff (~50 events/min live) and forced the event cap to stay small.
+    # Not cached: the rows carry live quotes and the fetch is cheap.
+    print("[1/5] Fetching Kalshi event catalog (nested markets)…", flush=True)
     kc = KalshiClient()
     t0 = time.time()
-    # Plausibility floor: the live catalog is ~7-8k events. A tiny result means
-    # a mocked client (unit tests) or a transient API failure — never cache it,
-    # never serve it from cache. Tests poisoned the cache before this guard.
-    _MIN_PLAUSIBLE_EVENTS = 500
-    all_events = _cache_load("kalshi_events.json", catalog_cache_ttl)
-    if all_events is not None and len(all_events) < _MIN_PLAUSIBLE_EVENTS:
-        all_events = None
-    from_cache = all_events is not None
-    if all_events is None:
-        all_events = kc.get_all_events(max_pages=None, page_size=200, status="open")
-        if catalog_cache_ttl > 0 and len(all_events) >= _MIN_PLAUSIBLE_EVENTS:
-            _cache_store("kalshi_events.json", all_events)
-    print(f"      {len(all_events):,} events in {time.time()-t0:.1f}s"
-          + (" (cached)" if from_cache else ""))
+    all_events = kc.get_all_events(max_pages=None, page_size=200, status="open",
+                                   with_nested_markets=True)
+    n_nested = sum(len(ev.get("markets") or []) for ev in all_events)
+    print(f"      {len(all_events):,} events, {n_nested:,} nested markets in {time.time()-t0:.1f}s")
 
     # ── 2. Filter events ─────────────────────────────────────────────────────
     filtered = []
     for ev in all_events:
         if _is_parlay(ev):
             continue
-        close = _parse_dt(ev.get("close_time") or ev.get("end_date"))
+        close = _event_close(ev)
         # Determine the category first so we can apply category-appropriate filters
         ev_cat = _category(ev)
         if category != "all" and ev_cat != category:
@@ -827,7 +838,7 @@ def discover(
 
     # Prioritise events closing sooner (more liquid, more likely to match)
     def _sort_key(ev):
-        dt = _parse_dt(ev.get("close_time") or ev.get("end_date"))
+        dt = _event_close(ev)
         return dt if dt else now + timedelta(days=9999)
 
     filtered.sort(key=_sort_key)
@@ -843,28 +854,12 @@ def discover(
           f"({', '.join(f'{c}={n}' for c, n in sorted(cat_counts.items()))})")
     if not filtered:
         print("      Nothing to scan.  Try --category all or --days 730.")
-        return []
+        return ([], [], []) if return_pools else []
 
-    # ── 3. Fetch Kalshi markets ──────────────────────────────────────────────
-    # Candidate blocking: when the filtered event set is bounded, fetch markets
-    # PER EVENT (one paginated call per event_ticker) instead of crawling the
-    # entire exchange catalog. The full catalog is ~750k rows — a full crawl
-    # takes longer than most scan budgets and fetches >99% irrelevant markets.
-    # Per-event fetching is O(relevant events), not O(exchange size). The full
-    # crawl remains only for genuinely unbounded scans, which also pick up
-    # markets whose parent event fell outside the event-catalog filter.
-    # Per-event blocking is O(relevant events) and bounded, so use it for ANY
-    # bounded scan (max_events_to_search set), regardless of count — the full
-    # 750k-row crawl is reserved for genuinely UNBOUNDED scans only. (Without
-    # this, raising the alerter cap to 1500 tripped the crawl and hung every scan
-    # → no emails for hours. run 46.)
-    _BLOCKING_EVENT_LIMIT = 500
-    use_blocking = (max_events_to_search is not None) or (len(filtered) <= _BLOCKING_EVENT_LIMIT)
-    print(
-        f"[3/5] Fetching Kalshi markets "
-        f"({'per-event blocking, ' + str(len(filtered)) + ' events' if use_blocking else 'full catalog crawl'})…",
-        flush=True,
-    )
+    # ── 3. Kalshi markets ────────────────────────────────────────────────────
+    # Taken from the nested rows. Only events that arrived WITHOUT a markets
+    # list (older API behaviour, or a partial response) fall back to a
+    # per-event /markets fetch.
     t0 = time.time()
     k_snaps: list = []
     k_keywords: list[str] = []
@@ -878,11 +873,13 @@ def discover(
         for ev in filtered
         if ev.get("event_ticker")
     }
-    all_kalshi_markets: list[dict] = []
-    if use_blocking:
-        # Parallel per-event fetch: events are independent, so N workers cut
-        # wall time ~Nx (one client per thread; map preserves event order so
-        # output is identical to the sequential loop).
+    missing = [ev.get("event_ticker", "") for ev in filtered if ev.get("markets") is None]
+    print(f"[3/5] Building Kalshi markets ({len(filtered) - len(missing)} events nested"
+          + (f", {len(missing)} fetched per-event" if missing else "") + ")…", flush=True)
+
+    fetched: dict[str, list[dict]] = {}
+    if missing:
+        # Parallel per-event fetch: events are independent (one client per thread).
         import threading
         from concurrent.futures import ThreadPoolExecutor
 
@@ -899,51 +896,28 @@ def discover(
             except Exception:
                 return []
 
-        tickers = [ev.get("event_ticker", "") for ev in filtered]
-        workers = max(1, min(kalshi_workers, len(tickers)))
-        done_n = 0
+        workers = max(1, min(kalshi_workers, len(missing)))
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            for batch in pool.map(_fetch_event_markets, tickers):
-                all_kalshi_markets.extend(batch)
-                done_n += 1
-                if done_n % 50 == 0:
-                    print(f"      {done_n}/{len(tickers)} events, {len(all_kalshi_markets):,} markets…", flush=True)
-    else:
-        cursor: str | None = None
-        seen_cursors: set[str] = set()
-        page = 0
-        while True:
-            resp = kc.get_markets(limit=1000, cursor=cursor, status="open")
-            batch = resp.get("markets", [])
-            all_kalshi_markets.extend(batch)
-            page += 1
-            if page % 25 == 0:
-                print(f"      fetched {len(all_kalshi_markets):,} Kalshi market rows…", flush=True)
-            next_cursor = resp.get("cursor")
-            if not batch or not next_cursor or next_cursor in seen_cursors:
-                break
-            seen_cursors.add(next_cursor)
-            cursor = next_cursor
+            for et, batch in zip(missing, pool.map(_fetch_event_markets, missing), strict=True):
+                fetched[et] = batch
 
-    for m in all_kalshi_markets:
-        event_ticker = m.get("event_ticker", "")
-        event = filtered_by_ticker.get(event_ticker)
-        event_title = (event or {}).get("title") or m.get("event_title") or m.get("title", "")
-        if event is None:
-            market_cat = _category({"title": event_title or m.get("title", "")})
-            if category != "all" and market_cat != category:
+    for ev in filtered:
+        et = ev.get("event_ticker", "")
+        markets = ev.get("markets")
+        if markets is None:
+            markets = fetched.get(et, [])
+        event_title = ev.get("title") or ""
+        for m in markets:
+            # Nested rows are not server-filtered by status (the /markets call
+            # used status=open); keep only tradeable markets.
+            if m.get("status") not in (None, "", "active", "open"):
                 continue
-            close = _parse_dt(m.get("close_time") or m.get("expiration_time"))
-            if close and close < now:
+            if _is_parlay_market(m):
+                skipped_parlay += 1
                 continue
-            if horizon is not None and close and close > horizon and market_cat != "sports":
-                continue
-        if _is_parlay_market(m):
-            skipped_parlay += 1
-            continue
-        k_snaps.append(_k_snap(m, fetched_at, event_title=event_title))
-        k_keywords.extend(_derive_keywords(event_title))
-        k_keywords.extend(_derive_keywords(m.get("title", "")))
+            m_title = event_title or m.get("event_title") or m.get("title", "")
+            k_snaps.append(_k_snap(m, fetched_at, event_title=m_title))
+            k_keywords.extend(_derive_keywords(m.get("title", "")))
 
     # Deduplicate keywords from the events scan (before supplemental)
     k_keywords = [kw for kw in dict.fromkeys(k_keywords) if len(kw) > 2]
@@ -954,7 +928,7 @@ def discover(
     print(f"      Derived {len(k_keywords)} Polymarket search keywords")
     if not k_snaps:
         print("      No Kalshi markets found.")
-        return []
+        return ([], k_snaps, []) if return_pools else []
 
     # ── 4. Search Polymarket ─────────────────────────────────────────────────
     # Primary path: search /events so we get the event title + all outcome

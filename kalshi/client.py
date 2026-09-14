@@ -288,6 +288,7 @@ class KalshiClient:
         cursor: str | None = None,
         series_ticker: str | None = None,
         status: str | None = None,
+        with_nested_markets: bool = False,
     ) -> dict:
         """
         List events (public endpoint).
@@ -304,6 +305,10 @@ class KalshiClient:
             params["series_ticker"] = series_ticker
         if status:
             params["status"] = status
+        if with_nested_markets:
+            # Embeds each event's markets (full rows incl. top-of-book), so the
+            # whole catalog comes back in ~60 pages instead of one call per event.
+            params["with_nested_markets"] = "true"
         return self._get("/events", params=params)
 
     def get_all_events(
@@ -312,6 +317,7 @@ class KalshiClient:
         page_size: int = 200,
         series_ticker: str | None = None,
         status: str | None = None,
+        with_nested_markets: bool = False,
     ) -> list[dict]:
         """Paginate through events until exhausted, unless ``max_pages`` caps it."""
         all_events: list[dict] = []
@@ -324,6 +330,7 @@ class KalshiClient:
                 cursor=cursor,
                 series_ticker=series_ticker,
                 status=status,
+                with_nested_markets=with_nested_markets,
             )
             batch = resp.get("events", [])
             all_events.extend(batch)
