@@ -8,14 +8,55 @@ proximity.  No external dependencies beyond the standard library.
 
 from __future__ import annotations
 
+import functools
+import math
 import re
+import types
 import unicodedata
+import weakref
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pipeline import MarketSnapshot
+
+# ---------------------------------------------------------------------------
+# Performance: memoised text -> feature helpers
+# ---------------------------------------------------------------------------
+#
+# PERFORMANCE: on full-catalog scans (~98.6k Kalshi x ~165.9k Polymarket
+# markets), is_compatible_match() re-derives the same handful of text
+# features (tokens, jurisdictions, domains, contract actions, proper names,
+# ...) for the SAME market text across every candidate pair it appears in —
+# a market that survives blocking as a candidate against a thousand
+# counterparts pays the full regex cost a thousand times over for a result
+# that only depends on its own text. Every function below is a pure
+# function of its string argument (no I/O, no mutation of shared state), so
+# memoising on that argument is exact: identical input always produces an
+# identical (and, per the audit in the PR description, never externally
+# mutated) output object.
+#
+# Bounded to comfortably cover a full-catalog scan (~264k distinct markets,
+# and each market may be looked up under a couple of different derived text
+# variants — title / snapshot text / contract text) without growing without
+# bound across the lifetime of a long-running alerter process, where the
+# tracked market universe churns but stays roughly this size.
+_TEXT_CACHE_SIZE = 300_000
+
+# _tokens and _ascii_lower are probed under MORE distinct strings per market
+# than the other helpers: unlike _domains/_jurisdictions/etc (always called on
+# one of a market's few whole-text variants), they are also called on
+# sub-strings — individual tokens (_bare_subject_name / _winner_subject probe
+# _jurisdictions/_offices on single candidate-name tokens) and matchup-side
+# fragments (_clean_matchup_side) route through _tokens, and _ascii_lower is
+# invoked on every one of those plus each whole-text variant. On a full-catalog
+# scan this measurably exceeds _TEXT_CACHE_SIZE, evicting entries that are
+# still needed and undoing the memoisation win for the very two functions in
+# the hottest call paths (see cache_info() after a full run: currsize pinned
+# at _TEXT_CACHE_SIZE with misses far above the ~264k distinct markets).
+_WIDE_TEXT_CACHE_SIZE = 900_000
+
 
 # ---------------------------------------------------------------------------
 # Title normalisation
@@ -108,6 +149,7 @@ _PHRASE_NORMALISERS: tuple[tuple[str, str], ...] = (
 )
 
 
+@functools.lru_cache(maxsize=_WIDE_TEXT_CACHE_SIZE)
 def _tokens(title: str) -> frozenset[str]:
     title = title.lower()
     for pat, repl in _PHRASE_NORMALISERS:
@@ -145,10 +187,91 @@ def _tokens(title: str) -> frozenset[str]:
 
 
 def _jaccard(a: frozenset[str], b: frozenset[str]) -> float:
-    union = a | b
-    if not union:
+    # PERFORMANCE: |union| == |a| + |b| - |intersection| (exact integer
+    # identity — no floating point involved), so this avoids materialising the
+    # union set object on every call. Millions of calls on full-catalog scans
+    # (candidate scoring here, group-title and outcome-title scoring in
+    # discover.py) make the avoided allocation add up. Numerically identical
+    # to len(a & b) / len(a | b) in every case, bit-for-bit.
+    if not a and not b:
         return 0.0
-    return len(a & b) / len(union)
+    inter = len(a & b)
+    return inter / (len(a) + len(b) - inter)
+
+
+# ---------------------------------------------------------------------------
+# Candidate blocking: exact prefix filtering for the Jaccard gate
+# ---------------------------------------------------------------------------
+#
+# On full-catalog scans (~98.6k Kalshi x ~165.9k Polymarket), blocking on ANY
+# shared token still lets a common word ("2026", "win") drag tens of
+# thousands of unrelated markets into one candidate bucket. Prefix filtering
+# (Chaudhuri/Ganti/Kaushik; Bayardo/Ma/Srikant "Scaling Up All Pairs
+# Similarity Search") is a PROVABLY LOSSLESS tightening of that same
+# any-shared-token blocking, for the specific case of "candidates that could
+# reach a Jaccard similarity gate `t`":
+#
+#   Fix any single global order over the token universe (rarity ascending is
+#   used here purely for pruning power — the correctness of the technique
+#   does not depend on which order is chosen). For a token set of size n,
+#   define its "prefix" as the first  n - ceil(t*n) + 1  tokens under that
+#   order. THEOREM: if Jaccard(x, y) >= t, then prefix(x) and prefix(y) share
+#   at least one token. Consequently, indexing every set's prefix tokens and,
+#   for a query set, only probing the index with ITS OWN prefix tokens is
+#   guaranteed to surface every pair whose Jaccard could reach `t` — it can
+#   never produce a false negative, only skip pairs that provably cannot
+#   reach the threshold.
+#
+# NOTE: this filter is only valid as a stand-in for "does this pair reach the
+# Jaccard gate `t`" — it says nothing about pairs that are accepted via a
+# DIFFERENT rule (e.g. match_markets' below-gate threshold-led path). Callers
+# that have such a secondary acceptance path must generate those candidates
+# separately (see match_markets) and union them in; this module never does
+# that unioning itself.
+
+
+def _token_frequencies(token_sets) -> dict[str, int]:
+    """Global document-frequency of each token across a collection of token
+    sets — used purely to pick a good (low-pruning-loss) order for prefix
+    filtering below. Any deterministic order is correct; rarity-ascending is
+    the one with the best pruning power in practice."""
+    freq: dict[str, int] = {}
+    for toks in token_sets:
+        for tok in toks:
+            freq[tok] = freq.get(tok, 0) + 1
+    return freq
+
+
+def _prefix_tokens(toks: frozenset[str], freq: dict[str, int], t: float) -> list[str]:
+    """The rarest-first prefix of ``toks`` used to index/probe for prefix
+    filtering at Jaccard threshold ``t`` (see module note above).
+
+    Ties in global frequency are broken by the token text itself so the
+    prefix — and therefore which candidates get generated — is fully
+    deterministic and independent of dict/set iteration order.
+    """
+    n = len(toks)
+    if n == 0:
+        return []
+    if t <= 0:
+        # t=0 admits every pair regardless of overlap; the formula below
+        # would need to keep the whole set anyway (ceil(0)=0 => n+1, clamped
+        # to n by the slice), so short-circuit for clarity.
+        return sorted(toks)
+    plen = n - math.ceil(t * n) + 1
+    ordered = sorted(toks, key=lambda tok: (freq.get(tok, 0), tok))
+    return ordered[:plen]
+
+
+def _length_compatible(n_a: int, n_b: int, t: float) -> bool:
+    """Necessary size condition for Jaccard(a, b) >= t when |a|=n_a, |b|=n_b:
+    t*n_a <= n_b <= n_a/t (and symmetrically). A pair failing this can NEVER
+    reach the threshold, so it is safe to skip without computing the exact
+    Jaccard score."""
+    if t <= 0 or n_a == 0 or n_b == 0:
+        return True
+    lo, hi = (n_a, n_b) if n_a <= n_b else (n_b, n_a)
+    return t * hi <= lo
 
 
 # ---------------------------------------------------------------------------
@@ -324,11 +447,57 @@ _US_STATE_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 
+@functools.lru_cache(maxsize=_WIDE_TEXT_CACHE_SIZE)
 def _ascii_lower(text: str) -> str:
     return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
 
 
-def _snapshot_text(s: "MarketSnapshot") -> str:
+# ---------------------------------------------------------------------------
+# Performance: identity-keyed memoisation for MarketSnapshot -> text
+# ---------------------------------------------------------------------------
+#
+# PERFORMANCE: MarketSnapshot is a plain (unhashable, mutable) dataclass, so it
+# cannot be a functools.lru_cache key directly. Without memoisation here,
+# is_compatible_match rebuilds `_snapshot_text(poly)` / `_snapshot_text(kalshi)`
+# as a BRAND NEW string object on every candidate-pair call — and that fresh
+# string then feeds ~25 different lru_cache-decorated helpers below
+# (_domains, _jurisdictions, _proper_names, _named_entities, ...) each of
+# which must hash it to do the cache lookup. A str's hash is computed once and
+# cached on the object itself; with a fresh object every call, that hash is
+# recomputed from scratch every time, for every one of those ~25 helpers, on
+# every candidate pair — the dominant cost of the iteration-4 regression (see
+# docs/history/COVERAGE_ITERATIONS.md iteration 4/5).
+#
+# Fix: memoise the snapshot -> text mapping by object IDENTITY, so repeated
+# calls for the SAME market (across however many candidate pairs it appears
+# in) return the exact same string object, whose hash is computed once. A
+# weakref callback self-evicts the entry the moment the snapshot is garbage
+# collected, so a later, unrelated object reusing the same id() can never see
+# a stale hit (the dict entry is gone before the id can be reassigned).
+def _identity_memoize(compute):
+    cache: dict[int, tuple["weakref.ref", str]] = {}
+
+    def get(s: "MarketSnapshot") -> str:
+        key = id(s)
+        entry = cache.get(key)
+        if entry is not None and entry[0]() is s:
+            return entry[1]
+        text = compute(s)
+
+        def _evict(_ref, _key=key):
+            cache.pop(_key, None)
+
+        cache[key] = (weakref.ref(s, _evict), text)
+        return text
+
+    def cache_clear() -> None:
+        cache.clear()
+
+    get.cache_clear = cache_clear
+    return get
+
+
+def _compute_snapshot_text(s: "MarketSnapshot") -> str:
     extra = getattr(s, "extra", {}) or {}
     return " ".join(
         str(x)
@@ -342,7 +511,7 @@ def _snapshot_text(s: "MarketSnapshot") -> str:
     )
 
 
-def _contract_text(s: "MarketSnapshot") -> str:
+def _compute_contract_text(s: "MarketSnapshot") -> str:
     extra = getattr(s, "extra", {}) or {}
     return " ".join(
         str(x)
@@ -355,6 +524,11 @@ def _contract_text(s: "MarketSnapshot") -> str:
     )
 
 
+_snapshot_text = _identity_memoize(_compute_snapshot_text)
+_contract_text = _identity_memoize(_compute_contract_text)
+
+
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _domains(text: str) -> set[str]:
     toks = _tokens(text)
     found: set[str] = set()
@@ -364,9 +538,12 @@ def _domains(text: str) -> set[str]:
         found.add("election")
     if toks & _ECON_TERMS:
         found.add("economic")
-    return found
+    # Cached below: return an immutable snapshot so a caller can never mutate
+    # the object that every future call for this same text will receive.
+    return frozenset(found)
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _offices(text: str) -> set[str]:
     low = _ascii_lower(text)
     found = {office for office, pat in _OFFICE_PATTERNS if re.search(pat, low)}
@@ -376,9 +553,10 @@ def _offices(text: str) -> set[str]:
     if re.search(r"\bvice[\s-]+presiden(?:t|tial|cy)\b", low):
         found.discard("president")
         found.add("vice_president")
-    return found
+    return frozenset(found)  # cached: immutable so callers can't corrupt it
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _parties(text: str) -> set[str]:
     low = _ascii_lower(text)
     parties: set[str] = set()
@@ -388,9 +566,10 @@ def _parties(text: str) -> set[str]:
         parties.add("democratic")
     if re.search(r"\b(conservative|tory|tories)\b", low):
         parties.add("conservative")
-    return parties
+    return frozenset(parties)  # cached: immutable so callers can't corrupt it
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _jurisdictions(text: str) -> set[str]:
     low = f" {_ascii_lower(text)} "
     found: set[str] = set()
@@ -407,17 +586,19 @@ def _jurisdictions(text: str) -> set[str]:
             continue
         if any(alias in low for alias in aliases):
             found.add(canonical)
-    return found
+    return frozenset(found)  # cached: immutable so callers can't corrupt it
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _years(text: str) -> set[str]:
     years = set(re.findall(r"\b(20\d{2})\b", text))
     for yy in re.findall(r"(?:^|[-\s])(\d{2})(?:$|[-\s])", text):
         if 20 <= int(yy) <= 49:
             years.add(f"20{yy}")
-    return years
+    return frozenset(years)  # cached: immutable so callers can't corrupt it
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _numeric_threshold(text: str) -> tuple[str, float, str] | None:
     """Extract a single one-sided numeric threshold: ``(direction, value, unit)``.
 
@@ -502,10 +683,13 @@ def _threshold_equal(
     return abs(va - vb) <= 0.05  # pct: absolute, tighter than one bucket step
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _rates(text: str) -> set[str]:
-    return set(re.findall(r"\b\d+(?:\.\d+)?\s*%|\b\d+\.\d+\b", text))
+    # Cached: immutable so callers can't corrupt it.
+    return frozenset(re.findall(r"\b\d+(?:\.\d+)?\s*%|\b\d+\.\d+\b", text))
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _stat_thresholds(text: str) -> dict[str, set[float]]:
     low = _ascii_lower(text)
     # "at any/this/some point", "point in time", "to the point" are time/idiom
@@ -528,18 +712,24 @@ def _stat_thresholds(text: str) -> dict[str, set[float]]:
         "goals": r"\bgoals?\b",
     }
     nums = {float(n) for n in re.findall(r"\b(\d+(?:\.\d+)?)\s*(?:\+|o/u|over|under)?", low)}
-    found: dict[str, set[float]] = {}
-    for stat, pat in stats.items():
-        if nums and re.search(pat, low):
-            found[stat] = nums
-    return found
+    found: dict[str, frozenset[float]] = {}
+    if nums:
+        frozen_nums = frozenset(nums)
+        for stat, pat in stats.items():
+            if re.search(pat, low):
+                found[stat] = frozen_nums
+    # Cached: an immutable mapping of immutable sets so callers can't corrupt
+    # either the dict itself or the per-stat value sets.
+    return types.MappingProxyType(found)
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _has_over_under(text: str) -> bool:
     low = _ascii_lower(text)
     return bool(re.search(r"\bo/u\b|\bover\s*/\s*under\b|\bover\b|\bunder\b", low))
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _is_ou_or_spread(text: str) -> bool:
     """True for a totals (over/under line) or point-spread market.
 
@@ -555,6 +745,7 @@ def _is_ou_or_spread(text: str) -> bool:
     )
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _is_win_market(text: str) -> bool:
     """True for a moneyline win/winner/beat market (not a totals/spread line)."""
     low = _ascii_lower(text)
@@ -568,6 +759,7 @@ _PROP_STATS = (r"assists?|goals?|points?|hits?|saves?|rebounds?|shots?|"
                r"corners?|cards?|fouls?|offsides?")
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _is_player_prop(text: str) -> bool:
     """True for a player stat-prop market, e.g. "Cody Gakpo: 2+ assists",
     "Mitch Marner: First Goalscorer", "Player: anytime goal".
@@ -589,6 +781,7 @@ def _is_player_prop(text: str) -> bool:
     return False
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _settlement_type(text: str) -> str | None:
     """Classify path-dependent price settlements.
 
@@ -641,6 +834,7 @@ _KNOWN_ORGS = (
 _KNOWN_AI_PRODUCTS = ("claude", "gpt", "gemini", "llama", "grok")
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _monetary_direction(text: str) -> set[str]:
     """Direction of a rate-policy market: ``{"up"}`` (hike), ``{"down"}`` (cut),
     or empty. Used to veto a rate-cut market against a rate-hike one — opposite
@@ -653,17 +847,21 @@ def _monetary_direction(text: str) -> set[str]:
         dirs.add("up")
     if re.search(r"\b(cut|cuts|cutting|lower|lowers|lowering|reduce|reduces|reducing)\b", low):
         dirs.add("down")
-    return dirs
+    return frozenset(dirs)  # cached: immutable so callers can't corrupt it
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _known_orgs(text: str) -> set[str]:
     low = _ascii_lower(text)
-    return {o for o in _KNOWN_ORGS if re.search(rf"\b{o}\b", low)}
+    # Cached: immutable so callers can't corrupt it.
+    return frozenset(o for o in _KNOWN_ORGS if re.search(rf"\b{o}\b", low))
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _known_products(text: str) -> set[str]:
     low = _ascii_lower(text)
-    return {p for p in _KNOWN_AI_PRODUCTS if re.search(rf"\b{p}\b", low)}
+    # Cached: immutable so callers can't corrupt it.
+    return frozenset(p for p in _KNOWN_AI_PRODUCTS if re.search(rf"\b{p}\b", low))
 
 
 # Antonym cue groups for logical-inversion detection: one side asserts the
@@ -720,12 +918,14 @@ def is_inverted_pair(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> bool:
     return False
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _comparison_bounds(text: str) -> dict[str, set[float]]:
     low = _ascii_lower(text)
-    return {
-        "lt": {float(n) for n in re.findall(r"(?:<|less than|under|below)\s*(\d+(?:\.\d+)?)\s*%?", low)},
-        "gt": {float(n) for n in re.findall(r"(?:>|more than|over|above)\s*(\d+(?:\.\d+)?)\s*%?", low)},
-    }
+    # Cached: immutable mapping of immutable sets so callers can't corrupt it.
+    return types.MappingProxyType({
+        "lt": frozenset(float(n) for n in re.findall(r"(?:<|less than|under|below)\s*(\d+(?:\.\d+)?)\s*%?", low)),
+        "gt": frozenset(float(n) for n in re.findall(r"(?:>|more than|over|above)\s*(\d+(?:\.\d+)?)\s*%?", low)),
+    })
 
 
 _MONTHS = {
@@ -744,6 +944,7 @@ _MONTHS = {
 }
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _time_scopes(text: str) -> set[str]:
     low = _ascii_lower(text)
     scopes: set[str] = set()
@@ -765,9 +966,10 @@ def _time_scopes(text: str) -> set[str]:
         low,
     ):
         scopes.add("year")
-    return scopes
+    return frozenset(scopes)  # cached: immutable so callers can't corrupt it
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _month_names(text: str) -> set[str]:
     """Extract all month names mentioned in text, regardless of context."""
     low = _ascii_lower(text)
@@ -778,26 +980,31 @@ def _month_names(text: str) -> set[str]:
         low,
     ):
         months.add(_MONTHS[month])
-    return months
+    return frozenset(months)  # cached: immutable so callers can't corrupt it
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _set_numbers(text: str) -> set[str]:
     low = _ascii_lower(text)
-    return set(re.findall(r"\bset\s*(\d+)\b", low))
+    # Cached: immutable so callers can't corrupt it.
+    return frozenset(re.findall(r"\bset\s*(\d+)\b", low))
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _draft_pick_numbers(text: str) -> set[str]:
     low = _ascii_lower(text)
     nums = set(re.findall(r"\b(\d+)(?:st|nd|rd|th)?\s+(?:overall\s+)?pick\b", low))
     nums.update(re.findall(r"\bpicked\s+(\d+)(?:st|nd|rd|th)?\b", low))
-    return nums
+    return frozenset(nums)  # cached: immutable so callers can't corrupt it
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _is_generic_match_winner(text: str) -> bool:
     low = _ascii_lower(text)
     return bool(re.search(r"\bset\s+\d+\s+winner\b|\bmatch\s+winner\b", low))
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _is_unselected_vs_winner(text: str) -> bool:
     low = _ascii_lower(text)
     return bool(
@@ -807,16 +1014,19 @@ def _is_unselected_vs_winner(text: str) -> bool:
     )
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _has_no_ipo(text: str) -> bool:
     return bool(re.search(r"\bno ipo\b|\bwithout an ipo\b", _ascii_lower(text)))
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _clean_matchup_side(side: str) -> frozenset[str]:
     side = re.split(r"[:\\-]", _ascii_lower(side), maxsplit=1)[0]
     side = re.sub(r"\b(winner|wins?|btts|both teams to score|more markets)\b", " ", side)
     return frozenset(t for t in re.split(r"\W+", side) if len(t) > 1)
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _matchup_signature(text: str) -> frozenset[frozenset[str]] | None:
     low = _ascii_lower(text)
     match = re.search(r"(.+?)\s+(?:vs\.?|at)\s+(.+)", low)
@@ -829,6 +1039,7 @@ def _matchup_signature(text: str) -> frozenset[frozenset[str]] | None:
     return frozenset((left, right))
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _selected_names(text: str) -> set[str]:
     low = _LEADING_QUESTION_WORDS.sub("", text)
     low_ascii = _ascii_lower(low)
@@ -837,6 +1048,58 @@ def _selected_names(text: str) -> set[str]:
             low = low[:low_ascii.index(splitter)]
             break
     return _proper_names(low)
+
+
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
+def _bare_subject_name(text: str) -> str | None:
+    """A single-word club/team/candidate name that _proper_names' 2+-token
+    regex can never capture ("Leverkusen", "Porto") — documented recall
+    exception, see EndorsedAuditRegression / KNOWN_RECALL_EXCEPTIONS in
+    tests/test_contract_spec.py. "Will Leverkusen win the 2026-27
+    Bundesliga?" has no 2+-token capitalised run, so _selected_names /
+    _proper_names return nothing.
+
+    Deliberately kept OUT of _selected_names: that feeds the hard
+    selected-name-MISMATCH veto, and a bare single token is far more likely to
+    spuriously collide with an unrelated multi-word name glommed from another
+    field (e.g. an event-title phrase like "Israeli Legislative Election
+    Winner") than a real proper name is. This helper is for RECALL only —
+    callers use it to widen an ACCEPTANCE path (contract_spec's single-entity
+    bridge), never to reject.
+
+    Reuses _WIN_TRIGGERS/_LEAD_WIN (the same win/seek/nominate-trigger
+    detection as _winner_subject) to isolate the head clause, but — unlike
+    _winner_subject — requires the head to contain EXACTLY ONE capitalised
+    word to begin with, before any jurisdiction/office filtering. Filtering
+    tokens individually (as _winner_subject does, by design, for its own
+    bag-of-words veto use) can leave a stray fragment behind: "MLB: Team to
+    win 100+ games" has TWO capitalised words ("MLB", "Team"); dropping the
+    league acronym leaves the generic noun "team" looking like a lone
+    subject, and "Kansas City wins" similarly leaves bare "city" once
+    "Kansas" is dropped as a jurisdiction. Either fragment then wrongly makes
+    an unrelated same-city/same-league pair "eligible" for the bridge (a real
+    bug caught validating this against a live sample: "Los Angeles Dodgers"
+    nearly bridged to "Los Angeles FC" through the bare jurisdiction "Los
+    Angeles", with "team" as the trigger). Requiring a lone capitalised word
+    from the start means a genuine single-word name is never preceded or
+    followed by another capitalised word in the same clause.
+    """
+    ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    m = _WIN_TRIGGERS.search(ascii_text)
+    if not m:
+        return None
+    head = _LEAD_WIN.sub("", ascii_text[: m.start()])
+    caps = re.findall(r"\b([A-Z][A-Za-z]{2,})\b", head)
+    if len(caps) != 1:
+        return None
+    tok = caps[0].lower()
+    if len(tok) < 4:
+        return None
+    if tok in _NAME_STOP or tok in _GENERIC_NAME_TERMS or tok in _STOPWORDS:
+        return None
+    if _jurisdictions(tok) or _offices(tok):
+        return None
+    return tok
 
 
 _NAME_STOP = {
@@ -872,6 +1135,15 @@ _GENERIC_NAME_TERMS = frozenset({
     # detection uses _sports_league (regex), which is unaffected, so the
     # NBA-vs-WNBA distinction is preserved.
     "nba", "wnba", "nfl", "nhl", "mlb", "mls", "ncaa",
+    # Named (non-acronym) domestic soccer leagues, same reasoning: Kalshi's
+    # event title "Bundesliga Champion" was glommed as a phantom 2-token
+    # proper name ("bundesliga champion"), colliding with a real single-word
+    # club name on the other side ("Bayer Leverkusen") that has no overlap
+    # with it — the KNOWN_RECALL_EXCEPTIONS case in
+    # tests/test_contract_spec.py. There is no ambiguity risk analogous to
+    # NBA-vs-WNBA here (each name is a distinct top-flight league), so this is
+    # a plain false-positive-name fix, not a narrowing of a real signal.
+    "bundesliga",
 })
 
 # League acronyms that can glom onto a person's name when a title ("Ben Olsen")
@@ -884,6 +1156,7 @@ _LEADING_QUESTION_WORDS = re.compile(
 )
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _proper_names(text: str) -> set[str]:
     ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
     ascii_text = _LEADING_QUESTION_WORDS.sub("", ascii_text)
@@ -913,7 +1186,7 @@ def _proper_names(text: str) -> set[str]:
             continue
         if name not in _NAME_STOP and not (toks and toks <= _GENERIC_NAME_TERMS):
             names.add(name)
-    return names
+    return frozenset(names)  # cached: immutable so callers can't corrupt it
 
 
 # Qualifier/date words that must not count as the shared "anchor" of two names:
@@ -924,14 +1197,22 @@ _NAME_QUALIFIER_TOKENS = frozenset({
     "may", "jun", "june", "jul", "july", "aug", "august",
     "sep", "sept", "september", "oct", "october", "nov", "november",
     "dec", "december",
+    # Generic connector words shared by unrelated organisation names ("X
+    # Without Borders") must not count as the shared anchor: "Reporters
+    # Without Borders" and "Doctors Without Borders" are different NGOs, not
+    # the same entity, but previously overlapped via "without"/"borders"
+    # (audit iter4 FP: phantom Nobel Peace Prize match).
+    "without", "borders",
 })
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _name_anchor_tokens(name: str) -> set[str]:
-    return {
+    # Cached: immutable so callers can't corrupt it.
+    return frozenset(
         t for t in re.split(r"\W+", name)
         if len(t) >= 3 and t not in _NAME_QUALIFIER_TOKENS
-    }
+    )
 
 
 def _names_overlap(a_names: set[str], b_names: set[str]) -> bool:
@@ -963,6 +1244,7 @@ _LEAD_WIN = re.compile(
 )
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _winner_subject(text: str) -> set[str]:
     """Significant tokens naming the entity claimed to WIN/be nominated.
 
@@ -976,7 +1258,7 @@ def _winner_subject(text: str) -> set[str]:
     ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
     m = _WIN_TRIGGERS.search(ascii_text)
     if not m:
-        return set()
+        return frozenset()
     head = _LEAD_WIN.sub("", ascii_text[: m.start()])
     out: set[str] = set()
     for tok in re.findall(r"\b([A-Z][A-Za-z]{2,})\b", head):
@@ -989,7 +1271,7 @@ def _winner_subject(text: str) -> set[str]:
         for syn in _TOKEN_SYNONYMS.get(t, (t,)):
             if len(syn) >= 3:
                 out.add(syn)
-    return out
+    return frozenset(out)  # cached: immutable so callers can't corrupt it
 
 
 _ENTITY_STOP = _NAME_STOP | {
@@ -1000,6 +1282,7 @@ _ENTITY_STOP = _NAME_STOP | {
 }
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _named_entities(text: str) -> set[str]:
     ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
     ascii_text = _LEADING_QUESTION_WORDS.sub("", ascii_text)
@@ -1028,9 +1311,10 @@ def _named_entities(text: str) -> set[str]:
         entity = match.group(1).lower()
         if entity not in _ENTITY_STOP:
             entities.add(entity)
-    return entities
+    return frozenset(entities)  # cached: immutable so callers can't corrupt it
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _contract_actions(text: str) -> set[str]:
     low = _ascii_lower(text)
     actions: set[str] = set()
@@ -1198,7 +1482,7 @@ def _contract_actions(text: str) -> set[str]:
         actions.add("pardon")
     if re.search(r"\bindict(?:ed|ment)?\b|\bcriminally charged\b", low):
         actions.add("indicted")
-    return actions
+    return frozenset(actions)  # cached: immutable so callers can't corrupt it
 
 
 # Distinct, mutually-exclusive political-event outcomes. If both sides name a
@@ -1215,6 +1499,7 @@ _POLITICAL_EVENT_ACTIONS = frozenset(
 )
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _sports_league(text: str) -> set[str]:
     """Detect the specific sports league a market refers to.
 
@@ -1244,9 +1529,10 @@ def _sports_league(text: str) -> set[str]:
         leagues.add("mlb")
     if re.search(r"\bmls\b|\bmls cup\b", low):
         leagues.add("mls")
-    return leagues
+    return frozenset(leagues)  # cached: immutable so callers can't corrupt it
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _legislative_scope(text: str) -> str | None:
     """Distinguish a single legislative seat from chamber-wide control.
 
@@ -1265,20 +1551,24 @@ def _legislative_scope(text: str) -> str | None:
     return None
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _is_generic_winner_market(text: str) -> bool:
     low = _ascii_lower(text)
     return bool(re.search(r"\b(who|which)\s+will\s+win\b|\bwho\s+will\s+be\b", low))
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _is_party_contract(text: str) -> bool:
     return bool(_parties(text)) and not _proper_names(text)
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _is_generic_location_market(text: str) -> bool:
     low = _ascii_lower(text)
     return bool(re.search(r"\bwhere\s+will\b|where .* next meet", low))
 
 
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
 def _is_specific_location_option(text: str) -> bool:
     low = _ascii_lower(text)
     return bool(re.search(r"\bmeet\s+next\s+in\b|\bnext\s+meet\s+in\b", low))
@@ -1848,10 +2138,34 @@ def match_markets(
     poly_tok = {s.market_id: _tokens(s.title) for s in remaining_poly}
     kalshi_tok = {s.market_id: _tokens(s.title) for s in remaining_kalshi}
     kalshi_by_id = {s.market_id: s for s in remaining_kalshi}
-    kalshi_by_token: dict[str, set[str]] = {}
+
+    # PERFORMANCE — candidate blocking, in two parts:
+    #
+    # (1) Jaccard-gate candidates: prefix filtering (see module note above
+    #     _jaccard) generates every pair that COULD reach `min_title_similarity`
+    #     via title overlap, and is provably exact — it can only skip pairs
+    #     that mathematically cannot reach the gate, matching (a strict subset
+    #     of) what the old "any shared token" blocking produced for THIS
+    #     purpose. On full catalogs, common tokens ("2026", "win") no longer
+    #     drag every market containing them into one bucket.
+    #
+    # (2) Threshold-led candidates: the block below also accepts pairs BELOW
+    #     the Jaccard gate when they share an exact numeric threshold, a named
+    #     entity, and a close resolution time (see the loop below). The
+    #     reference implementation reached those candidates through the SAME
+    #     any-shared-token blocking as (1) — prefix filtering must not be
+    #     applied there, since a matching low-Jaccard pair by definition may
+    #     share no token in either side's rarest-token prefix. Instead, index
+    #     the (typically small) subset of Kalshi markets that parse a numeric
+    #     threshold by (direction, unit), so a Polymarket threshold market only
+    #     scans same-direction/unit candidates — then require >=1 shared token
+    #     exactly as the reference implicitly did, before the value/time/entity
+    #     checks below run.
+    freq = _token_frequencies(list(poly_tok.values()) + list(kalshi_tok.values()))
+    kalshi_prefix_index: dict[str, set[str]] = {}
     for k in remaining_kalshi:
-        for tok in kalshi_tok[k.market_id]:
-            kalshi_by_token.setdefault(tok, set()).add(k.market_id)
+        for tok in _prefix_tokens(kalshi_tok[k.market_id], freq, min_title_similarity):
+            kalshi_prefix_index.setdefault(tok, set()).add(k.market_id)
 
     # Score all candidate pairs.
     # Close-time delta is a scoring signal only — never a hard exclusion gate.
@@ -1869,6 +2183,12 @@ def match_markets(
     kalshi_ents = {s.market_id: _named_entities(s.title) for s in remaining_kalshi}
     kalshi_dt = {s.market_id: _parse_dt(s.close_time) for s in remaining_kalshi}
 
+    # Bucket threshold-bearing Kalshi markets by (direction, unit) for (2).
+    kalshi_thr_bucket: dict[tuple[str, str], list[str]] = {}
+    for kalshi_id, kt in kalshi_thr.items():
+        if kt:
+            kalshi_thr_bucket.setdefault((kt[0], kt[2]), []).append(kalshi_id)
+
     scored: list[tuple[float, "MarketSnapshot", "MarketSnapshot"]] = []
     for p in remaining_poly:
         p_toks = poly_tok[p.market_id]
@@ -1876,8 +2196,14 @@ def match_markets(
         p_ents: set[str] | None = None  # lazy: only needed when p_thr exists
         p_dt = _parse_dt(p.close_time)
         candidate_ids: set[str] = set()
-        for tok in p_toks:
-            candidate_ids.update(kalshi_by_token.get(tok, ()))
+        for tok in _prefix_tokens(p_toks, freq, min_title_similarity):
+            candidate_ids.update(kalshi_prefix_index.get(tok, ()))
+        if p_thr is not None:
+            for kalshi_id in kalshi_thr_bucket.get((p_thr[0], p_thr[2]), ()):
+                if kalshi_id in candidate_ids:
+                    continue
+                if p_toks & kalshi_tok[kalshi_id]:  # reference required >=1 shared token
+                    candidate_ids.add(kalshi_id)
         for kalshi_id in candidate_ids:
             k = kalshi_by_id[kalshi_id]
             k_toks = kalshi_tok[k.market_id]
@@ -1919,8 +2245,12 @@ def match_markets(
             score = _confidence(sim, delta_h, max_close_delta_hours)
             scored.append((score, p, k))
 
-    # Greedy 1-1 matching: highest score first
-    scored.sort(key=lambda x: x[0], reverse=True)
+    # Greedy 1-1 matching: highest score first. Ties are broken by a total
+    # order on (poly market_id, kalshi market_id) so the result is independent
+    # of set-iteration order (which varies with PYTHONHASHSEED) — without this
+    # two runs over the same identical inputs could pick different pairs on a
+    # tied score.
+    scored.sort(key=lambda x: (-x[0], x[1].market_id, x[2].market_id))
     matched_poly: set[str] = set()
     matched_kalshi: set[str] = set()
     for score, p, k in scored:
@@ -1939,3 +2269,34 @@ def match_markets(
 
     pairs.sort(key=lambda x: (not x.via_override, -x.confidence))
     return pairs
+
+
+# ---------------------------------------------------------------------------
+# Cache hygiene (iteration 2 WP-B — cycle time / memory)
+# ---------------------------------------------------------------------------
+
+def clear_caches() -> int:
+    """Clear every ``lru_cache``-memoised function in this module.
+
+    A full-catalog scan (~98.6k Kalshi x ~165.9k Polymarket markets) drives
+    the ~39 pure text->feature helpers above (``_tokens``, ``_jaccard``, ...)
+    up to their ``_TEXT_CACHE_SIZE`` (300k entries) each. In a long-running
+    process (the alerter scans every 300s) those caches would otherwise never
+    shrink even as the tracked market universe churns, so discover() calls
+    this once per cycle after building its results.
+
+    Caches are discovered by introspection — anything at module scope with a
+    ``cache_clear`` attribute (i.e. anything wrapped in ``functools.lru_cache``
+    or ``functools.cache``) — rather than a hand-maintained list, so a new
+    memoised helper added later is covered automatically without editing this
+    function. Returns the number of caches cleared.
+    """
+    import sys
+    n = 0
+    module = sys.modules[__name__]
+    for name in dir(module):
+        obj = getattr(module, name, None)
+        if callable(obj) and hasattr(obj, "cache_clear"):
+            obj.cache_clear()
+            n += 1
+    return n
