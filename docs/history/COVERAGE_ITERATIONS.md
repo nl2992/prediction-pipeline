@@ -641,6 +641,155 @@ done then.
 
 ---
 
+## Iteration 6: bucket semantics + re-verification (done)
+
+**Proposed:** the iteration-5 "Next fixes" list.
+- **I (agent):** the `_ascii_lower` en-dash bug, plus discriminators for bucket vs
+  cumulative threshold, bucket boundary / width, and annual vs quarterly period.
+  Each is gated on zero same-pair loss across all three fixtures. Matcher output
+  is re-diffed and every changed pair explained.
+- **Coordinator:** live `tools.validate_coverage` (ingestion changed in
+  iterations 3–5 after the last live check) and fresh cold / stale / warm alerter
+  timings with the faster matcher.
+- **Weather policy:** unchanged (rejected) pending the operator's decision.
+
+**Results (I: depth-rescued bucket semantics):**
+- **En-dash bug fixed.** `matcher._ascii_lower` NFKD-normalises then
+  ascii-encodes with `errors="ignore"`; en dash (`–`) and em dash
+  (`—`) have no NFKD decomposition, so they were silently DROPPED
+  instead of folded to a hyphen — `"2.0–2.5%"` became `"2.02.5%"`
+  (digits glued together), unparseable by `contract_spec._num_range` /
+  `_RANGE_RE`. Fixed by folding both dashes to `"-"` before normalising.
+  Once fixed, the *existing* adjacent-bucket-mismatch gate (run 41) rejects
+  the GDP pair on its own — no new discriminator needed for that class.
+- **Three new narrow discriminators** in `contract_spec.py`, each gated on
+  zero labelled-same pairs lost across all three fixtures:
+
+  | Discriminator | What it catches | Depth-rescued FPs removed | Same lost (any fixture) |
+  |---|---|---|---|
+  | `_is_cumulative_bucket` (numeric bucket vs open-ended "N or below/above" threshold) | Polymarket narrow 2-sided bucket ("90-91°F") vs Kalshi's open-ended ladder-end rung ("<91°... 90° or below", i.e. everything ≤90) | 2 | 0 |
+  | `_week_bucket` (sports "Week N" granularity) | single-week bucket ("Week 1") vs multi-week window ("Week 1 to Week 2") | 1 | 0 |
+  | `_fiscal_period` (explicit Q1-4 vs "annual"/"full year") + extending the existing negative/positive direction gate to also read `_numeric_threshold` (not just `_num_range`) | annual GDP reading vs a single quarter's threshold ("Negative GDP growth in 2026" vs "...increase by more than 4.0% in Q4 2026") | 1 | 0 |
+  | en-dash fix (existing adjacent-bucket gate, newly reachable) | adjacent GDP buckets sharing a boundary, previously unparseable on the en-dash side | 1 | 0 |
+
+  All four fire only when both sides carry an unambiguous, narrow structural
+  signal (an explicit range/week/period tag on both sides, or a genuine
+  cumulative idiom paired with a genuine two-sided range on the other side),
+  so none touch the vast majority of pairs that don't use this phrasing.
+- **Precision:** `endorsed_audit_depth_rescued.json` 94.1% (80/85) → **100%
+  (85/85)**, all 5 previously-documented false positives now rejected, by
+  exactly the intended gate each time (verified via `d.reasons[0]`). The two
+  general fixtures (`endorsed_audit_2026-09-14.json`,
+  `endorsed_audit_iter4.json`) are **unchanged**: signal/stratified precision
+  stayed at 98.46%/100.0% and 100%/99.49% respectively, 0 labelled-same pairs
+  lost on either. Regression floor in `tests/test_contract_spec.py` raised
+  from 94.1% to 100% for the depth-rescued fixture.
+- **Matcher output change check** (`match_bench.py`, full frozen pools:
+  98,578 Kalshi x 165,865 Polymarket): `sig_iter6.json` vs the frozen
+  `sig_iter4b.json` reference — **4,739 = 4,739 pairs, 0 differences, 0 score
+  changes**, in **62.6 s** (within the ≈60-75 s band). Zero diff is expected:
+  every iteration-6 change lives in `contract_spec.py`'s v2 decision layer
+  (or, for the en-dash fix, only feeds `contract_spec._num_range`), and
+  `match_bench` measures `matcher.is_compatible_match`/candidate-generation
+  (v1), which doesn't do range-bucket comparison — confirmed no other
+  `matcher.py` code path is en-dash sensitive.
+- **Live re-verdict** on the saved `live_pairs_iter5.json` (5,007 pairs,
+  saved books; `alerter.compute_signals(min_edge=0.0001,
+  min_size=alerter.MIN_DEPTH)`), recomputing `match_spec` only for
+  previously-endorsed pairs and trusting a flip only when the new reason is
+  one of the four gates above (the flat export drops ingestion-time
+  `settle_src`/`full_question` context, so a blind full recompute both loses
+  the settlement-source gate and can drift a hair on unrelated
+  token-similarity — confirmed harmless, but excluded from the "after" count
+  for rigor):
+
+  | | Before | After |
+  |---|---|---|
+  | Endorsed | 3,828 | **3,822** (-6) |
+  | Production signals | 480 | **477** (-3) |
+  | Emailable | 36 | **35** (-1) |
+
+  All 6 flips trace to the new gates: 3 adjacent GDP-bucket pairs (en-dash
+  fix), 2 `Week N` vs `Week N to N+1` pairs, 1 annual-vs-Q4 GDP pair
+  (fiscal-period + direction). The bucket-vs-cumulative-threshold class
+  removed 0 live pairs because those weather pairs were already rejected
+  upstream by iteration 5's settlement-source gate (NOAA vs Weather
+  Company) — the fix still matters for a future weather-policy change that
+  relaxes that gate. Suite 800 → **815 passed** (15 new tests covering the
+  en-dash fix and all three discriminators), `ruff check --select F,E9,B`
+  clean.
+
+**Results (coordinator items):**
+- **Bug caught by the live re-check, fixed in `8cb5ee3`.**
+  `tools.validate_coverage` crashed in 0.15 s with `UnboundLocalError`. Two
+  function-local `import threading` statements in `ingest_kalshi` (added in
+  iteration 4) made `threading` local to the whole function, so the standalone
+  own-sweep-thread path failed before reaching the import. `discover()` always
+  injects its thread, so production scans were unaffected, but the verifier
+  wasn't. The fix uses the module-level import. A new regression test reproduces
+  the exact error on the previous commit and passes on the fix. An AST scan found
+  no other shadowed module imports in `discover.py`.
+- **Live `tools.validate_coverage`** (16:56 UTC, sweeps on): **0 real gaps on
+  both venues** (`clean=True`).
+
+  | Venue | Ground truth | Ingested | Raw overlap | Real gaps | Drift | Closed since |
+  |---|---|---|---|---|---|---|
+  | Kalshi | 107,219 | 107,651 | 97.67% | **0** | 2,498 | 2,930 |
+  | Polymarket | 169,655 | 169,665 | 99.96% | **0** | 69 | 79 |
+
+  Kalshi's raw overlap is lower than in iteration 1 (100.0%, measured at 06:35
+  UTC) because this run was during US trading hours. 15-minute crypto and live
+  sports series turn over ~2.5k markets in the gap between ingesting Kalshi and
+  walking its ground truth, and that gap is several minutes because the verifier
+  runs the Polymarket sweep first. Every miss classifies as drift, and every
+  extra as closed since.
+- **Alerter cycles** (`--once --dry-run`, back to back, no other load):
+
+  | Cycle | Caches | Wall | Peak RSS | Pairs | Survivable | Emailable | Coverage |
+  |---|---|---|---|---|---|---|---|
+  | A | Polymarket past 6 h cap (inline sweep), Kalshi stale | 380 s | 4.1 GB | 5,003 | 499 | 39 | 100.0% / 100.0% |
+  | B | both fresh-cached | **154 s** | 2.9 GB | 5,001 | 495 | 37 | 100.0% / 100.0% |
+  | C | both aged 2 h (stale, background refresh) | **148 s** | 3.2 GB | 5,000 | 489 | 38 | 100.0% / 100.0% |
+
+  Every cycle assembled its email and depth charts. The dry runs left
+  `alert_state.json` / `alert_signals.jsonl` untouched: their mtimes are still
+  07:19, from pre-fix runs in iteration 3.
+- Matcher re-diff under a fourth hash seed: 4,739 = 4,739 pairs, 0 changes, **59 s**.
+- Suite **815 passed**, ruff clean.
+
+**Compared with iteration 5:**
+
+| | Iteration 5 | Iteration 6 |
+|---|---|---|
+| Coverage (live verifier) | not re-run since iteration 1 | **0 gaps / 0 gaps** re-confirmed; verifier crash fixed |
+| Depth-rescued signal precision | 94.1% | **100%** (85 / 85) |
+| Other fixtures | 98.45% / 100% · 100% / 99.49% | unchanged, 0 same-pairs lost |
+| Live endorsed / signals / emailable (iteration-5 books) | 3,828 / 480 / 36 | 3,822 / 477 / 35 |
+| Alerter cycle, warm / stale | 125–216 s (iteration 4) | **154 s / 148 s** |
+| Alerter cycle, no usable cache | 352 s | 380 s (still > 300 s) |
+| Full-pool matching | 59–72 s | 59–63 s |
+| Tests | 800 | 815 |
+
+**Next fixes to consider (iteration 7 proposal):**
+1. **Verifier skew.** Walk each venue's ground truth *concurrently with* (or right
+   after) that venue's own ingestion, instead of after both, so drift reflects
+   real churn rather than the verifier's ~5–10 min gap. Report coverage on the
+   intersection of markets alive at both instants.
+2. **No-cache cold cycle (380 s).** The one remaining > 300 s case, paid only by
+   a process with no usable cache (first run, or > 6 h idle). Options: persist
+   and ship a seed orphan cache on deploy; or run the Polymarket sweep with
+   concurrent keyset segments if Gamma cursors can be partitioned by id range
+   (needs a probe).
+3. **Coverage in `ops.py`.** `health.py` already degrades on coverage; also show
+   the per-venue drift and closed-since counts from the last live verifier run,
+   if one was written (`--json`).
+4. **Weather policy** (operator decision, open since iteration 5).
+5. **Grow the audit fixtures from live signals each iteration** so precision
+   floors track the current catalog. The depth-rescued fixture is now fully
+   fixed (100%), so it no longer finds new problems.
+
+---
+
 ## Expansion backlog (beyond ingestion coverage)
 
 Ordered by expected arb surface per unit of work (sources:

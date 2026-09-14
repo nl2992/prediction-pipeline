@@ -81,6 +81,15 @@ Measured against live snapshots taken 2026-09-14 (01:37–01:43 UTC).
 | Dry run | — | writes state (bug) | writes state (bug) | **side-effect free** |
 | Coverage monitoring | `validate_coverage` (manual) | same | + `health.py` DEGRADED on < 100% or failed sweep | same (`sweep=stale` is OK) |
 
+Iterations 5–6:
+- Matching back to **59–63 s** (identical output).
+- Weather pairs whose venues settle via different pipelines (NOAA vs The
+  Weather Company) are rejected.
+- The depth-rescued signal audit went from 94.1% to **100%**.
+- A verifier crash was fixed and **0 / 0 gaps re-confirmed live**.
+- Alerter cycles: **154 s warm / 148 s stale / 380 s with no usable cache**, at
+  5,000 pairs and ~38 emailable.
+
 Iteration results are appended to [history/COVERAGE_ITERATIONS.md](history/COVERAGE_ITERATIONS.md).
 
 ## Verifying coverage
