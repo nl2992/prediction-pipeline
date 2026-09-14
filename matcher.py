@@ -449,6 +449,14 @@ _US_STATE_ALIASES: dict[str, tuple[str, ...]] = {
 
 @functools.lru_cache(maxsize=_WIDE_TEXT_CACHE_SIZE)
 def _ascii_lower(text: str) -> str:
+    # En dash (–) and em dash (—) have no NFKD decomposition, so the
+    # ascii encode below silently DROPS them rather than folding them to "-"
+    # — "2.0–2.5%" became "2.02.5%" (digits glued together), which broke
+    # every downstream range/threshold regex that looks for a "-" separator
+    # (contract_spec._num_range, _RANGE_RE) on titles that use a typographic
+    # dash instead of a hyphen (e.g. "1.0–1.5%" GDP buckets). Normalise
+    # both to a plain hyphen first so they still act as a range separator.
+    text = text.replace("–", "-").replace("—", "-")
     return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
 
 
