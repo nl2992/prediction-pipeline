@@ -278,7 +278,7 @@ The dashboard is a single static app. It calls the FastAPI scan endpoints,
 renders pair tables, category filters, sorting, detail panes, exchange links,
 and signal views.
 
-## `smoke_test.py`
+## `tools/smoke_test.py`
 
 Runs live connectivity and parser sanity checks for Polymarket Gamma/CLOB and
 Kalshi market/order-book endpoints.

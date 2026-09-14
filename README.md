@@ -27,22 +27,27 @@ orders — all with a single command.
 ## Repository structure
 
 ```
-prediction_pipeline/
+prediction-pipeline/
 ├── pipeline.py          # Data ingest: fetch + normalise both exchanges
-├── matcher.py           # Cross-exchange market pairing (Jaccard + close-time)
-├── arb.py               # Two-leg arbitrage detection with fee model
+├── discover.py          # Organic cross-exchange discovery (production scan path)
+├── matcher.py           # v1 matcher: Jaccard + close-time + deterministic vetoes
+├── contract_spec.py     # v2 structured matcher (shadow referee on every v1 pair)
+├── arb.py / book_arb.py # Two-leg arb detection; depth / VWAP / profit-by-stake
 ├── executor.py          # Order execution engine (dry-run by default)
 ├── monitor.py           # Continuous polling loop → signals.jsonl
+├── alerter.py           # Scheduled scan → email alerts (see docs/OPERATIONS.md)
+├── ai_verify.py         # Optional LLM settlement-equivalence check
+├── server.py + static/  # FastAPI dashboard
 ├── fed_rate_spread.py   # Fed rate spread analysis across both exchanges
-├── smoke_test.py        # Connectivity & parsing sanity checks
-├── requirements.txt
-├── polymarket/
-│   ├── __init__.py
-│   └── client.py        # Polymarket CLOB + Gamma API client (public + auth)
-└── kalshi/
-    ├── __init__.py
-    └── client.py        # Kalshi Trade API v2 client (public + auth)
+├── health.py, ops.py, signal_report.py, ai_verify_report.py   # operator tools
+├── kalshi/client.py     # Kalshi Trade API v2 client (public + auth)
+├── polymarket/client.py # Polymarket CLOB + Gamma API client (public + auth)
+├── tools/               # Live probes: smoke_test, validate_{live,recall,ingestion,matcher}
+├── tests/               # Hermetic pytest suite (CI) + fixtures
+└── docs/                # Guides, OPERATIONS.md; docs/history/ holds validation logs
 ```
+
+Run the live probes from the repo root as modules, e.g. `python -m tools.smoke_test`.
 
 ---
 
@@ -52,7 +57,7 @@ prediction_pipeline/
 pip install -r requirements.txt   # only `requests` is required
 
 # Verify connectivity
-python smoke_test.py
+python -m tools.smoke_test
 
 # One-off scan — Fed rate markets, compare across both exchanges
 python monitor.py --once \

@@ -114,7 +114,8 @@ class DigestHelpers(unittest.TestCase):
 
     def test_annualised_one_year_horizon(self):
         # net 0.10 with closes ~1 year out -> ~0.10 annualised.
-        a = r._annualised({"net_accurate": 0.10, "kalshi_close": "2027-06-24", "poly_close": "2027-06-24"})
+        a = r._annualised({"net_accurate": 0.10, "kalshi_close": "2027-06-24", "poly_close": "2027-06-24"},
+                          now=self._NOW)
         self.assertAlmostEqual(a, 0.10, places=2)
 
     def test_annualised_unknown_close_falls_back_to_net(self):

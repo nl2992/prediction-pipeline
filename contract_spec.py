@@ -20,7 +20,7 @@ pipeline:
 Extraction reuses matcher.py's battle-tested helpers, so v1 and v2 share signal
 quality and differ only in decision structure. v1 remains the production path;
 match_spec() is evaluated side-by-side by tests/test_contract_spec.py and
-documented in PIPELINE_REDESIGN.md.
+documented in docs/history/PIPELINE_REDESIGN.md.
 """
 
 from __future__ import annotations

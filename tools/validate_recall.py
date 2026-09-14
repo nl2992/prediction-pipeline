@@ -26,8 +26,8 @@ Scope & honesty (stated so results are not over-read):
     matches" in any absolute sense.
 
 Usage:
-    python validate_recall.py --json
-    python validate_recall.py --relaxed 0.18 --max-events 100
+    python -m tools.validate_recall --json
+    python -m tools.validate_recall --relaxed 0.18 --max-events 100
 """
 from __future__ import annotations
 

@@ -56,13 +56,13 @@ def _net(s: dict) -> float:
         return 0.0
 
 
-def _annualised(signal: dict) -> float:
+def _annualised(signal: dict, now: _dt.datetime | None = None) -> float:
     """Annualised return of a signal via the alerter's own horizon logic (net x 365
     / days to the later close), so this digest ranks by the SAME metric the alerter
     prioritises. 0.0 if it can't be computed."""
     try:
         from alerter import _settle_horizon
-        return _settle_horizon(signal)[0] or 0.0
+        return _settle_horizon(signal, now=now)[0] or 0.0
     except Exception:
         return 0.0
 
@@ -92,7 +92,7 @@ def summarize(signals: list[dict], top_n: int = 10,
         if ts >= e["latest_ts"]:          # rows ~chronological; keep the latest
             e["latest_ts"] = ts
             e["latest_net"] = net
-            e["annualised"] = _annualised(s)   # annualised of the latest snapshot
+            e["annualised"] = _annualised(s, now)   # annualised of the latest snapshot
     vals = list(pairs.values())
     for e in vals:
         e["age_hours"] = _age_hours(e["latest_ts"], now)

@@ -95,7 +95,7 @@ for _stream in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
-# Adaptive ingestion cap. Run 11 (MATCHER_VALIDATION_LOG.md) showed the old
+# Adaptive ingestion cap. Run 11 (docs/history/MATCHER_VALIDATION_LOG.md) showed the old
 # fixed cap of 200 Kalshi events silently dropped ~178 true pairs that live in
 # events ranked >200. Each scan now targets at least TARGET_SURVIVABLE positive
 # net-of-fees ("survivable") arbs, progressively widening the event cap through
@@ -105,7 +105,7 @@ for _stream in (sys.stdout, sys.stderr):
 # BTTS) living in events ranked 500-1500. Precision fixes (runs 13-37) made the
 # guarded top mostly-real, so 1500 is now safe for coverage. To keep the inbox
 # sane, emails are capped to the TOP_N richest (see signals_to_send). Re-check
-# MATCHER_VALIDATION_LOG.md (runs 12, 30, 38) before changing.
+# docs/history/MATCHER_VALIDATION_LOG.md (runs 12, 30, 38) before changing.
 TARGET_SURVIVABLE = 50
 CAP_LADDER = (1500,)
 # Email only the N richest (by net-of-fees edge) per cycle — full-catalog scans
@@ -376,15 +376,15 @@ def signals_to_send(signals: list[dict], state: dict, realert_hours: float,
 # Email
 # ---------------------------------------------------------------------------
 
-def _settle_horizon(s: dict) -> tuple[float, int | None, str | None]:
+def _settle_horizon(s: dict, now: datetime | None = None) -> tuple[float, int | None, str | None]:
     """Return (annualised_return, days_to_settle, settle_date_iso) for a signal.
 
     Capital is locked until BOTH legs resolve, so the horizon is the LATER of the
     two close dates. Annualised = net edge × 365 / days (simple). When close dates
     are missing, assume a 1-year horizon so ranking still works (returns days=None
-    so the display can omit it).
+    so the display can omit it). ``now`` is injectable for deterministic tests.
     """
-    now = datetime.now(timezone.utc)
+    now = now or datetime.now(timezone.utc)
     closes = []
     # Per leg, prefer the AI verifier's implied settlement date (set in the gate
     # from each market's rules) over the contractual close; ignore unparseable or

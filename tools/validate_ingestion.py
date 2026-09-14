@@ -22,8 +22,8 @@ Scope & honesty (so results are not over-read):
     "zero missed" claim.
 
 Usage:
-    python validate_ingestion.py --json
-    python validate_ingestion.py --prod-cap 200 --wide-cap 500
+    python -m tools.validate_ingestion --json
+    python -m tools.validate_ingestion --prod-cap 200 --wide-cap 500
 """
 from __future__ import annotations
 

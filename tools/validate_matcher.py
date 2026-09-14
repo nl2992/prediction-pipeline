@@ -13,9 +13,9 @@ validation loop cares about at once:
 It also checks polarity (``inverted`` flag) against the fixture ground truth.
 
 Usage:
-    python validate_matcher.py                 # diverse 20-pair slice, offset 0
-    python validate_matcher.py --offset 20     # rotate to a different slice
-    python validate_matcher.py --n 42 --json   # all true pairs, JSON output
+    python -m tools.validate_matcher                 # diverse 20-pair slice, offset 0
+    python -m tools.validate_matcher --offset 20     # rotate to a different slice
+    python -m tools.validate_matcher --n 42 --json   # all true pairs, JSON output
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ import os
 from pipeline import MarketSnapshot, OrderBook, PriceLevel
 from matcher import match_markets
 
-FIXTURE = os.path.join(os.path.dirname(__file__), "tests", "fixtures", "pairs_fixture.json")
+FIXTURE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tests", "fixtures", "pairs_fixture.json")
 CATEGORIES = ["politics", "econ", "sports", "crypto", "tech", "culture", "misc"]
 
 
