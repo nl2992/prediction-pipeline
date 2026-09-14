@@ -176,6 +176,84 @@ def _num_range(text: str) -> tuple[float, float] | None:
     return (min(a, b), max(a, b))
 
 
+# ---------------------------------------------------------------------------
+# Iteration-6 discriminators — narrow structural fixes for the remaining
+# depth-rescued false-positive classes (see
+# docs/history/COVERAGE_ITERATIONS.md, iteration 5 "unfixed classes" /
+# iteration 6). Each is gated on zero labelled-same pairs lost across all
+# three audit fixtures.
+# ---------------------------------------------------------------------------
+
+# A ladder-end idiom Kalshi (and occasionally Polymarket) titles use for the
+# OPEN-ENDED rung of a bucket ladder: "90° or below" / "$150k or above". This
+# covers the whole half-line beyond the named value, unlike a genuine
+# two-sided bucket ("90-91°F"), which covers only that narrow band. The two
+# are structurally different contracts even when they share a boundary
+# number — run audit caught "90-91°F" (a mid-ladder Polymarket bucket)
+# phantom-matched to Kalshi's "<91°... 90° or below" (the BOTTOM, cumulative
+# rung: YES for any reading <=90, not just [90, 91)).
+_CUMULATIVE_BUCKET_RE = re.compile(r"\b\d+(?:\.\d+)?\s*[a-z]?\s*(?:or\s+(?:below|above|less|more))\b")
+
+
+def _is_cumulative_bucket(text: str) -> bool:
+    """True when text phrases a threshold as an open-ended "or below"/"or
+    above" bucket rather than a two-sided numeric range. Pure threshold
+    phrasings ("Below 5.15%") also match this idiom on both sides of a
+    genuinely-equivalent pair, but those never produce a competing
+    ``_num_range`` on either side, so they are unaffected by the gate that
+    uses this (it only fires when the OTHER side is a genuine narrow range).
+    """
+    return bool(_CUMULATIVE_BUCKET_RE.search(_ascii_lower(text)))
+
+
+# Sports "Week N" scheduling buckets ("Week 1", "Week 1 to Week 2"). A single
+# week and a multi-week window are different granularity contracts even when
+# they overlap — run audit caught Polymarket "Week 1" (single-week) phantom-
+# matched to Kalshi "Week 1 to Week 2" (a two-week window) for the same
+# underlying question ("Fernando Mendoza first start").
+_WEEK_RANGE_RE = re.compile(r"\bweek\s*(\d+)\s*(?:to|through|thru|-|–|—)\s*week?\s*(\d+)\b")
+_WEEK_SINGLE_RE = re.compile(r"\bweek\s*(\d+)\b")
+
+
+def _week_bucket(text: str) -> tuple[int, int] | None:
+    """Extract the (lo, hi) week window a title names, or None if it names
+    none. A bare "Week N" is the single-week bucket (N, N)."""
+    low = _ascii_lower(text)
+    m = _WEEK_RANGE_RE.search(low)
+    if m:
+        a, b = int(m.group(1)), int(m.group(2))
+        return (min(a, b), max(a, b))
+    m = _WEEK_SINGLE_RE.search(low)
+    if m:
+        n = int(m.group(1))
+        return (n, n)
+    return None
+
+
+# Explicit fiscal-period tags: a calendar quarter ("Q4 2026") or the word
+# "annual"/"full year". Two DIFFERENT explicit tags are mutually exclusive
+# time scopes for the same recurring economic series (GDP, inflation) — run
+# audit caught Polymarket "Negative GDP growth in 2026?" (an annual, whole-
+# year question by construction — no quarter is named) phantom-matched to
+# Kalshi's "...GDP... in Q4 2026?" (a single-quarter reading). Deliberately
+# requires an EXPLICIT "annual"/"full year" cue rather than inferring it from
+# the absence of a quarter mention, so the vast majority of same-period pairs
+# that just say "in 2026" on both sides (naming no period at all) are never
+# touched by this gate.
+_QUARTER_RE = re.compile(r"\bq([1-4])\b")
+_ANNUAL_RE = re.compile(r"\bannual(?:ly)?\b|\bfull[- ]year\b|\bfull[- ]calendar[- ]year\b")
+
+
+def _fiscal_period(text: str) -> str | None:
+    low = _ascii_lower(text)
+    m = _QUARTER_RE.search(low)
+    if m:
+        return f"q{m.group(1)}"
+    if _ANNUAL_RE.search(low):
+        return "annual"
+    return None
+
+
 # Party/office descriptor tokens that are NOT parts of a person's name. A
 # two-token fragment containing one ("Democratic Vice", "Democratic VP", "Vice
 # Presidency") is an office label, not a person, and must not drive the
@@ -1082,15 +1160,45 @@ def match_spec(
     if ra and rb and (ra[1] <= rb[0] + 1e-9 or rb[1] <= ra[0] + 1e-9):
         return _reject(f"numeric range mismatch: {ra} vs {rb}")
 
-    # Negative/contraction bucket vs an explicitly positive numeric bucket are
-    # mutually-exclusive outcomes ("Negative GDP growth" vs "GDP growth 4.6% to
-    # 5.0%"). Run 34. (Unambiguous downturn words only — not "decline".)
+    # Numeric bucket vs open-ended cumulative threshold: a two-sided range on
+    # one side ("90-91F") against an "or below"/"or above" idiom on the OTHER
+    # side (and only the other side — a side that is itself a range is not
+    # cumulative) is always a different contract (iteration 6; see
+    # _is_cumulative_bucket).
+    if ra and not rb and _is_cumulative_bucket(b.raw):
+        return _reject(f"numeric bucket vs cumulative threshold: {ra} vs open-ended ({b.raw!r})")
+    if rb and not ra and _is_cumulative_bucket(a.raw):
+        return _reject(f"numeric bucket vs cumulative threshold: open-ended ({a.raw!r}) vs {rb}")
+
+    # Sports "Week N" scheduling bucket: a single week and a multi-week window
+    # are different granularity contracts (iteration 6).
+    wa, wb = _week_bucket(a.raw), _week_bucket(b.raw)
+    if wa and wb and wa != wb:
+        return _reject(f"week bucket mismatch: {wa} vs {wb}")
+
+    # Explicit fiscal-period mismatch: an annual reading vs a single quarter
+    # ("Negative GDP growth in 2026" vs "...GDP... in Q4 2026") are different
+    # contracts when BOTH sides name an explicit period tag (iteration 6).
+    fa, fb = _fiscal_period(a.raw), _fiscal_period(b.raw)
+    if fa and fb and fa != fb:
+        return _reject(f"fiscal period mismatch: {fa} vs {fb}")
+
+    # Negative/contraction bucket vs an explicitly positive numeric bucket or
+    # threshold are mutually-exclusive outcomes ("Negative GDP growth" vs "GDP
+    # growth 4.6% to 5.0%", or vs "increase by more than 4.0%"). Run 34.
+    # (Unambiguous downturn words only — not "decline".) Iteration 6: also
+    # checks the one-sided numeric threshold, not just the two-sided range, so
+    # "Negative GDP growth" vs "GDP will increase by more than X%" (no range
+    # on either side) is caught too.
     _neg = re.compile(r"\b(negative|contraction|recession|shrinks?|shrinking|below zero|sub[- ]?zero)\b")
     neg_a, neg_b = bool(_neg.search(a.raw.lower())), bool(_neg.search(b.raw.lower()))
     if neg_a != neg_b:
-        pos = rb if neg_a else ra
-        if pos and pos[0] > 0:
-            return _reject("direction mismatch: negative vs positive bucket")
+        pos_range = rb if neg_a else ra
+        other_thr = b.threshold if neg_a else a.threshold
+        pos_thr = other_thr[1] if other_thr and other_thr[0] == "up" else None
+        pos = pos_range[0] if pos_range else pos_thr
+        if pos is not None and pos > 0:
+            return _reject("direction mismatch: negative vs positive bucket/threshold")
 
     # --- threshold & settlement (with inversion detection) --------------------
     if a.threshold and b.threshold:

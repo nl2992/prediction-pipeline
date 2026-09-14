@@ -20,7 +20,9 @@ from contract_spec import (
     _actor_verb_object, _bps_bucket, _is_weekly_recurring,
     _is_runner_up_market, _is_tournament_champion_market, _is_duration_market,
     settlement_source, _settle_src_conflict, _is_first_endorsement_market,
+    _is_cumulative_bucket, _week_bucket, _fiscal_period,
 )
+from matcher import _ascii_lower
 from pipeline import MarketSnapshot, OrderBook, PriceLevel
 
 # Default to the in-repo slimmed fixture so parity ALWAYS runs (never silently
@@ -856,14 +858,18 @@ class DepthRescuedAuditRegression(unittest.TestCase):
     the depth-aware gate's newly-surfaced signals carry a different
     false-positive profile than the rest of the endorsed signal set.
 
-    Five labelled-different pairs are pinned as KNOWN, documented gaps (not
-    fixed by this workstream — narrower than the two discriminators iteration
-    5 was scoped to add): two bucket-vs-cumulative-threshold weather pairs
-    ("90-91F" vs Kalshi's "<91, 90 or below"), one bucket-granularity pair
-    ("Week 1" vs "Week 1 to Week 2"), one adjacent-GDP-bucket pair (exposed by
-    a pre-existing matcher._ascii_lower bug that strips the en-dash in
-    "1.0–1.5%" before _num_range can parse it — matcher.py is out of this
-    workstream's scope), and one GDP annual-vs-Q4 + direction mismatch.
+    Iteration 6 fixed all five of the previously-documented false positives:
+    the matcher._ascii_lower en-dash bug (it silently dropped –/—
+    instead of folding them to "-", so "1.0–1.5%" glued into "1.01.5%"
+    and couldn't be parsed as a range — once fixed, the existing adjacent-
+    bucket gate below rejects it on its own), plus three new narrow
+    discriminators in contract_spec.py: numeric bucket vs open-ended
+    cumulative threshold (_is_cumulative_bucket), sports "Week N" bucket
+    granularity (_week_bucket), and explicit fiscal-period mismatch
+    (_fiscal_period, plus extending the negative/positive direction gate to
+    also read the one-sided _numeric_threshold, not just _num_range).
+    Precision on this subset is now 100% (was 94.1%), with zero labelled-same
+    pairs lost.
     """
 
     @classmethod
@@ -892,13 +898,11 @@ class DepthRescuedAuditRegression(unittest.TestCase):
         # All 80 labelled-same pairs must still be endorsed (no recall loss).
         self.assertEqual(tp, 80)
         precision = tp / (tp + fp)
-        # Documents the CURRENT precision on this subset (94.1%) — lower than
-        # the >=98% floor on the general signal/stratified subsets, showing
-        # the depth-aware gate's newly-rescued signals skew toward the
-        # (documented, unfixed) bucket/threshold-alignment gap above. Not a
-        # regression floor to defend below 5 known FPs; a future fix for that
-        # class should raise this number, not just avoid lowering it.
-        self.assertAlmostEqual(precision, 80 / 85, places=4)
+        # Iteration 6 fixed all 5 documented false positives on this subset
+        # (bucket-vs-cumulative-threshold x2, bucket-granularity, adjacent-
+        # bucket/en-dash, fiscal-period+direction) with zero same-pairs lost.
+        # Precision floor raised from 94.1% to the now-achieved 100%.
+        self.assertAlmostEqual(precision, 1.0, places=4)
 
 
 class Iter4DiscriminatorTests(unittest.TestCase):
@@ -1197,6 +1201,108 @@ class ActorScopedSubjectTests(unittest.TestCase):
             "Will Donald J. Trump Jr. win the 2028 Iowa Republican caucus?", "",
         )
         self.assertNotIn("actor-scoped subject mismatch", " ".join(d.reasons))
+
+
+class Iter6DiscriminatorTests(unittest.TestCase):
+    """Unit tests for the iteration-6 narrow structural discriminators (see
+    contract_spec.py's iteration-6 comment block) and the matcher._ascii_lower
+    en-dash fix they depend on."""
+
+    # --- en-dash fix (matcher.py) -------------------------------------------
+
+    def test_ascii_lower_folds_en_and_em_dash_to_hyphen(self):
+        self.assertEqual(_ascii_lower("2.0–2.5%"), "2.0-2.5%")
+        self.assertEqual(_ascii_lower("2.0—2.5%"), "2.0-2.5%")
+
+    def test_num_range_parses_en_dash_range(self):
+        self.assertEqual(_num_range("GDP growth 2.0–2.5%"), (2.0, 2.5))
+
+    def test_adjacent_en_dash_buckets_rejected_end_to_end(self):
+        # The exact depth-rescued FP: without the en-dash fix, _num_range
+        # can't parse the Polymarket side at all, so the pre-existing
+        # adjacent-bucket gate never fires.
+        d = decide_full(
+            "1.0–1.5%", "GDP growth in 2026",
+            "GDP growth in 2026? 0.6% to 1.0%", "US real GDP growth in 2026?",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("numeric range mismatch", d.reasons[0])
+
+    # --- bucket vs cumulative threshold --------------------------------------
+
+    def test_is_cumulative_bucket(self):
+        self.assertTrue(_is_cumulative_bucket("90° or below"))
+        self.assertTrue(_is_cumulative_bucket("$150k or above"))
+        self.assertFalse(_is_cumulative_bucket("90-91°F"))
+        self.assertFalse(_is_cumulative_bucket("Below 5.15%"))  # no bare "or below/above"
+
+    def test_bucket_vs_cumulative_threshold_rejected(self):
+        d = decide_full(
+            "90-91°F", "Highest temperature in Houston on September 14?",
+            "Will the maximum temperature be <91° on Sep 14, 2026? 90° or below",
+            "Highest temperature in Houston on Sep 14, 2026?",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("numeric bucket vs cumulative threshold", d.reasons[0])
+
+    def test_two_cumulative_thresholds_not_rejected_by_this_gate(self):
+        d = decide_full(
+            "Below 5.15%", "30Y Treasury yield",
+            "Will the 30Y U.S. Treasury yield be below 5.15% by Sep 30, 2026? 5.14% or below", "",
+        )
+        self.assertNotIn("numeric bucket vs cumulative threshold", " ".join(d.reasons))
+
+    def test_two_ranges_not_rejected_by_this_gate(self):
+        d = decide_full("78-79F", "", "78 to 79F", "")
+        self.assertNotIn("numeric bucket vs cumulative threshold", " ".join(d.reasons))
+
+    # --- week bucket granularity ---------------------------------------------
+
+    def test_week_bucket(self):
+        self.assertEqual(_week_bucket("Week 1"), (1, 1))
+        self.assertEqual(_week_bucket("Week 1 to Week 2"), (1, 2))
+        self.assertIsNone(_week_bucket("no week mentioned here"))
+
+    def test_week_bucket_granularity_mismatch_rejected(self):
+        d = decide_full(
+            "Week 1", "Pro Football: Fernando Mendoza named Raiders starting QB by...?",
+            "Fernando Mendoza first start: Week 1 to Week 2",
+            "When will Fernando Mendoza start his first Pro Football game?",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("week bucket mismatch", d.reasons[0])
+
+    def test_same_week_bucket_not_rejected_by_this_gate(self):
+        d = decide_full("Week 1 winner", "", "Winner of Week 1", "")
+        self.assertNotIn("week bucket mismatch", " ".join(d.reasons))
+
+    # --- fiscal period + direction -------------------------------------------
+
+    def test_fiscal_period(self):
+        self.assertEqual(_fiscal_period("GDP growth in Q4 2026"), "q4")
+        self.assertEqual(_fiscal_period("Full-year GDP growth"), "annual")
+        self.assertIsNone(_fiscal_period("GDP growth in 2026"))
+
+    def test_annual_vs_quarter_direction_mismatch_rejected(self):
+        d = decide_full(
+            "Negative GDP growth in 2026?", "Negative GDP growth in 2026?",
+            "Will **real GDP** increase by more than 4.0% in Q4 2026? Above 4.0%",
+            "US real GDP growth in Q4 2026?",
+        )
+        self.assertFalse(d.match)
+        self.assertTrue(
+            any("fiscal period mismatch" in r or "direction mismatch" in r for r in d.reasons)
+        )
+
+    def test_same_fiscal_period_not_rejected_by_this_gate(self):
+        d = decide_full(
+            "GDP growth in Q4 2026?", "", "GDP growth in Q4 2026? Above 2.0%", "",
+        )
+        self.assertNotIn("fiscal period mismatch", " ".join(d.reasons))
+
+    def test_no_explicit_period_either_side_not_rejected_by_this_gate(self):
+        d = decide_full("GDP growth in 2026?", "", "GDP growth in 2026? Above 2.0%", "")
+        self.assertNotIn("fiscal period mismatch", " ".join(d.reasons))
 
 
 if __name__ == "__main__":
