@@ -9,5 +9,7 @@ Start here when navigating the repository documentation.
 - [API Clients](API_CLIENTS.md): Kalshi and Polymarket wrapper behavior.
 - [Operations](OPERATIONS.md): the scheduled alerter, AI verifier, operator tools.
 - [Expansion Proposal](EXPANSION_PROPOSAL.md): measured recall gaps and the plan to match more pairs.
+- [Coverage](COVERAGE.md): how discover() ingests 100% of both open catalogs, exclusions, before/after.
+- [Coverage iterations](history/COVERAGE_ITERATIONS.md): per-iteration log (what changed, comparison, next fixes).
 - [history/](history/): matcher validation runs, fix logs, redesign notes, diagnosis log.
 

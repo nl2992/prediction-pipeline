@@ -54,11 +54,74 @@ Run the live probes from the repo root as modules, e.g. `python -m tools.smoke_t
 ## Quick start
 
 ```bash
-pip install -r requirements.txt   # only `requests` is required
+pip install -r requirements.txt                          # runtime: only `requests` is required
+pip install -r requirements.txt -r requirements-dev.txt  # + pytest, ruff, fastapi, … (what CI installs)
 
-# Verify connectivity
-python -m tools.smoke_test
+python -m tools.smoke_test          # 1. verify connectivity to both exchanges
+python discover.py --show-prices    # 2. full cross-exchange scan, matched pairs + live prices
+python alerter.py --once --dry-run  # 3. one production cycle, email printed instead of sent
+```
 
+All commands run from the repo root. Every script is public-data only unless a
+flag says otherwise; nothing places an order without `--execute --no-dry-run`.
+
+---
+
+## Terminal commands
+
+### At a glance
+
+| Command | What it does | Network | Writes |
+|---|---|---|---|
+| `python discover.py` | Organic scan of **both full catalogs** → matched pairs | yes | `--output` JSON |
+| `python monitor.py` | Poll → match → arb → CLOB-verify, optionally execute | yes | `signals.jsonl`, `monitor.log` |
+| `python alerter.py` | Production loop: full scan → email executable arbs | yes | `alert_*.json[l]`, `ai_verify.jsonl` |
+| `python pipeline.py` | Raw ingest of both exchanges (+ optional arb pass) | yes | `./output/*.json` |
+| `python fed_rate_spread.py` | Fed-rate ladder spread + monotonicity arb check | yes | — |
+| `python server.py` | FastAPI dashboard on `http://localhost:8000` | yes | — |
+| `python ops.py` | Health + opportunities + matcher QA in one view | no | — |
+| `python health.py [LOG]` | Alerter status; exit 0 = OK, 1 = DEGRADED | no | — |
+| `python signal_report.py [FILE]` | Digest of emailed arbs (`alert_signals.jsonl`) | no | — |
+| `python ai_verify_report.py [FILE]` | Digest of AI verdicts (`ai_verify.jsonl`) | no | — |
+| `python ai_verify.py "A" "B"` | One-off LLM settlement-equivalence check | DeepSeek | `ai_verify.jsonl` |
+| `python -m tools.<probe>` | Live validation probes (see below) | yes | — |
+| `python -m pytest -q` | Hermetic test suite (no network, no secrets) | no | — |
+
+### `discover.py` — full-catalog cross-exchange discovery
+
+The production scan path (the alerter and `monitor.py --discover` call it).
+Ingests **100% of both open catalogs**: Kalshi `/events?with_nested_markets=true`
+plus a `/markets` orphan sweep, and Polymarket `/events/keyset` plus a
+`/markets/keyset` orphan sweep. It prints a `[coverage]` line per venue, then
+matches them. See [docs/COVERAGE.md](docs/COVERAGE.md).
+
+```bash
+python discover.py                                   # everything, no limits (~5-6 min, sweep-bound)
+python discover.py --no-market-sweep                 # skip orphan sweeps (~2 min, >99.7% coverage)
+python discover.py --category sports --days 7        # sports closing within a week
+python discover.py --show-prices --output pairs.json # fetch live books, save pairs
+python discover.py --coverage-json cov.json          # write the per-venue coverage accounting
+python discover.py --max-events 500 --poly-scan 5000 # bounded (faster) scan
+```
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--category {all,election,sports,economic,political,pop}` | `all` | Event category filter |
+| `--days N` | none | Only events closing within N days |
+| `--min-sim F` | `0.30` | Minimum Jaccard title similarity for a pair |
+| `--show-prices` | off | Fetch live order books for matched pairs |
+| `--max-events N` | none | Cap on Kalshi events scanned |
+| `--poly-scan N` | none | Cap on Polymarket events scanned |
+| `--kalshi-workers N` | `6` | Threads for the (rare) per-event Kalshi fallback fetch |
+| `--no-market-sweep` | sweeps on | Skip both orphan sweeps (faster; misses markets whose parent event isn't listed) |
+| `--coverage-json PATH` | none | Write ingested / excluded-by-reason counts per venue |
+| `--enrich-margin F` | off | With `--show-prices`: fetch live books only for endorsed pairs whose catalog edge is ≥ −F. Rarely useful: batched Kalshi books make enriching every pair take ~4 s |
+| `--no-enrich-margin` | default | Fetch live books for every v2-endorsed pair |
+| `--output PATH` | none | Write matched pairs as JSON |
+
+### `monitor.py` — continuous arb monitor
+
+```bash
 # One-off scan — Fed rate markets, compare across both exchanges
 python monitor.py --once \
   --kalshi-series KXFED \
@@ -66,14 +129,157 @@ python monitor.py --once \
   --max-close-delta-hours 9999 \
   --min-profit-pct 0 --no-verify --show-unverified
 
-# Continuous monitor — scan every 5 minutes, write live signals
-python monitor.py --interval 300 \
-  --kalshi-series KXFED \
-  --poly-keywords "federal funds" "fed rate" "upper bound" \
-  --max-close-delta-hours 9999
+# Continuous monitor over the full organic catalog, every 5 minutes
+python monitor.py --discover --interval 300
 
-# Fed rate deep-dive: implied distribution + monotonicity arb check
-python fed_rate_spread.py
+# A single Polymarket event vs a single Kalshi event
+python monitor.py --once --poly-event-slug ky-04-republican-primary-winner --kalshi-event <TICKER>
+```
+
+```
+Scan control:
+  --once                      Single scan then exit (exit 1 on a scan error)
+  --interval INT              Seconds between scans (default: 300)
+
+Market selection (fixed-series mode):
+  --poly-limit INT            Polymarket markets per scan (default: 50)
+  --kalshi-limit INT          Kalshi markets per scan (default: 50)
+  --kalshi-series STR         Kalshi series ticker, e.g. KXFED
+  --kalshi-event STR          Kalshi event ticker
+  --poly-event-slug STR       All markets of one Polymarket event (beats --poly-keywords)
+  --poly-keywords KW ...      Substring keywords to search the Polymarket catalog
+
+Market selection (organic mode — uses discover.py):
+  --discover                  Scan both full catalogs instead of fixed series
+  --discover-category STR     all | election | sports | economic | political | pop
+  --discover-days INT         Horizon in days (default: no limit)
+  --discover-max-events INT   Max Kalshi events per cycle (default: no limit)
+  --discover-market-sweep     Include the orphan sweeps (off by default: ~290 s)
+
+Matching:
+  --min-match-sim FLOAT       Minimum Jaccard similarity (default: 0.30)
+  --max-close-delta-hours F   Close-time proximity window (default: 72). A scoring
+                              bonus, never a hard exclusion (Kalshi sports markets
+                              carry far-out contractual expiry dates).
+
+Arb thresholds:
+  --min-profit-pct FLOAT      Minimum net profit % (default: 0.5)
+  --fee-poly FLOAT            Polymarket fee (default: 0.02)
+  --fee-kalshi FLOAT          Kalshi fee (default: 0.07)
+
+CLOB verification:
+  --no-verify                 Skip the live CLOB recheck (not recommended)
+
+Execution:
+  --execute                   Auto-execute verified signals
+  --dry-run                   Log orders only, no real placement (default)
+  --no-dry-run                Live placement (requires credentials in env)
+  --max-position FLOAT        Max USD per two-leg trade (default: 100)
+  --size-contracts FLOAT      Contracts per leg (default: 10)
+
+Output:
+  --signals-file PATH         JSONL signal file (default: signals.jsonl)
+  --log-file PATH             Log file, appended (default: monitor.log)
+  --log-level STR             DEBUG | INFO | WARNING | ERROR (default: INFO)
+  --show-unverified           Print CLOB-failed signals too
+```
+
+### `alerter.py` — production email alerter
+
+Runs the full `discover` scan, prices both fee models, and emails pairs whose net
+edge clears the threshold. Details, config keys and failure handling are in
+[docs/OPERATIONS.md](docs/OPERATIONS.md).
+
+```bash
+python alerter.py --once --dry-run   # one cycle, print the email instead of sending
+python alerter.py --once             # one cycle, send; exit 1 on a cycle error
+python alerter.py --interval 900     # loop forever, one cycle every 15 min
+```
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--interval SEC` | `300` | Seconds between cycles |
+| `--min-edge F` | `0.0001` | Min net edge ($ per $1 payout, accurate Kalshi fee) |
+| `--realert-hours H` | `6` | Re-email an unchanged signal after H hours |
+| `--min-size N` | `20` | Min best-level depth on both legs (`0` = off) |
+| `--once` | off | Run one cycle and exit |
+| `--dry-run` | off | Never send email; print instead |
+
+Email settings come from `alert_config.json` (gitignored) or env vars
+`ALERT_SMTP_HOST`, `ALERT_SMTP_PORT`, `ALERT_SMTP_USER`, `ALERT_SMTP_PASS`,
+`ALERT_FROM`, `ALERT_RECIPIENTS` (comma-separated; env wins). Without credentials
+the alerter still runs and just prints signals. The AI gate reads `DEEPSEEK_API_KEY`.
+
+### `pipeline.py` — raw ingest
+
+```bash
+python pipeline.py --kalshi-series KXFED --poly-limit 50 --arb
+python pipeline.py --kalshi-event <TICKER> --no-poly-books --output-dir ./output
+```
+
+Flags: `--poly-limit` / `--kalshi-limit` (default 20), `--no-poly-books`,
+`--no-kalshi-books` (top-of-book only), `--kalshi-series`, `--kalshi-event`,
+`--output-dir` (default `./output`), `--arb`, `--fee-poly`, `--fee-kalshi`,
+`--min-profit-pct` (default 0.0), `--log-level`.
+
+### `fed_rate_spread.py` — Fed-rate ladder analysis
+
+```bash
+python fed_rate_spread.py                        # auto-detects next FOMC meeting
+python fed_rate_spread.py --event KXFED-26JUN    # a specific meeting
+python fed_rate_spread.py --lower-bound 3.50 --upper-bound 3.75 --fee 0.02
+```
+
+Also `--poly-timeout` (default 15 s) and `--kalshi-timeout` (default 20 s).
+
+### Dashboard
+
+```bash
+pip install fastapi uvicorn
+python server.py          # http://localhost:8000 — /api/status checks both venues
+```
+
+### Operator tools (read local logs only — no network)
+
+```bash
+python ops.py                        # everything below in one view; exit 0 healthy / 1 degraded
+python health.py                     # STATUS: OK | DEGRADED (reads alerter_cron.log)
+python health.py path/to/alerter_cron.log
+python signal_report.py              # recurring / richest / best-annualised arbs
+python ai_verify_report.py           # AI verdict digest: matcher false-positives vs settlement drops
+python ai_verify.py "Poly market text" "Kalshi market text"   # needs DEEPSEEK_API_KEY
+```
+
+`python ops.py || <notify>` works as a watchdog.
+
+### Live probes (`tools/`)
+
+Excluded from the hermetic suite; they hit both live APIs.
+
+```bash
+python -m tools.smoke_test                                   # connectivity + response shapes
+python -m tools.validate_coverage [--json] [--no-sweep]      # ingestion vs ground truth; exit 0 iff no gaps
+python -m tools.validate_live --min-pairs 20 --max-events 200 [--json]
+python -m tools.validate_recall --production 0.30 --relaxed 0.20 --max-events 200 [--json]
+python -m tools.validate_ingestion --prod-cap 200 --wide-cap 500 [--json]
+python -m tools.validate_matcher --n 20 --offset 0 --min-sim 0.30 [--json]
+```
+
+| Probe | Question it answers |
+|---|---|
+| `smoke_test` | Can we reach both venues and parse their books? |
+| `validate_coverage` | Does ingestion cover 100% of both venues' open markets? (misses split into drift vs real gaps) |
+| `validate_live` | Do live `discover` pairs survive the v2 referee? |
+| `validate_recall` | How many more pairs would a lower similarity threshold find? |
+| `validate_ingestion` | How many more pairs would a wider event cap find? |
+| `validate_matcher` | Does the matcher still pair the curated fixture set? |
+
+### Tests and lint (what CI runs)
+
+```bash
+python -m ruff check --select F,E9,B .   # real-bug lint categories only
+python -m pytest -q                      # hermetic: no network, no secrets
+python -m pytest tests/test_discover.py -q -k Nested   # a subset
 ```
 
 ---
@@ -84,15 +290,17 @@ python fed_rate_spread.py
 
 **Polymarket** — two public APIs:
 - **Gamma API** (`gamma-api.polymarket.com`): market discovery.  
-  `tag_slug` and `_q` query params are broken on Gamma; the client paginates  
-  the full catalog and filters titles client-side when `--poly-keywords` is given.
+  Full-catalog scans walk `/events/keyset` by cursor — offset pagination on
+  `/events` is rejected with HTTP 422 past offset ~2100. `tag_slug` and `_q`
+  are broken on Gamma, so titles are filtered client-side.
 - **CLOB API** (`clob.polymarket.com`): live order books via `POST /books`  
   (batch token lookup — one request for all markets in a scan).
 
 **Kalshi** — one public API:
 - `api.elections.kalshi.com/trade-api/v2`  
-  `/markets` for discovery (filter by `series_ticker` or `event_ticker`),  
-  `/markets/{ticker}/orderbook` for full depth (public, no auth).
+  `/events?with_nested_markets=true` for full-catalog discovery (every open
+  event with its markets embedded, ~60 pages), `/markets` for series/event
+  lookups, `/markets/{ticker}/orderbook` for full depth (public, no auth).
 
 All data is normalised into `MarketSnapshot` / `OrderBook` objects:
 
@@ -192,55 +400,6 @@ python fed_rate_spread.py --event KXFED-26JUN    # target specific meeting
 > Polymarket "reach X% before 2027" markets resolve end-of-year.  
 > These are **not directly arbitrageable** but are comparable for spread analysis.  
 > Use `--max-close-delta-hours 9999` in `monitor.py` to surface them anyway.
-
----
-
-## Monitor CLI reference
-
-```
-python monitor.py [flags]
-
-Scan control:
-  --once                  Single scan then exit
-  --interval INT          Seconds between scans (default: 300)
-
-Market selection:
-  --poly-limit INT        Polymarket markets per scan (default: 50)
-  --kalshi-limit INT      Kalshi markets per scan (default: 50)
-  --kalshi-series STR     Kalshi series ticker, e.g. KXFED
-  --kalshi-event STR      Kalshi event ticker
-  --poly-keywords KW ...  Substring keywords to search Polymarket catalog
-
-Matching:
-  --min-match-sim FLOAT       Minimum Jaccard similarity (default: 0.25)
-  --max-close-delta-hours FLOAT
-                              Normalisation window for close-time proximity
-                              scoring (default: 72). Pairs beyond this window
-                              are scored on title similarity alone; they are
-                              never hard-excluded (sports markets on Kalshi
-                              carry a contractual far-out expiry date).
-
-Arb thresholds:
-  --min-profit-pct FLOAT  Minimum net profit % (default: 0.5)
-  --fee-poly FLOAT        Polymarket fee (default: 0.02)
-  --fee-kalshi FLOAT      Kalshi fee (default: 0.07)
-
-CLOB verification:
-  --no-verify             Skip live CLOB recheck (not recommended)
-
-Execution:
-  --execute               Auto-execute verified signals
-  --dry-run               Log orders only, no real placement (default)
-  --no-dry-run            Live placement (requires credentials in env)
-  --max-position FLOAT    Max USD per two-leg trade (default: 100)
-  --size-contracts FLOAT  Contracts per leg (default: 10)
-
-Output:
-  --signals-file PATH     JSONL signal file (default: signals.jsonl)
-  --log-file PATH         Log file (default: monitor.log)
-  --log-level STR         DEBUG | INFO | WARNING (default: INFO)
-  --show-unverified       Print CLOB-failed signals too
-```
 
 ---
 
