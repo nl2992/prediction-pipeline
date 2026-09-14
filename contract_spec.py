@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING
 
 from matcher import (
     _ascii_lower,
+    _bare_subject_name,
     _close_delta_hours,
     _contract_actions,
     _contract_text,
@@ -42,6 +43,7 @@ from matcher import (
     _jurisdictions,
     _known_orgs,
     _known_products,
+    _matchup_signature,
     _month_names,
     _monetary_direction,
     _named_entities,
@@ -79,6 +81,7 @@ class ContractSpec:
     entities: frozenset[str]
     winner_subject: frozenset[str]
     selected_names: frozenset[str]
+    bare_subject_names: frozenset[str]
     orgs: frozenset[str]
     products: frozenset[str]
     domains: frozenset[str]
@@ -95,6 +98,7 @@ class ContractSpec:
     time_scopes: frozenset[str]
     beat_order: tuple[str, str] | None  # ordered (winner, loser) for "A beat B"
     close_time: str | None
+    settle_src: frozenset[str]          # compact settlement-source tags (see settlement_source())
     raw: str = field(repr=False, default="")
 
 
@@ -225,6 +229,482 @@ def _polarity(text: str) -> bool:
     return False
 
 
+_STAGE_PATTERNS: tuple[tuple[str, re.Pattern], ...] = (
+    ("seed", re.compile(r"#\s*\d+\s*seed\b|\b\d+(?:st|nd|rd|th)\s+seed\b|\bwild\s*card\b")),
+    ("division", re.compile(r"\bdivision\b|\b(?:afc|nfc)\s+(?:east|west|north|south)\b")),
+    ("conference", re.compile(r"\bconference\b")),
+)
+
+
+def _playoff_stage(text: str) -> str | None:
+    """Sports tournament STAGE the market is about: a specific playoff seed, a
+    division title, or a conference championship. These are mutually exclusive
+    and NOT interchangeable — winning a division is a materially different
+    (and easier) bar than winning the conference, and being seeded #N is
+    different again from winning anything.
+
+    Structural fix for an audit FP class: an NHL "2027 Eastern Conference
+    Champion" market phantom-matched a "Metropolitan Division Winner" market
+    on the same team (5 pairs, run audit_2026-09-14), and an "AFC West
+    Champion" market (a division, named by conference+direction per NFL
+    convention) phantom-matched an "AFC #5 Seed" market. Matches when both
+    sides name the SAME stage; silent (None) when a side doesn't use any of
+    these words, so plain "X wins the championship" pairs are unaffected.
+    """
+    low = _ascii_lower(text)
+    for tag, rx in _STAGE_PATTERNS:
+        if rx.search(low):
+            return tag
+    return None
+
+
+_RANK_RE = re.compile(r"#\s*(\d+)\b")
+
+
+def _rank_number(text: str) -> int | None:
+    """The '#N' rank a market is about ('#1 Searched Person', 'AFC #5 Seed').
+    Two different rank numbers are different contracts even when everything
+    else (subject, event, close date) lines up — run audit caught '#1 Searched
+    Person on Google (US)' phantom-matched to a '#2' rank market for the same
+    person/event family."""
+    m = _RANK_RE.search(text)
+    return int(m.group(1)) if m else None
+
+
+_GROUP_FROM_RE = re.compile(r"\b(?:a|any)\s+(?:team|player|company|country|state|coach)\s+from\b")
+
+
+def _group_bucket_jurisdictions(text: str) -> frozenset[str] | None:
+    """Jurisdictions named by an aggregate GROUP phrasing ('a team from
+    Texas wins...'), or None if the text isn't phrased as a group bucket.
+
+    A group-bucket market settles YES on ANY member of the named group — a
+    structurally broader (and different) contract than a market naming one
+    specific member. Matching them mis-signals a real settlement difference:
+    run audit caught 'a team from Texas' phantom-matched to a market about
+    the Atlanta franchise specifically (Atlanta is not a Texas team).
+    """
+    if not _GROUP_FROM_RE.search(_ascii_lower(text)):
+        return None
+    return frozenset(_jurisdictions(text))
+
+
+# ---------------------------------------------------------------------------
+# Iteration-3 discriminators — narrow structural fixes for the remaining
+# endorsed false-positive classes from the 2026-09-14 audit (see
+# docs/history/COVERAGE_ITERATIONS.md, iteration 3). Each is a small, targeted
+# regex/lookup — not a generic entity-collision gate — because a previous
+# generic "same subject, different context" gate was built and REVERTED after
+# it falsely rejected ~41 true same-pairs on noisy multi-word entity glomming.
+# ---------------------------------------------------------------------------
+
+# Major-league team nicknames, used ONLY to disambiguate a same-PERSON market
+# by the team/org each side names (e.g. "Rocco Baldelli" as Phillies manager
+# vs as Red Sox manager). Deliberately a small closed gazetteer of proper
+# multi-word franchise names rather than generic capitalized-run extraction,
+# so it can't glom onto unrelated text the way the reverted gate did. MLB only
+# for now (the observed audit FP class); safe to extend if new classes appear.
+# Maps every recognised spelling (full "city + nickname" and bare nickname) to
+# one CANONICAL nickname, so "New York Yankees" and "Yankees" collapse to the
+# same team for comparison instead of counting as two different ones.
+_TEAM_ALIASES: dict[str, str] = {}
+for _full, _nick in (
+    ("boston red sox", "red sox"), ("new york yankees", "yankees"),
+    ("new york mets", "mets"), ("los angeles dodgers", "dodgers"),
+    ("los angeles angels", "angels"), ("san francisco giants", "giants"),
+    ("san diego padres", "padres"), ("chicago cubs", "cubs"),
+    ("chicago white sox", "white sox"), ("philadelphia phillies", "phillies"),
+    ("atlanta braves", "braves"), ("miami marlins", "marlins"),
+    ("washington nationals", "nationals"), ("milwaukee brewers", "brewers"),
+    ("st louis cardinals", "cardinals"), ("pittsburgh pirates", "pirates"),
+    ("cincinnati reds", "reds"), ("cleveland guardians", "guardians"),
+    ("detroit tigers", "tigers"), ("minnesota twins", "twins"),
+    ("kansas city royals", "royals"), ("houston astros", "astros"),
+    ("texas rangers", "rangers"), ("seattle mariners", "mariners"),
+    ("oakland athletics", "athletics"), ("tampa bay rays", "rays"),
+    ("toronto blue jays", "blue jays"), ("baltimore orioles", "orioles"),
+    ("colorado rockies", "rockies"), ("arizona diamondbacks", "diamondbacks"),
+):
+    _TEAM_ALIASES[_full] = _nick
+    _TEAM_ALIASES[_nick] = _nick
+# Longest spelling first, so "boston red sox" matches before the bare "red sox"
+# substring within it (avoids double-counting one mention as two teams).
+_KNOWN_TEAMS: tuple[str, ...] = tuple(
+    sorted(_TEAM_ALIASES, key=len, reverse=True)
+)
+
+
+def _team_orgs(text: str) -> frozenset[str]:
+    low = _ascii_lower(text)
+    found: set[str] = set()
+    remaining = low
+    for spelling in _KNOWN_TEAMS:
+        if re.search(rf"\b{re.escape(spelling)}\b", remaining):
+            found.add(_TEAM_ALIASES[spelling])
+            # Blank out this span so the bare nickname inside a longer,
+            # already-matched full name isn't counted a second time.
+            remaining = re.sub(rf"\b{re.escape(spelling)}\b", " ", remaining, count=1)
+    return frozenset(found)
+
+
+# Known college-football award FAMILIES. These are mutually-exclusive
+# terminal honors — a Heisman market and a Walter Camp market on the same
+# player are different contracts even though both reduce to "<player> wins
+# the award" once the award name is stripped (audit: Dante Moore / Bo Jackson
+# / Julian Sayin all phantom-matched across Heisman <-> Walter Camp/Doak Walker).
+_AWARD_FAMILIES: tuple[tuple[str, re.Pattern], ...] = (
+    ("heisman", re.compile(r"\bheisman\b")),
+    ("walter_camp", re.compile(r"\bwalter camp\b")),
+    ("doak_walker", re.compile(r"\bdoak walker\b")),
+    ("davey_obrien", re.compile(r"\bdavey o'?brien\b")),
+    ("maxwell", re.compile(r"\bmaxwell award\b")),
+    ("outland", re.compile(r"\boutland trophy\b")),
+    ("biletnikoff", re.compile(r"\bbiletnikoff\b")),
+    ("butkus", re.compile(r"\bbutkus\b")),
+    ("thorpe", re.compile(r"\bjim thorpe award\b")),
+    ("lombardi", re.compile(r"\blombardi award\b")),
+    ("unitas", re.compile(r"\bunitas\b")),
+)
+
+
+def _award_family(text: str) -> str | None:
+    low = _ascii_lower(text)
+    for tag, rx in _AWARD_FAMILIES:
+        if rx.search(low):
+            return tag
+    return None
+
+
+# Settlement-period markers: a halftime/1st-half result and a full-match
+# moneyline/spread/total are different contracts even on the same fixture
+# (audit: "Al-Shamal vs. Al-Ittihad - Halftime Result" phantom-matched
+# "Al-Ittihad wins by more than N goals?", a full-match spread).
+_HALFTIME_RE = re.compile(r"\bhalf\s*-?\s*time\b|\b1st\s+half\b|\bfirst\s+half\b")
+
+
+def _is_halftime(text: str) -> bool:
+    return bool(_HALFTIME_RE.search(_ascii_lower(text)))
+
+
+# Explicit "1st half" vs "2nd half" result markers — a stricter, bet-type
+# independent companion to the halftime-vs-full-match gate above. That gate
+# only fires when the non-halftime side resolves to a classifiable
+# margin/total/moneyline bet_type, which a bare single-word outcome title
+# ("Al-Shamal") never does — so a "Second Half Result" market on one side
+# could otherwise bridge to a "First Half" market on the other (iteration-4
+# single-entity bridge exposed this: "Al-Shamal vs. Al-Ittihad Club - Second
+# Half Result" vs "Al-Shamal vs Al-Ittihad: First Half Winner", same two
+# teams, different half). Fires whenever BOTH sides name an explicit half
+# and they disagree, independent of bet_type.
+_SECOND_HALF_RE = re.compile(r"\b(?:2nd|second)\s+half\b")
+
+
+def _half_number(text: str) -> int | None:
+    low = _ascii_lower(text)
+    if _SECOND_HALF_RE.search(low):
+        return 2
+    if _HALFTIME_RE.search(low):
+        return 1
+    return None
+
+
+# Fed/central-bank rate LEVEL ("Fed Rate hit 5.0%") vs number-of-CUTS/CHANGES
+# ("number of rate changes ... be exactly 5") are different measurements of
+# the same underlying process, not the same contract (audit: "^ 5.0%" / "What
+# will Fed Rate hit before 2027?" phantom-matched a rate-change-COUNT market).
+_RATE_COUNT_RE = re.compile(
+    r"\bnumber of (?:fed |federal (?:funds )?)?rate (?:changes|cuts|hikes)\b"
+    r"|\brate (?:cuts|hikes|changes) (?:happen|occur)\b"
+)
+
+
+def _is_rate_count(text: str) -> bool:
+    return bool(_RATE_COUNT_RE.search(_ascii_lower(text)))
+
+
+# "Will <actor> <verb> <object>?" — a small curated verb list where the same
+# actor performing the same VERB on two different OBJECTS is a different
+# contract (audit: "Will Trump nationalize elections?" phantom-matched "Will
+# trump nationalize SpaceX?" — same actor+verb, unrelated object). Narrowly
+# scoped to this literal phrasing and a short verb list so it can't glom onto
+# unrelated text the way the reverted generic gate did.
+_ACTOR_VERB_OBJECT_RE = re.compile(
+    r"\bwill\s+([a-z][\w.'-]*(?:\s+[a-z][\w.'-]*)?)\s+"
+    r"(nationalize|ban|acquire|buy|sell|invade|annex|sanction|deport|fire|"
+    r"pardon|sue|tax|regulate|dissolve)\s+"
+    r"(?:the\s+)?([\w\s'.-]*?)\s*\?",
+    re.IGNORECASE,
+)
+
+
+def _actor_verb_object(text: str) -> tuple[str, str, frozenset[str]] | None:
+    m = _ACTOR_VERB_OBJECT_RE.search(text)
+    if not m:
+        return None
+    actor = _ascii_lower(m.group(1)).strip()
+    verb = _ascii_lower(m.group(2)).strip()
+    obj = frozenset(_tokens(m.group(3)))
+    if not actor or not obj:
+        return None
+    return (actor, verb, obj)
+
+
+# bps bucket boundaries: "25 bps decrease" (exact) vs "cut more than 25bps"
+# (open-ended, excludes exactly 25) or "50+ bps increase" vs "hike 1-25bps"
+# are non-overlapping buckets even though they share direction and most
+# tokens (audit: two Bank of England pairs phantom-matched this way).
+_BPS_RANGE_RE = re.compile(r"(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*bps")
+_BPS_MORE_RE = re.compile(r"(?:more than|over|>)\s*(\d+(?:\.\d+)?)\s*bps")
+_BPS_ATLEAST_RE = re.compile(r"(?:at least|no less than|>=|≥)\s*(\d+(?:\.\d+)?)\s*bps")
+_BPS_PLUS_RE = re.compile(r"(\d+(?:\.\d+)?)\s*\+\s*bps")
+_BPS_LESS_RE = re.compile(r"(?:less than|under|up to|<)\s*(\d+(?:\.\d+)?)\s*bps")
+_BPS_EXACT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*bps")
+_BPS_DECREASE_RE = re.compile(r"\b(decrease|decreases|cut|cuts|lower|lowers|drop|drops|ease|eases)\b")
+_BPS_INCREASE_RE = re.compile(r"\b(increase|increases|hike|hikes|raise|raises)\b")
+
+
+def _bps_bucket(text: str) -> tuple[str | None, float, float] | None:
+    low = _ascii_lower(text)
+    if "bps" not in low:
+        return None
+    if _BPS_DECREASE_RE.search(low):
+        direction = "decrease"
+    elif _BPS_INCREASE_RE.search(low):
+        direction = "increase"
+    else:
+        direction = None
+    m = _BPS_RANGE_RE.search(low)
+    if m:
+        return (direction, float(m.group(1)), float(m.group(2)))
+    m = _BPS_ATLEAST_RE.search(low)
+    if m:
+        return (direction, float(m.group(1)), float("inf"))
+    m = _BPS_MORE_RE.search(low)
+    if m:
+        return (direction, float(m.group(1)) + 0.01, float("inf"))
+    m = _BPS_PLUS_RE.search(low)
+    if m:
+        return (direction, float(m.group(1)), float("inf"))
+    m = _BPS_LESS_RE.search(low)
+    if m:
+        return (direction, 0.0, float(m.group(1)) - 0.01)
+    m = _BPS_EXACT_RE.search(low)
+    if m:
+        v = float(m.group(1))
+        return (direction, v, v)
+    return None
+
+
+# Weekly-recurring markets ("Top ... this week?") vs a market with a
+# materially different (month-end/longer) close horizon are different
+# contracts even when the subject overlaps a lot (audit: "Top Text to Image
+# AI this week? OpenAI" phantom-matched a "best Text-to-Image AI end of
+# October" market — same subject, weekly-recurring vs month-scoped).
+_RECURRING_WEEK_RE = re.compile(r"\bthis week\b|\bweekly\b")
+
+
+def _is_weekly_recurring(text: str) -> bool:
+    return bool(_RECURRING_WEEK_RE.search(_ascii_lower(text)))
+
+
+# ---------------------------------------------------------------------------
+# Iteration-4 discriminators — narrow structural fixes for the false-positive
+# classes found in the fresh 2026-09-14 live audit (tests/fixtures/
+# endorsed_audit_iter4.json), since the original 2026-09-14 fixture's false
+# positives were mostly fixed by iteration 3 and stopped finding new problems.
+# Same philosophy as iteration 3: small, targeted checks, never a generic
+# entity-collision gate (one of those was tried earlier in this project and
+# reverted for breaking ~41 true pairs).
+# ---------------------------------------------------------------------------
+
+# A "Runner-Up" market and a "Champion"/"Winner" market on the same
+# competition are mutually exclusive outcomes, not the same contract (audit:
+# three USL Championship pairs — New Mexico United, Charleston Battery,
+# Colorado Springs Switchbacks — phantom-matched a "2026 Runner-Up" market
+# on Polymarket to Kalshi's "win the USL Championship" market for the same
+# club).
+_RUNNER_UP_RE = re.compile(r"\brunner[- ]?up\b")
+
+
+def _is_runner_up_market(text: str) -> bool:
+    return bool(_RUNNER_UP_RE.search(text.lower()))
+
+
+# A single fixture's match-winner market ("Team A vs Team B") and a market on
+# winning the whole multi-fixture TOURNAMENT/championship are different
+# contracts even when they name the same team (audit: "Caribbean Premier
+# League: Antigua And Barbuda Falcons vs Guyana Amazon Warriors" — a
+# specific-match title — phantom-matched "Will Antigua And Barbuda Falcons
+# win the 2026 Caribbean Premier League championship?", a tournament-winner
+# market). Detected structurally: one side's text reduces to a bare "X vs Y"
+# matchup signature (matcher._matchup_signature), the other explicitly says
+# "win the ... championship/cup".
+_TOURNAMENT_WIN_RE = re.compile(r"\bwin(?:s|ning)?\s+the\b[^?]{0,40}\b(?:championship|cup|title)\b")
+
+
+def _is_tournament_champion_market(text: str) -> bool:
+    return bool(_TOURNAMENT_WIN_RE.search(text.lower()))
+
+
+# A song/album DURATION question ("How long will X be?") and a chart-position
+# / ranking question about the same work are different contracts (audit:
+# "Bass Persuades - Miley Cyrus" #2 Spotify song this week phantom-matched
+# "How long will Bass Persuades by Miley Cyrus be? ... Album Duration").
+_DURATION_RE = re.compile(r"\bhow long will\b.{0,60}\bbe\b")
+
+
+def _is_duration_market(text: str) -> bool:
+    return bool(_DURATION_RE.search(text.lower()))
+
+
+# ---------------------------------------------------------------------------
+# Settlement-source extraction (iteration 5) — a COMPACT provider/station tag,
+# never the full rules/description text (memory: ~270k live snapshots, peak
+# RSS already ~3.75 GB; a market's rules_primary/rules_secondary/description
+# run to hundreds-to-thousands of chars each, far bigger than the short
+# question text already kept in extra["full_question"]).
+#
+# Investigated live on the motivating case (2026-09-14): Kalshi's
+# "Highest temperature in Atlanta" (KXHIGHTATL-26SEP14) rules_primary reads
+# "If the maximum temperature recorded at Atlanta (CLIATL) for Sep 14, 2026,
+# is less than 92° fahrenheit ACCORDING TO THE WEATHER COMPANY, then the
+# market resolves to Yes." Its rules_secondary adds: "checking a source like
+# AccuWeather or Google Weather may help guide your decision" but "the
+# official and final value ... is ... as reported by the Weather Company."
+# Polymarket's "Highest temperature in Atlanta on September 14?" event
+# resolves "to the temperature range that contains the highest temperature
+# recorded BY NOAA at the Hartsfield-Jackson International Airport Station",
+# resolutionSource https://www.weather.gov/wrh/timeseries?site=katl (raw
+# hourly obs), falling back to "the Weather Underground Daily Observations
+# table" if NOAA data is unavailable.
+#
+# Both nominally reference the same airport, but they are DIFFERENT
+# settlement pipelines: Kalshi's own disclaimer exists precisely because The
+# Weather Company's official station report can disagree with other readings
+# of "the same" day's high. That is a genuine settlement-source risk, not a
+# text-matching false positive — hence a hard reject below, not a soft flag
+# (the alerter already requires v2_match True, so rejecting here is what
+# keeps mismatched-source pairs out of emails).
+# ---------------------------------------------------------------------------
+
+_WEATHER_PROVIDER_PATTERNS: tuple[tuple[str, re.Pattern], ...] = (
+    ("weather_company", re.compile(r"\bthe weather company\b", re.I)),
+    ("noaa", re.compile(r"\bnoaa\b|\bnational weather service\b", re.I)),
+    ("wunderground", re.compile(r"\bweather underground\b|\bwunderground\b", re.I)),
+    ("accuweather", re.compile(r"\baccuweather\b", re.I)),
+)
+# Kalshi: "recorded at Atlanta (CLIATL)" -> station "cliatl".
+_WEATHER_STATION_PAREN_RE = re.compile(r"recorded at [^(]*\(([a-z]{3,6})\)", re.I)
+# Polymarket resolutionSource URL: "...timeseries?site=katl" -> station "katl".
+_WEATHER_STATION_SITE_RE = re.compile(r"[?&]site=([a-z]{3,4})\b", re.I)
+
+_CRYPTO_SOURCE_PATTERNS: tuple[tuple[str, re.Pattern], ...] = (
+    ("cf_benchmarks", re.compile(r"\bcf benchmarks\b|\bbrti\b|\bbrri\b", re.I)),
+    ("binance", re.compile(r"\bbinance\b", re.I)),
+    ("coinbase", re.compile(r"\bcoinbase\b", re.I)),
+    ("kraken", re.compile(r"\bkraken\b", re.I)),
+)
+
+_ECON_AGENCY_PATTERNS: tuple[tuple[str, re.Pattern], ...] = (
+    ("bls", re.compile(r"\bbureau of labor statistics\b|\bbls\b|\ball urban consumers\b", re.I)),
+    ("bea", re.compile(r"\bbureau of economic analysis\b|\bbea\b", re.I)),
+    ("fed", re.compile(r"\bfederal reserve\b|\bfomc\b", re.I)),
+    ("ons", re.compile(r"\boffice for national statistics\b|\bons\b", re.I)),
+    ("stats_sa", re.compile(r"\bstatistics south africa\b|\bstats sa\b", re.I)),
+)
+
+
+def settlement_source(*texts: str) -> tuple[str, ...]:
+    """Compact settlement-source tags extracted from a market's OWN rules
+    text at INGESTION time — the rules/description text itself is never
+    stored (see module comment above). Called from discover.py's snapshot
+    builders (_k_snap on ``rules_primary``; _p_snap / _p_snap_from_event on
+    ``description`` + ``resolutionSource``) and stashed compactly in
+    ``extra["settle_src"]``.
+
+    Tags are ``"<class>:<provider>[:<station>]"``, e.g.
+    ``"weather:weather_company:cliatl"``, ``"weather:noaa:katl"``,
+    ``"crypto:binance"``, ``"econ:bls"``. Returns () for the overwhelming
+    majority of markets outside these three classes (sports "official
+    source" wording is deliberately NOT extracted here — low discriminating
+    value per the iteration-5 scope).
+
+    A tuple (not frozenset) so it survives ``json.dumps`` in discover.py's
+    ``--output``/coverage dumps unchanged; extract_spec() below wraps it in a
+    frozenset for comparison.
+    """
+    blob = " ".join(t for t in texts if t)
+    if not blob:
+        return ()
+    tags: set[str] = set()
+
+    station = None
+    m = _WEATHER_STATION_PAREN_RE.search(blob)
+    if m:
+        station = m.group(1).lower()
+    else:
+        m = _WEATHER_STATION_SITE_RE.search(blob)
+        if m:
+            station = m.group(1).lower()
+    for tag, rx in _WEATHER_PROVIDER_PATTERNS:
+        if rx.search(blob):
+            tags.add(f"weather:{tag}:{station}" if station else f"weather:{tag}")
+
+    for tag, rx in _CRYPTO_SOURCE_PATTERNS:
+        if rx.search(blob):
+            tags.add(f"crypto:{tag}")
+
+    for tag, rx in _ECON_AGENCY_PATTERNS:
+        if rx.search(blob):
+            tags.add(f"econ:{tag}")
+
+    return tuple(sorted(tags))
+
+
+def _settle_src_conflict(
+    a_src: frozenset[str], b_src: frozenset[str]
+) -> tuple[str, list[str], list[str]] | None:
+    """None if compatible; else (class, sorted providers A, sorted providers B).
+
+    Compares PROVIDER identity within the same class only (station codes are
+    spelled differently per venue for the very same airport — "cliatl" vs
+    "katl" — so station is informational, not itself a gate). A side that
+    cites a provider AND its documented fallback (e.g. Polymarket's "NOAA,
+    falling back to Weather Underground") carries both tags, so it is never
+    disjoint against a counterparty using either one alone — only a genuine,
+    unshared provider set trips this.
+    """
+    def by_class(src: frozenset[str]) -> dict[str, set[str]]:
+        out: dict[str, set[str]] = {}
+        for t in src:
+            cls, _, rest = t.partition(":")
+            provider = rest.split(":", 1)[0]
+            out.setdefault(cls, set()).add(provider)
+        return out
+
+    da, db = by_class(a_src), by_class(b_src)
+    for cls in sorted(set(da) & set(db)):
+        if da[cls].isdisjoint(db[cls]):
+            return cls, sorted(da[cls]), sorted(db[cls])
+    return None
+
+
+# Iteration-5: "Will Trump's first endorsement before the primaries be the
+# 2028 GOP nominee?" (Polymarket) is a bet on TRUMP'S OWN, not-yet-made
+# endorsement decision proving correct — it settles YES only if whoever Trump
+# endorses first also becomes the nominee. That is a structurally different
+# contract from any market naming a SPECIFIC candidate for the same race
+# (e.g. a "Donald Trump Jr." or "Ivanka Trump" 2028-nominee/caucus market),
+# even when both share heavy token overlap (2028, republican, nominee,
+# trump). Narrowly scoped to this literal "first endorsement" phrasing so it
+# can't glom onto unrelated endorsement markets.
+_FIRST_ENDORSEMENT_RE = re.compile(r"\bfirst endorsement\b", re.I)
+
+
+def _is_first_endorsement_market(text: str) -> bool:
+    return bool(_FIRST_ENDORSEMENT_RE.search(text))
+
+
 def _beat_order(text: str) -> tuple[str, str] | None:
     m = _BEAT_RE.search(text)
     if not m:
@@ -236,13 +716,58 @@ def _beat_order(text: str) -> tuple[str, str] | None:
     return (" ".join(sorted(win)), " ".join(sorted(lose)))
 
 
+def _field_texts(snap: "MarketSnapshot") -> tuple[str, ...]:
+    """The market's title/event-title/full-question text AS SEPARATE fields
+    (not joined). _contract_text() concatenates them into one string for
+    bag-of-words signals (tokens, jaccard), which is fine — but a regex that
+    hunts for a capitalized NAME run can bleed ACROSS that artificial join:
+    "Renan Santos" (title) directly followed by "Brazil Presidential Election
+    First Round Winner" (event title) reads as one long capitalized run, and
+    matcher._proper_names's office+jurisdiction filter drops the WHOLE blob —
+    losing the real name entirely and leaving a phantom "First Round Winner"
+    fragment behind (audit false-reject: this cost ~8 genuinely-same pairs
+    their selected-name overlap). Extracting names per FIELD and unioning
+    avoids the cross-field artifact while still catching names that are whole
+    within a single field.
+    """
+    extra = getattr(snap, "extra", {}) or {}
+    return tuple(
+        str(x) for x in (
+            getattr(snap, "title", ""),
+            extra.get("event_title", ""),
+            extra.get("full_question", ""),
+        )
+        if x
+    )
+
+
+def _selected_names_per_field(snap: "MarketSnapshot") -> frozenset[str]:
+    names: set[str] = set()
+    for field_text in _field_texts(snap):
+        names.update(_selected_names(field_text))
+    return frozenset(names)
+
+
+def _bare_subject_names_per_field(snap: "MarketSnapshot") -> frozenset[str]:
+    """Per-field union of _bare_subject_name — single-word names recall-only,
+    kept separate from selected_names so they never feed the hard
+    selected-name-mismatch veto (see _bare_subject_name's docstring)."""
+    names: set[str] = set()
+    for field_text in _field_texts(snap):
+        name = _bare_subject_name(field_text)
+        if name:
+            names.add(name)
+    return frozenset(names)
+
+
 def extract_spec(snap: "MarketSnapshot") -> ContractSpec:
     text = _contract_text(snap)
     return ContractSpec(
         tokens=frozenset(_tokens(text)),
         entities=frozenset(_named_entities(text)),
         winner_subject=frozenset(_winner_subject(text)),
-        selected_names=frozenset(_selected_names(text)),
+        selected_names=_selected_names_per_field(snap),
+        bare_subject_names=_bare_subject_names_per_field(snap),
         orgs=frozenset(_known_orgs(text)),
         products=frozenset(_known_products(text)),
         domains=frozenset(_domains(text)),
@@ -259,6 +784,7 @@ def extract_spec(snap: "MarketSnapshot") -> ContractSpec:
         time_scopes=frozenset(_time_scopes(text)),
         beat_order=_beat_order(text),
         close_time=getattr(snap, "close_time", None),
+        settle_src=frozenset((getattr(snap, "extra", {}) or {}).get("settle_src") or ()),
         raw=text,
     )
 
@@ -316,6 +842,14 @@ def match_spec(
             f"different country set: {sorted(a.jurisdictions)} vs {sorted(b.jurisdictions)}")
     if a.orgs and b.orgs and a.orgs.isdisjoint(b.orgs):
         return _reject(f"org mismatch: {sorted(a.orgs)} vs {sorted(b.orgs)}")
+    # Settlement-source mismatch: both sides cite a provider for the same
+    # class (weather/crypto/econ) but the providers don't overlap — a genuine
+    # settlement risk, not a text-matching false positive. See
+    # settlement_source()'s docstring for the motivating Atlanta case.
+    src_conflict = _settle_src_conflict(a.settle_src, b.settle_src)
+    if src_conflict:
+        cls, pa, pb = src_conflict
+        return _reject(f"settle_src_mismatch ({cls}): {pa} vs {pb}")
     if a.products and b.products and a.products.isdisjoint(b.products):
         return _reject(f"product mismatch: {sorted(a.products)} vs {sorted(b.products)}")
     if a.winner_subject and b.winner_subject and not _names_overlap(
@@ -336,6 +870,44 @@ def match_spec(
     # are too broad (they broke fixture parity), so only selected_names is used.
     if _first_name_collision(a.selected_names, b.selected_names):
         return _reject("different person: shared first name, different surname")
+
+    # Same PERSON, different team/org context (e.g. Rocco Baldelli as Phillies
+    # manager candidate vs Red Sox manager candidate). Gated on an actual
+    # selected-name overlap (so this only applies to person markets already
+    # agreeing on WHO) plus both sides naming a KNOWN team/org from the closed
+    # gazetteer above — never a generic entity diff, which was tried and
+    # reverted for breaking ~41 true pairs.
+    if a.selected_names & b.selected_names:
+        teams_a, teams_b = _team_orgs(a.raw), _team_orgs(b.raw)
+        if teams_a and teams_b and teams_a.isdisjoint(teams_b):
+            return _reject(
+                f"same person, different team/org: {sorted(teams_a)} vs {sorted(teams_b)}"
+            )
+
+    # Award-family mismatch: mutually exclusive named honors (Heisman, Walter
+    # Camp, Doak Walker, ...) on the same player.
+    award_a, award_b = _award_family(a.raw), _award_family(b.raw)
+    if award_a and award_b and award_a != award_b:
+        return _reject(f"award-family mismatch: {award_a} vs {award_b}")
+
+    # Aggregate GROUP bucket ("a team from Texas") vs a specific member named
+    # on the other side but outside that group's jurisdiction.
+    grp_a = _group_bucket_jurisdictions(a.raw)
+    grp_b = _group_bucket_jurisdictions(b.raw)
+    if grp_a and not (grp_a & frozenset(b.tokens)):
+        return _reject(f"group bucket ({sorted(grp_a)}) vs entity outside that group")
+    if grp_b and not (grp_b & frozenset(a.tokens)):
+        return _reject(f"group bucket ({sorted(grp_b)}) vs entity outside that group")
+
+    # Sports playoff STAGE (division / conference / seed) — mutually exclusive.
+    stage_a, stage_b = _playoff_stage(a.raw), _playoff_stage(b.raw)
+    if stage_a and stage_b and stage_a != stage_b:
+        return _reject(f"playoff-stage mismatch: {stage_a} vs {stage_b}")
+
+    # "#N" rank markets — different N is a different contract.
+    rank_a, rank_b = _rank_number(a.raw), _rank_number(b.raw)
+    if rank_a is not None and rank_b is not None and rank_a != rank_b:
+        return _reject(f"rank mismatch: #{rank_a} vs #{rank_b}")
 
     # --- sports bet-type gate -------------------------------------------------
     # A moneyline (win), a totals/spread line, and a player stat-prop are
@@ -358,6 +930,38 @@ def match_spec(
     ):
         return _reject("player-prop vs non-prop on same subject")
 
+    # Settlement-period mismatch: a halftime/1st-half result market vs a
+    # full-match moneyline/spread/total market on the same fixture.
+    halftime_a, halftime_b = _is_halftime(a.raw), _is_halftime(b.raw)
+    if halftime_a != halftime_b:
+        full_side_bet = b.bet_type if halftime_a else a.bet_type
+        if full_side_bet in ("margin", "total", "moneyline"):
+            return _reject(
+                f"settlement-period mismatch: halftime vs full-match ({full_side_bet})"
+            )
+    half_a, half_b = _half_number(a.raw), _half_number(b.raw)
+    if half_a is not None and half_b is not None and half_a != half_b:
+        return _reject(f"settlement-period mismatch: half {half_a} vs half {half_b}")
+
+    # Runner-up vs champion/winner — mutually exclusive tournament outcomes.
+    if _is_runner_up_market(a.raw) != _is_runner_up_market(b.raw):
+        return _reject("outcome-tier mismatch: runner-up on one side only")
+
+    # Single-match winner vs whole-tournament champion — different contracts
+    # even naming the same team.
+    matchup_a, matchup_b = _matchup_signature(a.raw), _matchup_signature(b.raw)
+    if (matchup_a is not None) != (matchup_b is not None):
+        tourney_side = b.raw if matchup_a is not None else a.raw
+        if _is_tournament_champion_market(tourney_side):
+            return _reject("single-match vs tournament-champion mismatch")
+
+    # Song/album duration vs chart-position/ranking — different measurements
+    # of the same work.
+    if _is_duration_market(a.raw) != _is_duration_market(b.raw) and (
+        a.selected_names & b.selected_names
+    ):
+        return _reject("duration vs chart-position mismatch")
+
     # --- event-class gates ----------------------------------------------------
     if a.actions and b.actions and a.actions.isdisjoint(b.actions):
         return _reject(f"action mismatch: {sorted(a.actions)} vs {sorted(b.actions)}")
@@ -367,6 +971,10 @@ def match_spec(
     # gate misses it because both share a spurious 'stat_prop' from "hit".
     if ("song_chart" in a.actions) != ("song_chart" in b.actions) and (a.entities & b.entities):
         return _reject("chart-achievement vs non-chart on same artist")
+    # Trump's own not-yet-made "first endorsement" proxy bet vs a market
+    # naming a specific candidate for the same race (run iteration-5).
+    if _is_first_endorsement_market(a.raw) != _is_first_endorsement_market(b.raw):
+        return _reject("actor-scoped subject mismatch: endorsement-proxy vs named-candidate")
     # Coin toss vs winning the match/tournament — both extract action 'win', so
     # the disjoint gate misses it; gate on the 'toss' marker explicitly (run 37).
     if ("toss" in a.actions) != ("toss" in b.actions):
@@ -402,6 +1010,31 @@ def match_spec(
         return _reject(
             f"monetary direction mismatch: {sorted(a.monetary_direction)} vs {sorted(b.monetary_direction)}"
         )
+    # Rate LEVEL ("Fed Rate hit 5.0%") vs number-of-CUTS/CHANGES market — a
+    # different measurement of the same underlying process, not the same bet.
+    if _is_rate_count(a.raw) != _is_rate_count(b.raw):
+        return _reject("rate-level vs number-of-changes mismatch")
+    # bps bucket boundaries: same direction, non-overlapping magnitude ranges
+    # ("25 bps decrease" exact vs "cut more than 25bps"; "50+ bps increase" vs
+    # "hike 1-25bps").
+    bps_a, bps_b = _bps_bucket(a.raw), _bps_bucket(b.raw)
+    if bps_a and bps_b and bps_a[0] and bps_b[0] and bps_a[0] == bps_b[0]:
+        _, lo_a, hi_a = bps_a
+        _, lo_b, hi_b = bps_b
+        if hi_a < lo_b or hi_b < lo_a:
+            return _reject(f"bps bucket mismatch: {bps_a} vs {bps_b}")
+    # Same actor + same verb, different OBJECT ("Will Trump nationalize
+    # elections?" vs "Will Trump nationalize SpaceX?").
+    avo_a, avo_b = _actor_verb_object(a.raw), _actor_verb_object(b.raw)
+    if (
+        avo_a and avo_b
+        and avo_a[0] == avo_b[0]
+        and avo_a[1] == avo_b[1]
+        and avo_a[2].isdisjoint(avo_b[2])
+    ):
+        return _reject(
+            f"different object of '{avo_a[1]}': {sorted(avo_a[2])} vs {sorted(avo_b[2])}"
+        )
 
     # --- ordered head-to-head ("A beat B" vs "B beat A") ----------------------
     if a.beat_order and b.beat_order:
@@ -416,6 +1049,10 @@ def match_spec(
     # --- time gates -----------------------------------------------------------
     price_market = "$" in a.raw or "$" in b.raw
     if not same_horizon:
+        # Weekly-recurring market ("Top ... this week?") vs a market with a
+        # materially different close horizon — same subject, different bet.
+        if _is_weekly_recurring(a.raw) != _is_weekly_recurring(b.raw):
+            return _reject("weekly-recurring vs longer-horizon mismatch")
         if a.years and b.years and a.years.isdisjoint(b.years):
             sports = "sports" in a.domains or "sports" in b.domains
             gap = min(abs(int(x) - int(y)) for x in a.years for y in b.years)
@@ -520,6 +1157,37 @@ def match_spec(
     if shared_named and (a.entities & b.entities) and same_horizon and sim >= 0.25:
         reasons.append(
             f"proper-noun bridge: shared name {sorted(shared_named)}, sim {sim:.2f}"
+        )
+        return MatchDecision(True, inverted, max(sim, 0.5), reasons)
+
+    # Single distinctive-name bridge: recovers single-word club/team names
+    # ("Leverkusen", via matcher._bare_subject_name's _winner_subject
+    # fallback) that don't produce an EXACT shared multi-token string with the
+    # proper-noun bridge above (poly's "Bayer Leverkusen" vs Kalshi's bare
+    # "Leverkusen" share no literal string, only a substring relationship).
+    # bare_subject_names is intentionally NOT part of selected_names (kept out
+    # of the hard mismatch veto above — a bare single token collides too
+    # easily with an unrelated multi-word name glommed from an event-title
+    # field); it is used here, acceptance-only.
+    #
+    # The overlap must run THROUGH a bare_subject_name specifically (not just
+    # be present somewhere on that side) — requiring only "a.bare_subject_names
+    # or b.bare_subject_names non-empty, then check ANY overlap between the
+    # unioned sets" let an unrelated bare name (e.g. "team", from "MLB: Team
+    # to win 100+ games") make a pair "eligible" for a bridge whose actual
+    # overlap was really just two DIFFERENT LA teams sharing the bare
+    # jurisdiction name "Los Angeles" ("Los Angeles Dodgers" vs "Los Angeles
+    # FC") — a real bug caught while validating this bridge on the iter4 live
+    # sample. Requiring the bare token itself to participate closes that gap.
+    other_a = set(a.selected_names) | set(a.bare_subject_names)
+    other_b = set(b.selected_names) | set(b.bare_subject_names)
+    bare_bridges = (
+        (set(a.bare_subject_names) and _names_overlap(set(a.bare_subject_names), other_b))
+        or (set(b.bare_subject_names) and _names_overlap(set(b.bare_subject_names), other_a))
+    )
+    if bare_bridges and same_horizon and sim >= 0.15:
+        reasons.append(
+            f"single-entity bridge: {sorted(other_a)} vs {sorted(other_b)}, sim {sim:.2f}"
         )
         return MatchDecision(True, inverted, max(sim, 0.5), reasons)
 
