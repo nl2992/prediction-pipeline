@@ -44,6 +44,7 @@ Algorithm
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import os
 import re
@@ -359,7 +360,7 @@ def _event_close(ev: dict) -> datetime | None:
     return max(closes) if closes else None
 
 
-def _k_snap(m: dict, fetched_at: str, event_title: str = ""):
+def _k_snap(m: dict, fetched_at: str, event_title: str = "", series_ticker: str = ""):
     from pipeline import MarketSnapshot, _parse_kalshi_top_of_book, kalshi_market_title
     from contract_spec import settlement_source
     ob = _parse_kalshi_top_of_book(m)
@@ -381,7 +382,12 @@ def _k_snap(m: dict, fetched_at: str, event_title: str = ""):
         close_time=close,
         fetched_at=fetched_at,
         orderbook=ob,
-        extra={"event_title": event_title, "settle_src": settle_src},
+        extra={
+            "event_title": event_title,
+            "settle_src": settle_src,
+            "series_ticker": series_ticker,
+            "yes_sub_title": m.get("yes_sub_title") or "",
+        },
     )
 
 
@@ -514,8 +520,22 @@ def _p_snap_from_event(m: dict, ev_title: str, ev_slug: str, fetched_at: str):
             "catalog_bid": catalog_bid,
             "catalog_ask": catalog_ask,
             "settle_src": settle_src,
+            # Structured sports join (sports_match.py)
+            "sports_market_type": m.get("sportsMarketType"),
+            "game_start_time": m.get("gameStartTime"),
+            "market_slug": m.get("slug", ""),
+            "outcome_labels": _json_list(m.get("outcomes")),
         },
     )
+
+
+def _json_list(v) -> list:
+    if isinstance(v, str):
+        try:
+            v = json.loads(v)
+        except Exception:
+            return []
+    return list(v) if isinstance(v, (list, tuple)) else []
 
 
 # ---------------------------------------------------------------------------
@@ -908,6 +928,7 @@ _DIRECTION_SYNONYMS: dict[str, str] = {
 }
 
 
+@functools.lru_cache(maxsize=1 << 20)
 def _normalise_tokens(title: str) -> frozenset[str]:
     """Like matcher._tokens but with bps-split and direction synonym folding."""
     from matcher import _tokens
@@ -944,23 +965,34 @@ def _match_outcomes_within_group(
     scored = []
     for k in k_outcomes:
         k_toks = _normalise_tokens(k.title)
+        # Kalshi's yes_sub_title IS the outcome label ("Dividend", "Denver");
+        # the title is the whole question. Compare label to label when we can —
+        # the question's extra words otherwise sink a correct pair under the
+        # 0.15 floor below (Costco earnings words, NFL best/worst record).
+        k_sub = (k.extra or {}).get("yes_sub_title") or ""
+        k_sub_toks = _normalise_tokens(k_sub) if k_sub else frozenset()
         k_mid = k.orderbook.mid or k.orderbook.best_bid
         for p in p_outcomes:
-            if not is_compatible_match(p, k):
-                continue
-            if not is_close_time_compatible(p, k):
-                continue
             p_toks = _normalise_tokens(p.title)
-            p_mid = p.orderbook.mid or p.orderbook.best_bid
-
             title_sim = _jaccard(k_toks, p_toks)
+            # Label-to-label only for NAMED outcomes: on numeric ladders ("Below
+            # 5.21%", "25 bps increase") a lifted label score lets the price-led
+            # mode below pick an adjacent rung ("below 5.22%").
+            if k_sub_toks and not any(ch.isdigit() for ch in p.title + k_sub):
+                title_sim = max(title_sim, _jaccard(k_sub_toks, p_toks))
             # Price proximity is useful only after the two outcomes share some
             # lexical evidence.  Without this floor, a categorical Polymarket
             # outcome like "Andy Beshear" can match a generic Kalshi question
             # such as "Who will win the next presidential election?" solely
             # because their catalogue prices happen to be close.
+            # (Checked before the compatibility vetoes: same outcome, far cheaper.)
             if title_sim < 0.15:
                 continue
+            if not is_compatible_match(p, k):
+                continue
+            if not is_close_time_compatible(p, k):
+                continue
+            p_mid = p.orderbook.mid or p.orderbook.best_bid
 
             if k_mid is not None and p_mid is not None and k_mid > 0 and p_mid > 0:
                 # Within a matched event, a small price difference is a very
@@ -999,6 +1031,17 @@ def _match_outcomes_within_group(
         used_k.add(k.market_id)
 
     return pairs
+
+
+_CONTEXT_GATE = 0.30
+
+
+def _context_similarity(p, k) -> float:
+    """Jaccard over "<title> <event title>" of both sides."""
+    from matcher import _jaccard, _tokens
+    pe = (p.extra or {}).get("event_title") or ""
+    ke = (k.extra or {}).get("event_title") or ""
+    return _jaccard(_tokens(f"{p.title} {pe}"), _tokens(f"{k.title} {ke}"))
 
 
 def _match_groups_then_individual(
@@ -1083,25 +1126,38 @@ def _match_groups_then_individual(
     used_p: set[str] = set()
     all_pairs: list = []
 
+    # Score outcome pairs for EVERY candidate event pairing, then assign greedily
+    # at MARKET level (each market used once). An event-level 1-1 (or capped)
+    # assignment stranded outcomes whenever a venue lists one race several ways
+    # ("CA-07 House Election Winner" and "... (by individual)", a statewide race
+    # alongside its county sub-events): the wrong duplicate claimed the event and
+    # its outcomes never got a second chance. Market-level greedy keeps the best
+    # scoring pair for each market regardless of which event pairing produced it.
+    scored_outcomes: list = []
     for event_sim, k_eid, p_eid in event_scores:
-        if k_eid in matched_k_events or p_eid in matched_p_events:
+        for pair in _match_outcomes_within_group(k_groups[k_eid], p_groups[p_eid], event_sim):
+            scored_outcomes.append((pair.confidence, k_eid, p_eid, pair))
+    scored_outcomes.sort(key=lambda x: (-x[0], x[3].kalshi.market_id, x[3].poly.market_id))
+
+    for _conf, k_eid, p_eid, pair in scored_outcomes:
+        if pair.kalshi.market_id in used_k or pair.poly.market_id in used_p:
             continue
+        all_pairs.append(pair)
+        used_k.add(pair.kalshi.market_id)
+        used_p.add(pair.poly.market_id)
         matched_k_events.add(k_eid)
         matched_p_events.add(p_eid)
-
-        k_outs = [s for s in k_groups[k_eid] if s.market_id not in used_k]
-        p_outs = [s for s in p_groups[p_eid] if s.market_id not in used_p]
-
-        for pair in _match_outcomes_within_group(k_outs, p_outs, event_sim):
-            all_pairs.append(pair)
-            used_k.add(pair.kalshi.market_id)
-            used_p.add(pair.poly.market_id)
 
     # ── Step 2: individual Jaccard for remaining markets ──────────────────────
     # Use stricter thresholds than group matching:
     #   min_sim raised to 0.45 to stop short generic labels from matching
     #   min_token_ratio=0.40 blocks "Democratic Party" (2 toks) matching a
     #   long parlay question (8 toks) — ratio 0.25 < 0.40 → rejected.
+    # Bare Polymarket labels ("St. Louis Blues") score high against ANY Kalshi
+    # question naming the team ("...win the Presidents' Trophy?"); vetoing one
+    # wrong counterpart then hands the slot to the next wrong one. Gate every
+    # candidate on CONTEXTUAL similarity (label + parent event title, both
+    # sides) BEFORE the 1-1 assignment, so wrong candidates never take a slot.
     rem_k = [s for s in k_snaps if s.market_id not in used_k]
     rem_p = [s for s in p_snaps if s.market_id not in used_p]
     if rem_k and rem_p:
@@ -1110,6 +1166,7 @@ def _match_groups_then_individual(
             min_title_similarity=max(min_sim, 0.45),
             max_close_delta_hours=100_000,
             min_token_ratio=0.40,
+            pair_gate=lambda p, k: _context_similarity(p, k) >= _CONTEXT_GATE,
         )
         all_pairs.extend(fallback)
 
@@ -1290,6 +1347,7 @@ def ingest_kalshi(
     fetched_at = now.isoformat()
     ingested = 0
     k_snaps: list = []
+
     for ev in filtered:
         et = ev.get("event_ticker", "")
         markets = ev.get("markets")
@@ -1306,7 +1364,8 @@ def ingest_kalshi(
                 continue
             reason = ev_reason or ("parlay_title" if _is_parlay_market(m) else None)
             m_title = event_title or m.get("event_title") or m.get("title", "")
-            snap = _k_snap(m, fetched_at, event_title=m_title)
+            snap = _k_snap(m, fetched_at, event_title=m_title,
+                           series_ticker=ev.get("series_ticker") or "")
             if reason:
                 snap.extra["match_excluded"] = reason
                 held_out[reason] = held_out.get(reason, 0) + 1
@@ -1428,7 +1487,8 @@ def ingest_kalshi(
                 ev_reason = _kalshi_hold_reason(ev)
                 reason = ev_reason or ("parlay_title" if _is_parlay_market(m) else None)
                 event_title = ev.get("title") or m.get("title", "")
-                snap = _k_snap(m, fetched_at, event_title=event_title)
+                snap = _k_snap(m, fetched_at, event_title=event_title,
+                               series_ticker=ev.get("series_ticker") or "")
                 if reason:
                     snap.extra["match_excluded"] = reason
                     held_out[reason] = held_out.get(reason, 0) + 1
@@ -1929,9 +1989,21 @@ def discover(
     print(f"[3/4] Running two-level group matcher (min_sim={min_sim})  "
           f"({len(match_k_snaps):,}/{len(k_snaps):,} Kalshi markets eligible)…", flush=True)
     t0 = time.time()
-    pairs = _match_groups_then_individual(match_k_snaps, p_snaps, min_sim=min_sim)
+    # Structured sports-game join first: game titles share no tokens across
+    # venues ("Denver wins" vs "Broncos vs. Chiefs"), so the text matcher
+    # cannot find them. Matched markets are removed from the text pools.
+    from sports_match import match_sports_games
+    sports_pairs = match_sports_games(match_k_snaps, p_snaps)
+    used_k = {pr.kalshi.market_id for pr in sports_pairs}
+    used_p = {pr.poly.market_id for pr in sports_pairs}
+    text_pairs = _match_groups_then_individual(
+        [s for s in match_k_snaps if s.market_id not in used_k],
+        [s for s in p_snaps if s.market_id not in used_p],
+        min_sim=min_sim,
+    )
+    pairs = sports_pairs + text_pairs
     cov_t["match"] = round(time.time() - t0, 1)
-    print(f"      {len(pairs)} pairs found")
+    print(f"      {len(pairs)} pairs found ({len(sports_pairs)} sports-key, {len(text_pairs)} text)")
 
     # ── 4. Format / enrich ───────────────────────────────────────────────────
     print("[4/4] Formatting results…", flush=True)
@@ -1945,6 +2017,8 @@ def discover(
     from contract_spec import explain as _v2_explain
     v2_by_pair: dict = {}
     for pair in pairs:
+        if pair.match_source == "sports":
+            continue  # structural key join; v2's text rules do not apply
         try:
             v2_by_pair[id(pair)] = _v2_explain(pair.poly, pair.kalshi)
         except Exception as exc:  # shadow mode must never break production
@@ -1960,7 +2034,8 @@ def discover(
     catalog_edge_by_pair: dict = {}
     books_live_ids: set = set()
     if show_prices and pairs:
-        endorsed = [p for p in pairs if getattr(v2_by_pair.get(id(p)), "match", False) is True]
+        endorsed = [p for p in pairs if p.match_source == "sports"
+                    or getattr(v2_by_pair.get(id(p)), "match", False) is True]
         to_enrich, catalog_edge_by_pair = _select_pairs_to_enrich(endorsed, enrich_margin)
         print(f"      Fetching live orderbooks for {len(to_enrich)} of {len(endorsed)} "
               f"v2-endorsed pairs (catalog screen, margin={enrich_margin}) "
@@ -1972,7 +2047,7 @@ def discover(
 
     # ── Format results ────────────────────────────────────────────────────────
     t0 = time.time()
-    from matcher import is_arb_eligible
+    from matcher import is_arb_eligible, settlement_risk
 
     FEE = 0.07  # conservative worst-case fee
     results = []
@@ -1983,7 +2058,7 @@ def discover(
         ka = pair.kalshi.orderbook.best_ask
 
         arb_dir = arb_profit = None
-        arb_eligible = is_arb_eligible(pair.poly, pair.kalshi)
+        arb_eligible = pair.match_source == "sports" or is_arb_eligible(pair.poly, pair.kalshi)
         if show_prices and arb_eligible:
             if pa is not None and kb is not None:
                 profit = round(1.0 - (pa + 1.0 - kb) - FEE, 4)
@@ -2004,7 +2079,10 @@ def discover(
         # precomputed above (text-only) and reused here. A v2 rejection of a v1
         # match is a candidate v1 false positive — surfaced, never silently dropped.
         _v2 = v2_by_pair.get(id(pair))
-        if isinstance(_v2, Exception):  # shadow mode must never break production
+        if pair.match_source == "sports":
+            v2_fields = {"v2_match": True, "v2_inverted": False,
+                         "v2_reasons": [pair.match_reason]}
+        elif isinstance(_v2, Exception):  # shadow mode must never break production
             v2_fields = {"v2_match": None, "v2_error": str(_v2)}
         else:
             v2_fields = {
@@ -2057,6 +2135,8 @@ def discover(
                 "bids": [[l.price, l.size] for l in (pair.kalshi.orderbook.bids or [])[:30]],
                 "asks": [[l.price, l.size] for l in (pair.kalshi.orderbook.asks or [])[:30]],
             },
+            "match_source":     pair.match_source,
+            "settlement_risk":  settlement_risk(pair.poly, pair.kalshi),
             "arb_eligible":     arb_eligible,
             "arb_direction":    arb_dir,
             "arb_net_profit":   arb_profit,

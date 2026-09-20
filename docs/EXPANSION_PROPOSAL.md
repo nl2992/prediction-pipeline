@@ -108,3 +108,415 @@ they still consume the 1-to-1 slot a correct pair could have taken):
 
 Caveat: all edges above are from **catalog** prices, not executable books; they
 indicate where arb surface exists, not confirmed profit.
+
+---
+
+## Progress log
+
+Status key: ✅ done · 🟡 partial · ⬜ open. Newest first.
+
+### 2026-09-20 (pass 9) — spreads and totals: a contract class matched 0%
+
+**Proposal.** Text recall (91.9%) now sits AT the hand-labelled oracle ceiling
+(~91%), so more wording rules would chase the oracle's own errors. The
+uncovered surface left is contract **types**, not wording — and both venues
+list spreads and totals for the same games, which the pipeline matched 0% of.
+
+**Structure (both venues, confirmed live).**
+
+| | Kalshi | Polymarket |
+|---|---|---|
+| Spread | own event `KXMLSSPREAD-26SEP26VANDCU`, market "Vancouver wins by more than 2.5 goals?" | market in the game event, "Spread: Rays (-1.5)", outcomes `[Rays, Yankees]` (token 0 covers) |
+| Total | own event `KXMLSTOTAL-…`, "Will over 2.5 goals be scored?" | "O/U 7.5", outcomes `[Over, Under]` (token 0 = Over) |
+
+Kalshi's spread/total events share the GAME KEY, so they attach to a game the
+moneyline join has already verified and inherit its team mapping, league vote,
+outcome-shape and start-time checks — no new matching risk.
+
+**Implemented** (`sports_match.py`):
+
+* `_k_line_events` indexes Kalshi SPREAD/TOTAL markets by (series prefix, game key).
+  The prefix must match EXACTLY, which keeps first-half and team-total variants
+  (`KXNFL1HTEAMTOTAL`) out — they share the key but are different contracts.
+* `_match_lines` pairs a Kalshi spread with the PM spread market whose token 0
+  is the same team and whose line is EQUAL, and a Kalshi total with the PM
+  total on an equal line.
+* The line is read from the PM market slug (`-total-4pt5`, `-spread-away-1pt5`),
+  which is unambiguous; the title is a fallback because PM titles sometimes
+  fall back to the whole question ("Red Wings vs. Penguins: O/U 4.5").
+* 4 new tests: pairing, unequal line rejected, wrong side rejected, first-half /
+  team-total series not joined.
+
+**Measured (live).**
+
+| | before | after |
+|---|---|---|
+| Sports contract pairs | 1,305 | **1,829** (1,271 moneyline + **558 spread/total**) |
+| Spread/total pairs | 0 | 558 |
+| Cross-venue price gap (spread/total) | — | median **0.5c** |
+| Sports game recall | 95–97% | unchanged (same games, more contracts each) |
+
+The spread/total tail is wider than moneylines (53 pairs > 15c) but inspection
+showed untraded Polymarket books on obscure college games — every line on such
+a game sits near 0.5 — not mis-mapping; the live order books the alerter uses
+replace those catalog prices.
+
+### 2026-09-19 (pass 8) — closed the v2 gate gap (endorsed 87.7% → 91.9%)
+
+**Diagnosis.** Pass 7 split MATCHED from V2-ENDORSED and found 188 oracle pairs
+the matcher found but the v2 referee rejected. The alerter requires v2, so those
+pairs can never produce an alert — the single largest remaining lever. Every one
+of the 188 was v2 over-firing on a true pair:
+
+| n | v2 reason | Reality |
+|---|---|---|
+| 105 | "player-prop vs non-prop" | "QB Points Leader" vs "Season Top QB" — two leader markets (the same class fixed in v1 in pass 5) |
+| 47 | "selected-name mismatch" | v2 extracted "new jersey" from the Kalshi question instead of the candidate |
+| 28 | "winner-subject mismatch" | party-worded question vs candidate name — the candidate is in `yes_sub_title`, which v2 never saw |
+| 7 | "different person" | fired on *identical* strings ("Yokohama DeNA BayStars") |
+| 1 | similarity below gate | genuine |
+
+**Implemented.**
+
+* `ContractSpec` gains `outcome_label` (Kalshi `yes_sub_title` / PM market title).
+* An exact label match suppresses the winner-subject, selected-name and
+  first-name-collision heuristics — they exist to separate DIFFERENT contestants.
+* Leader-vs-leader exemption for the prop gate, mirroring `matcher.py`.
+* **New v2 guard from the same evidence:** different named outcome ("Bo Nix" vs
+  "Patrick Mahomes", Lakers vs "Los Angeles C"), tolerant of short forms,
+  spellings, middle names and second surnames.
+
+**Two rejected attempts at that guard** (both caught by the live A/B before
+landing): strict containment dropped 134 true pairs ("Ben"/"Benjamin
+Silverman", "Cam"/"Cameron Davis", "Jaxon"/"Jaxson Smith-Njigba"); requiring an
+equal last token still dropped 46 ("Justin J. Pearson", "Kendor Gregorio Macías
+Martínez"). The landed version accepts a token subset sharing ≥ 2 words.
+
+**Measured** (same pools; live in the last column):
+
+| | pass 7 | pass 8 | live |
+|---|---|---|---|
+| Oracle pairs MATCHED | 91.7% | 91.7% | 91.9% |
+| Oracle pairs V2-ENDORSED | 87.4% | **91.7%** | **91.9%** |
+| Matched but v2-rejected | 188 | **1** | 1 |
+| Endorsed pairs, total | 9,307 | **9,814** (+507) | — |
+| Newly (correctly) rejected | — | 18 (Lakers vs Clippers, Chargers vs Rams, Giants vs Jets, opposite chamber-control combos) | — |
+
+**Caveat, recorded deliberately:** v1 and v2 now share the outcome-label logic,
+so v2 is less independent on those classes than it was. It still runs its own
+extraction for everything else, and the alerter's AI settlement check remains a
+third, genuinely independent gate.
+
+**Where this leaves coverage:** ingestion and matching scope are 100%; matched
+and endorsed recall are now the same number, so nothing is lost between the
+matcher and the alert gate. The remaining ~8% of oracle misses is ~63% real
+(pass-7 hand label) → true recall ≈ 95%.
+
+### 2026-09-19 (pass 7) — hand-labelled the misses; matched recall 91.9%
+
+**Proposal.** Stop adding rules blind. The oracle is looser than the matcher, so
+an unknown share of "misses" are the oracle's own errors. Hand-label a random
+sample, measure the reachable ceiling, and fix only what is real.
+
+**Hand-label (60 random misses, classified by reading both contracts):**
+
+| Verdict | n | Examples |
+|---|---|---|
+| **Real miss** | 38 (63%) | Fantasy season leaders ("highest-scoring QB of the season" / "Season Top QB") ×10; Senate + AG races (party question + candidate label vs "Democratics win … ? <name>") ×8; CFB Playoff top-4 seeds ×5; VALORANT Champions 2026 MVP / "Champions Shanghai MVP" ×6; MLB home-run leader ×2; Dune cinematography, LA-05 nominee, Clarity Act, PODEMOS, Ro Khanna, NPB champion, Putin–Zelenskyy meeting |
+| **Oracle error** | 22 (37%) | group winner vs tournament champion ×5; "advance to" vs "win" conference finals ×3; AI model Sep/Oct/Nov vs Dec 31 ×3; league phase vs champion ×2; county vs statewide ×2; Game Awards different categories ×2; US vs global (Google, Netflix); Coachella perform vs headline; Cracker Barrel vs Costco; Trump–Putin vs Putin–Zelenskyy; French candidate list vs winning |
+
+**So the ceiling is ~91% of oracle pairs, not 100%** — the remaining 37% of
+misses *should* be misses.
+
+**Also discovered:** a matched pair can still be counted as missed because the
+**v2 referee** rejects it. The report now separates MATCHED from V2-ENDORSED.
+
+**Fixed (all from the real-miss classes):**
+
+| Fix | Note |
+|---|---|
+| **v1 bug:** "(2026)" after a title parsed as a point spread ("(-1.5)") | NPB/KBO champions hit the spread-vs-moneyline veto; spreads now need a sign or decimal |
+| **v1 bug:** "Dune: Part **Three**" read as a "threes" stat line, valued from "99th Academy Awards" / a ticker suffix | stat numbers must sit next to the stat word |
+| "Top 4 **Seeds**" (plural) never matched "top 4 seed" | every CFB seed pair was rejected as a different seed |
+| Leader markets worded without "lead" ("hit the **most** home runs", "**highest-scoring** RB") | now leader markets; "yards/receptions/touchdowns" count as leader stats on BOTH wordings — a first attempt made this asymmetric and dropped 474 true NCAAF/NFL leader pairs (caught by the A/B, reverted within the pass) |
+| New veto: different stat category | "Week 2 Receiving Yards Leader" vs "Leader in fantasy points for Week 2" |
+
+**Measured** (same pools; live in the last column):
+
+| | pass 6 | pass 7 | live |
+|---|---|---|---|
+| Oracle pairs MATCHED | 85.3% | **91.7%** | 91.9% |
+| Oracle pairs v2-ENDORSED | 86.3%* | 87.4% | 87.7% |
+| Matched but v2-rejected | — | 188 | 190 |
+| Sports recall | 96.2% | 96.2% | 96.9% |
+
+\* pass 6 measured endorsement only; the matched/endorsed split is new in pass 7.
+
+**Adjusted for oracle error** (63% of misses real): true recall ≈ **95%** of the
+pairs that actually exist in the oracle's slice.
+
+**Next:** the 190 matched-but-v2-rejected pairs are now the largest single
+lever — they are found by the matcher but the alerter drops them because it
+requires v2 endorsement.
+
+### 2026-09-19 (pass 6) — market-level assignment, 8 precision rules (85% → 86.3%)
+
+**Diagnosis.** After pass 5 the biggest bucket was still 231 pairs that pass
+every veto yet stay unpaired, plus 105 leader-vs-leader pairs. Causes:
+
+* **Assignment.** Events were matched 1-1 (then capped at 3). Whenever a venue
+  lists one race several ways — a statewide race beside its county sub-events,
+  "… (by individual)" duplicates — the wrong variant claimed the Kalshi event
+  and its outcomes never got another chance.
+* **v1 bug.** `_stat_thresholds` read a long slug digit run
+  ("…-20260727173335231") as a stat line, which silently disabled the
+  leader-vs-leader exemption ("MLB: Home Runs Leader" vs "lead Pro Baseball in
+  home runs").
+
+**Implemented.**
+
+| Fix | Where |
+|---|---|
+| Score outcome pairs for EVERY candidate event pairing, then assign greedily at **market** level (each market used once) — no event-level cap | `discover.py` |
+| Ignore 5+-digit numbers (slug ids) and calendar years in stat lines | `matcher.py` |
+| 8 new `context_veto` rules, each from a wrong pair the wider assignment surfaced: different district (CA-04 vs MO-04); different stat-line value (400+ vs 3,500+ passing yards, 0.75 tolerance so "more than 84.5 games" == "at least 85"); reach a stage vs win it; finishing scope (top-5 vs winner, "#1" vs "Top 5"); playoff seed number; vote-share threshold vs winning; week vs season scope; size-conditional contract ("$1t+ IPO" vs plain IPO — bare price levels excluded, they are the contract itself) | `matcher.py` |
+
+**Measured** (same pools; live report in the last column):
+
+| | pass 5 | pass 6 | live 2026-09-19 |
+|---|---|---|---|
+| Text recall vs oracle | 85.1% | **86.3%** | 86.5% |
+| Endorsed pairs, total | 8,805 | **9,341** | — |
+| Sports recall | 96.2% | 96.2% | 96.2% |
+| Matching time | 206 s | 288 s | 206 s |
+
+Wider assignment costs runtime (outcome scoring now runs for every candidate
+event pair) and it surfaces wrong pairs as fast as right ones — every one of
+the 8 rules above came from reviewing what the wider assignment let through.
+
+### 2026-09-19 (pass 5) — text recall 81% → 85%, and two more v1 bugs
+
+**Method.** Trace every oracle miss to the exact line that rejects it, rank by
+count, then judge each bucket as a real miss or a correct rejection (the oracle
+is looser than the matcher).
+
+**Fixed (real misses).**
+
+| Bucket | Cause | Fix |
+|---|---|---|
+| 253 passed every veto yet stayed unpaired | `is_close_time_compatible` capped non-sports pairs at 400 days, but open-ended succession markets ("next Press Secretary", "Next James Bond actor") carry a formal Kalshi expiry (end of term, 2029) against a calendar-year PM close | pair them when the outcome name matches; `settlement_risk` flags the differing deadlines so alerts skip them |
+| 86 `stat_leader` | "QB Points Leader" vs "Season Top QB" | "Season Top QB/RB/WR/TE" and "Golden Boot" are leader markets |
+| 51 candidacy | "Who will **announce Presidential run**" not recognised | broadened to "announce/declare … run/candidacy/bid" |
+| 51 deadline asymmetry, 46 foreign jurisdiction, 39+30+19+10 name heuristics | these separate DIFFERENT contestants, but fired on pairs whose outcome name is identical | exact label identity (PM label == Kalshi `yes_sub_title`) overrides them; semantics still gated by `context_veto` |
+| **v1 bug** | `_stat_thresholds` read "run before 2027" as `runs = 2027`, and a season span "2026-27" as a 27 line | years and season spans excluded from stat lines |
+| **v1 bug** | a DEADLINE year compared against a TARGET year ("announce before 2027" vs "the 2028 nomination") | `_period_years` returns (targets, deadlines); only targets are compared, in both the new and the old year veto |
+
+**Kept (correct rejections, oracle noise):** group-stage winner vs tournament
+champion (67), "AI model" vs "coding model" on different months (30), Coachella
+"perform" vs "headline" (14), General Mills vs Carnival earnings words (20).
+
+**New precision rule found while measuring:** a numeric stat line on one side
+only ("1250+ rushing yards" vs "Rushing Yards Leader") is not the same
+contract — both word orders, basis points excluded (they have their own range rule).
+
+**Tried and reverted:** letting a barren event pairing retry its fan-out slot.
++1% recall but ~1,000 mostly-wrong pairs (CA-04 vs MO-04 House, leader vs
+"1250+ yards", "#1 artist" vs "#2 artist"), because wrong candidates keep
+descending the score order once the right one is absent.
+
+**Measured** (same 2026-09-18 pools; live report in the second column):
+
+| | pass 4 | pass 5 |
+|---|---|---|
+| Text recall vs oracle | 80.8% | **85.1%** (live 85.4%) |
+| Endorsed pairs, total | 8,628 | **8,805** |
+| vs pass 4 | — | +220 gained, 43 removed (most correct: "15+ Sacks" vs "lead in Sacks") |
+| Pairs flagged `settlement_risk` | ~100 | 459 (weather station + horizon) |
+
+### 2026-09-18 (pass 4) — text recall measured and raised (74% → 81%)
+
+**Proposal.** Text-matched markets had no recall number. Build an oracle
+*independent of the matcher* (own tokenizer): a PM outcome and a Kalshi market
+are a true pair when their event titles overlap strongly (word Jaccard ≥ 0.5,
+same non-year numbers, not a single game) and the PM label equals Kalshi's
+`yes_sub_title` after normalisation; binary events need near-identical
+questions. 4,398 oracle pairs on the 2026-09-18 pools. Then trace every miss
+through `is_compatible_match` and rank causes.
+
+**Findings and fixes.**
+
+| Cause (share of misses) | Fix | Where |
+|---|---|---|
+| Events matched strictly 1-1; PM lists one race several ways ("CA-07 … Winner" and "… (by individual)", party vs candidate), the wrong duplicate claimed the Kalshi event (the largest bucket: 614 misses passed every veto) | event fan-out ≤ 3, markets still 1-1 | `discover.py` |
+| **v1 bug:** `_matchup_signature` treated " at " as a game separator — "win Best Director *at the* 99th Academy Awards" became a two-team matchup, so every awards pair (Oscars, Grammys, CMAs) was vetoed | "at" separates only when not followed by the/their/a/an/… | `matcher.py` |
+| **v1 bug:** at-large districts ("WY-AL") not recognised as a seat, read as chamber control | `XX-AL` and "house race for" = seat | `matcher.py` |
+| New false positives surfaced by the extra recall: runner-up vs winner; Champions/Europa League *league phase* vs overall; wrong bps rung | 3 more `context_veto` rules; bps compared as ranges (">25bps" = "50+ bps", 25bp steps) | `matcher.py` |
+
+**Measured** (same pools):
+
+| | pass 3 | pass 4 |
+|---|---|---|
+| Text recall vs oracle | 74.1% (3,259 / 4,398) | **80.8%** (3,553 / 4,398) |
+| Endorsed pairs, total | 7,866 | **8,628** |
+| Last veto batch | — | 93 removed, all false positives (league phase ×~40, runner-up ×~35, wrong bps rung); 25 gained, all correct |
+| Matching time | 195 s | 208 s |
+
+**Remaining text misses** (845, ranked by the tracer): v1 `stat_leader` /
+`deadline` action vetoes over-firing on "next to leave the Cabinet" and
+fantasy "Top WR" lists; `foreign jurisdiction` on non-US cabinets; esports
+award names; plus oracle noise (e.g. "How high will *inflation* get" vs
+"*unemployment*" share the phrase and the "Above 10%" label).
+
+### 2026-09-18 (pass 3) — sports recall to ~96%, measurable coverage
+
+**Diagnosis.** Six sports series stuck at 0 have **no Polymarket counterpart at
+all** (NCAA women's volleyball, Polish TT Elite — PM's Setka tables are
+Ukrainian/Czech/Moldovan leagues — AFCON qualifier games, Serie C, Davis Cup,
+Ettan), so they belong outside the recall denominator. The real misses were
+name normalisation in the join's fallback: "Reg Time:" prefixes, accents
+(Grêmio, Bodø), dotted abbreviations (D.C.), initials (RB = Red Bulls, SL =
+Sport Lisboa), extra words on one side (Hokkaido Nippon-Ham Fighters), and
+local spellings (Praha, München, Utd).
+
+**Implemented.**
+
+| Fix | Where | Status |
+|---|---|---|
+| Name normalisation for the sports join (above list + small alias map) | `sports_match.py` | ✅ |
+| `tools/coverage_report.py` — live ingestion counts, sports recall vs an independent oracle with a miss list, price-agreement precision, optional text matching | `tools/` | ✅ |
+| Finishing-position veto ("3rd place" vs "last place") | `matcher.py` | ✅ |
+| Period-year veto with normalisation ("2026-27" spans both; "before 2027" / "before Jan 2027" = 2026) | `matcher.py` | ✅ |
+
+**Measured.**
+
+| | before | after |
+|---|---|---|
+| Sports recall vs oracle (games with a PM counterpart) | 85.5% (652/763) | **95.6%** (746/780, fresh catalog) |
+| Sports contract pairs (same pools) | 1,545 | 1,886 |
+| Sports price agreement | median 0.5c | median 0.5c, p90 3c |
+| Text pairs removed by the two new vetoes | — | 39, all false positives (Brazil state 1st vs national 4th/5th ×24, Ligue 1 3rd vs last ×15), 0 collateral |
+| Total endorsed pairs (same 2026-09-18 pools) | 7,564 | **7,866** |
+
+**Remaining sports misses** (from the report): NCAAF where the oracle hits the
+wrong sport (noise), rugby where Kalshi is 2-way and PM 3-way (correctly
+refused — different draw settlement), reserve teams ("S. Bratislava B" vs
+first team, correctly refused), and a few names no rule reconciles
+("Uniao SC Paredes" vs "USC Paredes").
+
+**Is coverage 100%?** Ingestion and matching scope: yes. Recall: ~96% on sports
+games, ~96% on House races; the text matcher has no independent oracle yet, so
+its recall is unmeasured beyond those two families — that is the next gap.
+
+### 2026-09-18 (pass 2) — precision: event context, and stop "whack-a-mole"
+
+**Diagnosis.** Polymarket outcome snapshots are titled with the bare label
+("Phil Murphy", "St. Louis Blues"). Both engines scored that label against the
+full Kalshi question, so the parent-event difference was invisible — and when a
+wrong pair was vetoed, greedy 1-1 assignment handed the slot to the *next*
+wrong candidate (Conference Champion → Division winner → Presidents' Trophy).
+Separately, inside matched event groups, labels like "Dividend" or "Denver
+Broncos" were compared with Kalshi's whole question and fell under the 0.15
+similarity floor, so thousands of true outcome pairs were missed.
+
+**Implemented.**
+
+| Fix | Where | Status |
+|---|---|---|
+| `context_veto` — 10 event-context rules, each from an observed class: single-game vs season scope; "run for" vs winning; county vs whole jurisdiction; division vs conference; price race ("$50k before $100k") vs level; different central banks; opposite party wave; negated contract; "exactly N" vs open-ended; different named entities sharing words (tolerates initials "J. J."/"J.J." and short first names Alex/Alexander) | `matcher.py` | ✅ |
+| `settlement_risk` — weather high/low pairs flagged (venues may use different stations); alerter skips them, pairs stay visible | `matcher.py`, `alerter.py` | ✅ |
+| Contextual gate (label + event title, Jaccard ≥ 0.30) on every fallback candidate **before** 1-1 assignment (`match_markets(pair_gate=…)`) | `discover.py`, `matcher.py` | ✅ |
+| Label-to-label scoring against Kalshi `yes_sub_title` for named outcomes (numeric ladders excluded — they picked adjacent rungs, e.g. "below 5.21%" → "below 5.22%") | `discover.py` | ✅ |
+| Tried and reverted: scoring the fallback on full contextual titles — +3,885 pairs but 51 min runtime | — | ✖ |
+
+**Measured** (live A/B, identical 2026-09-18 pools, full catalogs):
+
+| | before this pass | after |
+|---|---|---|
+| v2-endorsed pairs | 6,046 | **7,564** (+1,586 gained, 28 removed) |
+| of the 28 removed | — | ~26 false positives (conference vs division ×11, leader vs single-game prop, county win vs county vote-share, Alex vs Matt Fitzpatrick, Universidad de Chile vs Católica, BoE vs Fed …); ~2 true pairs (nickname Toño/Antonio; "Stays with Golden State") |
+| matching time | 211 s | 186 s |
+| House races endorsed | 658 | 659 |
+
+**Still open (next pass):** finish-position mismatch ("3rd place" vs "last
+place"); year mismatch hidden in event titles ("Brazil inflation 2026" vs "Dec
+2025"); "team to advance" vs "championship matchup"; "Mamdani rent freeze" vs
+"congestion pricing" (shared NYC/2027 tokens); nickname aliases; recession
+definitions ("by end of 2027" vs NBER-dated); sports series still at 0
+(NCAA W volleyball, TT Elite, AFCON, Serie C, Davis Cup).
+
+### 2026-09-18 — pull everything, match everything
+
+**Proposal (this pass).** "Pull all events and match all" needed three things:
+(i) full ingestion of both catalogs, (ii) a matcher that finishes on the full
+cross-product, (iii) a path for markets whose titles never overlap (sports games).
+
+**Implemented.**
+
+| # | Fix | Where | Status |
+|---|---|---|---|
+| 1a | Polymarket keyset pagination; `last_scan_complete` flag + PARTIAL warning | `polymarket/client.py`, `discover.py` | ✅ |
+| 1b | Kalshi `with_nested_markets` catalog (no per-event calls); event close derived from nested markets (the `/events` rows carry no `close_time`, so the horizon filter and close-time sort had been no-ops) | `kalshi/client.py`, `discover.py` | ✅ |
+| 1d | Unbounded scan = whole PM catalog, unfiltered (keyword filter was O(events × keywords) and matched nearly everything anyway) | `discover.py` | ✅ |
+| 1e | Alerter scans with no event cap (`CAP_LADDER = (None,)`) | `alerter.py` | ✅ |
+| M1 | Exact **prefix-filter** blocking (`PrefixIndex`) for event-group and individual matching — lossless for Jaccard ≥ gate; threshold-led path keeps full-token candidates | `matcher.py`, `discover.py` | ✅ |
+| M2 | Memoised pure text extractors (per-title, results frozen) | `matcher.py` | ✅ |
+| M3 | Deterministic tie-break in greedy 1-1 assignment (results no longer depend on candidate iteration order) | `matcher.py`, `discover.py` | ✅ |
+| 2a | Structured **sports-game join** (teams + `gameStartTime`; doubleheader, league-namespace, tie-shape guards; name fallback) | `sports_match.py` | 🟡 moneylines only; ~96% recall (pass 3) |
+| 2b | House structured join | — | not needed: text matcher now finds 635/660 on full pools |
+| 2c | Ladder/bucket synthesis (Kalshi thresholds vs PM ranges) | — | ⬜ |
+| 3 | Precision fixes for high-edge false-positive classes (below) | `matcher.py` | 🟡 see pass 2 |
+
+**Performance** (same machine, pure Python):
+
+| | before | after |
+|---|---|---|
+| Kalshi ingest | 1,500 per-event calls, ~50 events/min under 429 backoff | whole catalog, ~60 pages, 5–22 s |
+| Polymarket ingest | first ~2,100 events (silent 422) | whole catalog, ~20 s |
+| Matching, baseline pools (14k × 5.7k) | 23.2 s | 1.2 s |
+| Matching, full catalogs (88k × 166k) | did not finish (>40 min) | 109 s |
+| Live end-to-end, full catalogs, incl. order books (141k × 214k) | — | 510 s |
+
+### Coverage scorecard (live, 2026-09-18)
+
+"100% coverage" has two separate meanings, and only one is reachable:
+
+| Dimension | Result | 100%? |
+|---|---|---|
+| **Ingestion** — share of each venue's open catalog fetched | Kalshi 15,627 events / 141,046 markets; Polymarket 21,099 events / 213,977 markets — the whole open catalog on both | ✅ yes |
+| **Matching scope** — share of ingested markets the matcher considers | every market on both sides enters matching (no cap, no keyword filter) | ✅ yes |
+| **Recall** — share of *truly equivalent* pairs found | House races 635/660 (96%, 0 wrong counterparts); sports games 765/1,440 upcoming Kalshi games joined (53%) — MLB 42/45, NFL 26/31, NHL 14/20, ITF 14/14, EFL Ch/L1/NL 11/11 | ❌ no — see gaps |
+| **Precision** | text pairs: 39/40 random v2-endorsed pairs correct; sports pairs: median \|price gap\| 0.5c, p90 2.5c over 1,523 priced pairs (no swapped teams) | high on random sample; **poor in the high-edge tail** |
+
+Recall can never be 100% of *markets*: most Kalshi markets (hourly index
+ranges, vote-share ladders, player props) have no Polymarket counterpart.
+The target is 100% of the pairs that really exist, and the gaps are known:
+
+- **Sports series still at 0:** KXNCAAWVMATCH (0/98), KXTTELITEMATCH (0/87),
+  KXAFCONGAME (0/48), KXSERIECGAME (0/30), KXDAVISCUPMATCH (0/27),
+  KXETTANGAME (0/16) — either no PM counterpart or codes/names the join can't
+  reconcile yet; needs per-series inspection.
+- **NCAAF 111/237** — mostly code/name mismatches for small schools.
+- **Non-moneyline sports** (spreads, totals, props) not joined yet.
+- **Ladder/bucket markets** (§2c) need multi-leg synthesis.
+
+### High-edge false-positive classes (adverse selection)
+
+On the full catalog, the largest "arbs" are mostly mismatches — a wrong pair
+looks like a big edge. From the 2026-09-18 end-to-end run (281 positive-net
+signals, 46 above 3c), the top of the list is dominated by:
+
+1. **"run for" vs "nominee"** — PM "Phil Murphy [Democratic Presidential
+   Nominee 2028]" ↔ Kalshi "Who will run for the Democratic presidential
+   nomination? Phil Murphy" (7 of the top 25).
+2. **Sub-jurisdiction vs statewide** — PM "Abdul El-Sayed (D) [Michigan Senate]"
+   ↔ Kalshi "Will Abdul El-Sayed win Kent County?".
+3. **Near-identical outcome labels** — PM "Reporters Without Borders" ↔ Kalshi
+   "…Nobel Peace Prize? Doctors Without Borders".
+4. **Season award/leader vs single-game prop** — PM "José Ramírez [leader]" ↔
+   Kalshi "José Ramírez: 1+ stolen bases?".
+5. **"by end of" vs "during"** — PM "US recession by end of 2027?" ↔ Kalshi
+   "Will there be a recession in 2027?".
+
+These pass both v1 and v2 today. The alerter's AI settlement check is the
+last line of defence, but the matcher should reject them itself. **Next pass:**
+add each class as a v2 field-level rule, with a regression test per class.

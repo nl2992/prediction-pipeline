@@ -1061,5 +1061,31 @@ class MatcherClearCaches(unittest.TestCase):
         self.assertGreaterEqual(n, 20)
 
 
+class OutcomeLabelMatching(unittest.TestCase):
+    """_match_outcomes_within_group compares PM labels to Kalshi yes_sub_title
+    for NAMED outcomes only (numeric ladders keep the title path)."""
+
+    def _k(self, ticker, title, sub, mid):
+        from pipeline import MarketSnapshot, OrderBook, PriceLevel
+        return MarketSnapshot("kalshi", ticker, "KE", title, "active", None, "",
+                              OrderBook(bids=[PriceLevel(mid, 10)], asks=[PriceLevel(mid + .01, 10)]),
+                              extra={"event_title": "What will Costco say during their next earnings call?",
+                                     "yes_sub_title": sub})
+
+    def _p(self, mid_id, label, mid):
+        from pipeline import MarketSnapshot, OrderBook, PriceLevel
+        return MarketSnapshot("polymarket", mid_id, "pe", label, "open", None, "",
+                              OrderBook(bids=[PriceLevel(mid, 10)], asks=[PriceLevel(mid + .01, 10)]),
+                              extra={"event_title": "What will Costco say during their next earnings call?"})
+
+    def test_named_outcome_matches_via_sub_title(self):
+        from discover import _match_outcomes_within_group
+        k = [self._k("K-DIV", "What will Costco say during their next earnings call? Dividend", "Dividend", .6),
+             self._k("K-TAR", "What will Costco say during their next earnings call? Tariff", "Tariff", .3)]
+        p = [self._p("p-div", "Dividend", .61), self._p("p-tar", "Tariff", .29)]
+        got = sorted((x.poly.market_id, x.kalshi.market_id) for x in _match_outcomes_within_group(k, p, 1.0))
+        self.assertEqual(got, [("p-div", "K-DIV"), ("p-tar", "K-TAR")])
+
+
 if __name__ == "__main__":
     unittest.main()

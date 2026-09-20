@@ -11,7 +11,7 @@ import os
 import unittest
 
 from contract_spec import (
-    extract_spec, match_spec,
+    explain, extract_spec, match_spec,
     _bet_type, _num_range, _first_name_collision, _polarity,
     _corporate_event, _beat_order,
     _playoff_stage, _rank_number, _group_bucket_jurisdictions,
@@ -432,7 +432,6 @@ class BeatOrder(unittest.TestCase):
         self.assertIsNone(_beat_order("Who wins the game?"))
 
 
-class PlayoffStage(unittest.TestCase):
     """Division / conference / seed are mutually exclusive sports contracts
     (audit FP class: NHL conference-champion phantom-matched to a division
     winner on the same team; AFC West [division] phantom-matched to AFC #5
@@ -1303,6 +1302,54 @@ class Iter6DiscriminatorTests(unittest.TestCase):
     def test_no_explicit_period_either_side_not_rejected_by_this_gate(self):
         d = decide_full("GDP growth in 2026?", "", "GDP growth in 2026? Above 2.0%", "")
         self.assertNotIn("fiscal period mismatch", " ".join(d.reasons))
+
+
+class OutcomeLabelOverride(unittest.TestCase):
+    """v2: an exact outcome label (Kalshi yes_sub_title == PM label) outranks the
+    name/subject heuristics, which exist to separate DIFFERENT contestants."""
+
+    @staticmethod
+    def _pm(label, event):
+        from pipeline import MarketSnapshot, OrderBook
+        return MarketSnapshot("polymarket", "p", "pe", label, "open", None, "",
+                              OrderBook(bids=[], asks=[]), extra={"event_title": event})
+
+    @staticmethod
+    def _k(title, event, sub=""):
+        from pipeline import MarketSnapshot, OrderBook
+        return MarketSnapshot("kalshi", "K", "KE", title, "active", None, "",
+                              OrderBook(bids=[], asks=[]),
+                              extra={"event_title": event, "yes_sub_title": sub})
+
+    def test_party_worded_question_with_candidate_sub_title(self):
+        d = explain(self._pm("Jamie Davis (D)", "Louisiana Senate Election Winner"),
+                    self._k("Will Democratics win the Senate race in Louisiana? Jamie Davis",
+                            "Louisiana Senate winner?", "Jamie Davis"))
+        self.assertTrue(d.match, d.reasons)
+
+    def test_leader_wordings_are_not_prop_vs_plain(self):
+        d = explain(self._pm("Travis Kelce", "Fantasy Football: 2026-27 TE Points Leader"),
+                    self._k("Who will be Fantasy Football: 2026-27 Season Top TE? Travis Kelce",
+                            "Fantasy Football: 2026-27 Season Top TE", "Travis Kelce"))
+        self.assertTrue(d.match, d.reasons)
+
+    def test_different_contestants_rejected_by_the_pipeline(self):
+        # v2 alone does not guard these (it never did); the production path
+        # requires v1 AND v2, and v1's context_veto rejects them.
+        from matcher import is_compatible_match
+        self.assertFalse(is_compatible_match(
+            self._pm("Alex Fitzpatrick", "BMW PGA Championship Top 20"),
+            self._k("Matt Fitzpatrick finishes top 20", "BMW PGA: Top 20 Finishers", "Matt Fitzpatrick")))
+        self.assertFalse(is_compatible_match(
+            self._pm("Reporters Without Borders", "Nobel Peace Prize Winner 2026"),
+            self._k("Who will win the Nobel Peace Prize? Doctors Without Borders",
+                    "2026 Nobel Peace Prize winner", "Doctors Without Borders")))
+
+    def test_v2_still_rejects_a_different_named_outcome(self):
+        d = explain(self._pm("Bo Nix", "Fantasy Football: 2026-27 QB Points Leader"),
+                    self._k("Who will be Fantasy Football: 2026-27 Season Top QB? Patrick Mahomes",
+                            "Fantasy Football: 2026-27 Season Top QB", "Patrick Mahomes"))
+        self.assertFalse(d.match)
 
 
 if __name__ == "__main__":

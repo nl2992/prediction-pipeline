@@ -106,8 +106,13 @@ for _stream in (sys.stdout, sys.stderr):
 # pass explicit int caps (e.g. for a fast smoke scan). To keep the inbox sane,
 # emails are capped to the TOP_N richest (see signals_to_send). Re-check
 # docs/history/MATCHER_VALIDATION_LOG.md (runs 12, 30, 38) before changing.
+#
+# 2026-09: ingestion is now full-catalog (Kalshi nested markets, Polymarket
+# keyset) and matching uses exact prefix-filter blocking, so a scan with NO event
+# cap (None) completes in minutes. The ladder is a single uncapped rung; see
+# docs/EXPANSION_PROPOSAL.md ("Progress log").
 TARGET_SURVIVABLE = 50
-CAP_LADDER = (None,)
+CAP_LADDER: tuple[int | None, ...] = (None,)
 # Email only the N richest (by net-of-fees edge) per cycle — full-catalog scans
 # surface ~335 survivable arbs; the operator wants the richest, not all of them.
 TOP_N = 50
@@ -299,6 +304,8 @@ def compute_signals(pairs: list[dict], min_edge: float,
     for p in pairs:
         if require_v2 and p.get("v2_match") is not True:
             continue  # independent referee does not confirm same contract
+        if p.get("settlement_risk"):
+            continue  # same wording, possibly different settlement data (e.g. weather station)
         pb, pa = p.get("poly_bid"), p.get("poly_ask")
         kb, ka = p.get("kalshi_bid"), p.get("kalshi_ask")
 

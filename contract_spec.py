@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING
 from matcher import (
     _ascii_lower,
     _bare_subject_name,
+    _same_person_variant,
     _close_delta_hours,
     _contract_actions,
     _contract_text,
@@ -99,6 +100,10 @@ class ContractSpec:
     beat_order: tuple[str, str] | None  # ordered (winner, loser) for "A beat B"
     close_time: str | None
     settle_src: frozenset[str]          # compact settlement-source tags (see settlement_source())
+    # Outcome label: Kalshi's yes_sub_title, Polymarket's short market title.
+    # Exact equality means both contracts name the SAME outcome, which outranks
+    # the name/subject heuristics (they exist to separate different contestants).
+    outcome_label: str = ""
     raw: str = field(repr=False, default="")
 
 
@@ -863,6 +868,9 @@ def extract_spec(snap: "MarketSnapshot") -> ContractSpec:
         beat_order=_beat_order(text),
         close_time=getattr(snap, "close_time", None),
         settle_src=frozenset((getattr(snap, "extra", {}) or {}).get("settle_src") or ()),
+        outcome_label=((getattr(snap, "extra", None) or {}).get("yes_sub_title")
+                       if getattr(snap, "source", "") == "kalshi"
+                       else getattr(snap, "title", "")) or "",
         raw=text,
     )
 
@@ -885,6 +893,54 @@ class MatchDecision:
 
 def _reject(reason: str) -> MatchDecision:
     return MatchDecision(False, False, 0.0, [reason])
+
+
+def _label_key(label: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", _ascii_lower(re.sub(r"\(.*?\)", "", label or "")))
+
+
+def _is_name_label(label: str) -> bool:
+    """Outcome label that names a person/team ("Patrick Mahomes", "Tokyo Yakult
+    Swallows") rather than a level or phrase ("25 bps increase", "Above 4.5%")."""
+    words = re.findall(r"[^\W\d_][\w'’.-]*", label or "")
+    return len(words) >= 2 and all(w[:1].isupper() for w in words) and not re.search(r"\d", label or "")
+
+
+def _different_named_outcome(a: ContractSpec, b: ContractSpec) -> bool:
+    """Both sides name an outcome and neither name contains the other —
+    "Bo Nix" vs "Patrick Mahomes" is a different contract, while
+    "Yakult Swallows" vs "Tokyo Yakult Swallows" is the same one."""
+    if not (_is_name_label(a.outcome_label) and _is_name_label(b.outcome_label)):
+        return False
+    la, lb = _label_key(a.outcome_label), _label_key(b.outcome_label)
+    if len(la) < 5 or len(lb) < 5:
+        return False
+    if la in lb or lb in la:
+        return False
+    # Name variants of ONE person are the same outcome: short forms ("Ben" /
+    # "Benjamin Silverman", "Cam" / "Cameron Davis"), spelling ("Jaxon" /
+    # "Jaxson"), and inserted middle names ("Jordan L. Smith").
+    if _same_person_variant(a.outcome_label, b.outcome_label):
+        return False
+    # One name may carry middle names or a second surname the other omits
+    # ("Justin J. Pearson", "Kendor Gregorio Macías Martínez"): a strict token
+    # subset sharing >= 2 words is the same person. Party suffixes "(D)"/"(R)"
+    # are stripped first. "Los Angeles Lakers" vs "Los Angeles C" is NOT a
+    # subset (C is not a Lakers token), so rival teams stay rejected.
+    def toks(label: str) -> set[str]:
+        bare = re.sub(r"\(.*?\)", " ", label or "")
+        return {w for w in (re.sub(r"[^a-z0-9]", "", x) for x in _ascii_lower(bare).split()) if w}
+
+    ta, tb = toks(a.outcome_label), toks(b.outcome_label)
+    if ta and tb and len(ta & tb) >= 2 and (ta <= tb or tb <= ta):
+        return False
+    return True
+
+
+def _same_outcome_label(a: ContractSpec, b: ContractSpec) -> bool:
+    la = re.sub(r"[^a-z0-9]", "", _ascii_lower(re.sub(r"\(.*?\)", "", a.outcome_label)))
+    lb = re.sub(r"[^a-z0-9]", "", _ascii_lower(re.sub(r"\(.*?\)", "", b.outcome_label)))
+    return len(la) >= 5 and la == lb
 
 
 def match_spec(
@@ -930,13 +986,19 @@ def match_spec(
         return _reject(f"settle_src_mismatch ({cls}): {pa} vs {pb}")
     if a.products and b.products and a.products.isdisjoint(b.products):
         return _reject(f"product mismatch: {sorted(a.products)} vs {sorted(b.products)}")
-    if a.winner_subject and b.winner_subject and not _names_overlap(
+    # Same named outcome on both sides: the subject/name heuristics exist to
+    # separate DIFFERENT contestants, so they must not fire here (a party-worded
+    # Kalshi question carries the candidate in yes_sub_title).
+    same_outcome = _same_outcome_label(a, b)
+    if _different_named_outcome(a, b):
+        return _reject(f"different named outcome: {a.outcome_label!r} vs {b.outcome_label!r}")
+    if not same_outcome and a.winner_subject and b.winner_subject and not _names_overlap(
         set(a.winner_subject), set(b.winner_subject)
     ):
         return _reject(
             f"winner-subject mismatch: {sorted(a.winner_subject)} vs {sorted(b.winner_subject)}"
         )
-    if a.selected_names and b.selected_names and not _names_overlap(
+    if not same_outcome and a.selected_names and b.selected_names and not _names_overlap(
         set(a.selected_names), set(b.selected_names)
     ):
         return _reject(
@@ -946,7 +1008,7 @@ def match_spec(
     # Alvarez") — _names_overlap treats them as overlapping via the shared first
     # name, so guard surnames explicitly on the SELECTED names (run 42). Entities
     # are too broad (they broke fixture parity), so only selected_names is used.
-    if _first_name_collision(a.selected_names, b.selected_names):
+    if not same_outcome and _first_name_collision(a.selected_names, b.selected_names):
         return _reject("different person: shared first name, different surname")
 
     # Same PERSON, different team/org context (e.g. Rocco Baldelli as Phillies
@@ -1001,7 +1063,10 @@ def match_spec(
         return _reject(f"corporate-event mismatch: {ca} vs {cb}")
     # A player prop on one side and a non-prop market on the same subject
     # (the other side has no bet_type) is still a different contract.
-    if (a.bet_type == "prop") != (b.bet_type == "prop") and (
+    # Two leader markets worded differently ("QB Points Leader" / "Season Top
+    # QB") are one contract, not prop-vs-plain (mirrors matcher.py).
+    both_leader = "stat_leader" in a.actions and "stat_leader" in b.actions
+    if not both_leader and (a.bet_type == "prop") != (b.bet_type == "prop") and (
         (a.entities & b.entities)
         or (a.selected_names & b.selected_names)
         or (a.winner_subject & b.winner_subject)
