@@ -346,3 +346,122 @@ class Keeps(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TopOfBookMismatches(unittest.TestCase):
+    """The largest apparent edges in a live run are where mismatches hurt most.
+    Each case below was a top-16 'arb' on 2026-09-21 before these rules."""
+
+    def check(self, p, k, part):
+        r = context_veto(p, k)
+        self.assertIsNotNone(r, f"expected a veto, got none for {p.title!r}")
+        self.assertIn(part, r)
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_ordinal_place_vs_top_n(self):          # +74c
+        self.check(pm("Cruz Azul", "Liga MX: 2026 Apertura 2nd Place Finish"),
+                   ks("Will Cruz Azul finish in the top 8 in the Liga MX Apertura?",
+                      "Liga MX Apertura Top 8 Finishers", "Cruz Azul"), "finishing scope")
+
+    def test_award_nomination_vs_win(self):         # +18c
+        self.check(pm("Spider-Man: Brand New Day", "Oscars 2027: Best Visual Effects Winner"),
+                   ks("2027 Best Visual Effects Oscar nominations? Spider-Man",
+                      "Oscar nominees: Best Visual Effects", "Spider-Man: Brand New Day"), "nomination")
+
+    def test_different_awards_body(self):           # +19c
+        self.check(pm("Sam Rockwell", "Oscars 2027: Best Actor Nominations"),
+                   ks("Will Sam Rockwell be on the list of nominees for Best Supporting Actor?",
+                      "Golden Globe Nominations: Best Supporting Actor", "Sam Rockwell"), "awards body")
+
+    def test_different_county(self):                # +19c
+        self.check(pm("Abdul El-Sayed (D)", "Michigan Senate Election: Kent County Winner"),
+                   ks("Will Abdul El-Sayed win Eaton County?",
+                      "Michigan Senate: which counties will Abdul El-Sayed win?", "Abdul El-Sayed"),
+                   "county")
+
+    def test_division_title_vs_league_championship(self):   # +19c / +17c
+        self.check(pm("Vegas Golden Knights", "NHL: 2027 Champion"),
+                   ks("Will the Vegas Golden Knights win the Pacific Division?",
+                      "NHL Pacific Division Winner", "Vegas Golden Knights"), "overall title")
+
+    def test_second_best_vs_top(self):              # +19c
+        # Two independent faults here (rank 2 vs 1, and a week vs a month), so
+        # assert the rejection and accept whichever rule reports first.
+        p = pm("Moonshot", "Second-Best Chinese AI Company end of September?")
+        k = ks("Top Chinese AI Company week of September 21st? Moonshot",
+               "Top Chinese AI Company week of September 21st", "Moonshot")
+        reason = context_veto(p, k)
+        self.assertIsNotNone(reason)
+        self.assertTrue("finishing scope" in reason or "period" in reason, reason)
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_ordinal_best_beyond_second(self):
+        self.assertEqual(context_veto(
+            pm("Z.ai", "Third-Best Chinese AI Company end of September?"),
+            ks("Top Chinese AI Company end of September? Z.ai",
+               "Top Chinese AI Company end of September", "Z.ai")), "different finishing scope (top-N vs winner)")
+
+    def test_superlative_stat_vs_advancement(self):   # +16c
+        self.check(pm("Kansas City Chiefs", "Pro Football: Team to advance to AFC Championship Game"),
+                   ks("Will Kansas City be the highest scoring team?",
+                      "Pro Football Highest Scoring Team", "Kansas City"), "superlative")
+
+    def test_school_qualifier_mismatch(self):         # +11c
+        self.check(pm("Texas A&M", "NCAA Football: Team to Make National Championship"),
+                   ks("Will Texas reach the College Football Playoff National Championship?",
+                      "College Football National Championship Qualifiers", "Texas"), "school")
+
+    def test_different_legislative_chamber(self):   # +15c
+        self.check(pm("PL", "Next Brazil Senate Election: Most Seats Won"),
+                   ks("Will PL win the 2026 Brazilian Chamber of Deputies election?",
+                      "Brazil Chamber of Deputies Election: Most Seats", "PL"), "chamber")
+
+
+class TopOfBookKeeps(unittest.TestCase):
+    def test_same_award_same_category_still_pairs(self):
+        self.assertIsNone(context_veto(
+            pm("Ella Langley", "CMA Female Vocalist of the Year 2026"),
+            ks("Will Ella Langley win Female Vocalist of the Year at the CMA Awards?",
+               "CMA Awards: Female Vocalist of the Year", "Ella Langley")))
+
+    def test_political_nomination_is_not_an_award_nomination(self):
+        self.assertIsNone(context_veto(
+            pm("Greg Abbott", "Who will announce Presidential run before 2027?"),
+            ks("Who will run for the Republican presidential nomination in 2028? Greg Abbott",
+               "Who will run for the 2028 Republican presidential nomination?", "Greg Abbott")))
+
+
+class TopOfBookMismatchesRound2(unittest.TestCase):
+    """Second batch, from the top of the live list after round 1."""
+
+    def check(self, p, k, part):
+        r = context_veto(p, k)
+        self.assertIsNotNone(r, f"expected a veto for {p.title!r}")
+        self.assertIn(part, r)
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_exit_poll_vs_election_result(self):       # +21c
+        self.check(pm("Democratic Party", "Which party will hold more governorships after the midterms?"),
+                   ks("Will Democrats win independents in the exit poll? Democratic",
+                      "Midterms: which party wins independents?", "Democratic"), "exit poll")
+
+    def test_matchup_vs_single_team_advancement(self):  # +14c
+        self.check(pm("New York Giants", "Pro Football: Team to advance to NFC Championship Game"),
+                   ks("2026-27 Championship Game Matchup: New York J vs Los Angeles",
+                      "Pro Football Championship Game Matchup", "New York J"), "matchup")
+
+    def test_victory_label_is_first_place(self):        # +10c
+        self.check(pm("Renan Santos Victory", "Brazil Presidential Election First Round Winner"),
+                   ks("Will Renan Santos finish 4th in the first round?",
+                      "Brazil presidential election: 4th place (1st round)", "Renan Santos"),
+                   "finishing")
+
+    def test_womens_vs_mens_competition(self):          # +9c
+        self.check(pm("Arsenal", "UEFA Women's Champions League 2026-27 Winner"),
+                   ks("Will Arsenal win the Champions League?", "Champions League Winner", "Arsenal"),
+                   "women's")
+
+    def test_day_vs_month_period(self):                 # +9c
+        self.check(pm("claude-fable-5.1-max", "Best AI model on September 21?"),
+                   ks("What will be the top AI model this month? claude-fable-5.1-max",
+                      "Top AI model in September?", "claude-fable-5.1-max"), "period")

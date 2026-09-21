@@ -1715,6 +1715,94 @@ def _sub_jurisdiction(text: str) -> bool:
 
 
 @functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
+def _period_grain(text: str) -> frozenset[str]:
+    """How long the contract measures over: "Top AI company THIS WEEK" is not
+    "best AI company at the END OF NOVEMBER"."""
+    out = set()
+    if re.search(r"\bon (?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{1,2}\b"
+                 r"|\btoday\b|\btomorrow\b", text):
+        out.add("day")
+    if re.search(r"\bweek of\b|\bthis week\b|\bweekly\b", text):
+        out.add("week")
+    if re.search(r"\bthis month\b|\bmonthly\b"
+                 r"|\bend of (?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)", text):
+        out.add("month")
+    return frozenset(out)
+
+
+def _is_exit_poll(text: str) -> bool:
+    """An exit-poll demographic split is not an election result."""
+    return bool(re.search(r"\bexit polls?\b", text))
+
+
+def _is_matchup(text: str) -> bool:
+    """"Championship Game Matchup: A vs B" pairs two teams; "team to advance"
+    is a single-team contract."""
+    return bool(re.search(r"\bmatchup\b", text))
+
+
+def _womens_competition(text: str) -> bool:
+    """Women's competitions are separate contracts from the men's ones."""
+    return bool(re.search(r"\bwomen'?s?\b|\bwsl\b|\bnwsl\b|\bwnba\b|\bfemale\b", text))
+
+
+def _superlative_stat(text: str) -> bool:
+    """"highest scoring team" is a season stat crown, not a playoff run."""
+    return bool(re.search(r"\b(?:highest|lowest)[- ]scoring\b|\bmost points\b", text))
+
+
+_SCHOOL_QUALIFIERS = frozenset({"a&m", "am", "state", "st", "tech", "southern",
+                                "northern", "eastern", "western", "central"})
+
+
+def _school_qualifier(text: str) -> frozenset[str]:
+    """"Texas A&M" is not "Texas"; "Michigan State" is not "Michigan"."""
+    return frozenset(t for t in re.split(r"[^a-z0-9&]+", text) if t in _SCHOOL_QUALIFIERS)
+
+
+def _is_nomination(text: str) -> bool:
+    """Being NOMINATED is not winning ("Best Visual Effects nominations" vs
+    "Best Visual Effects Winner"). Callers gate this on an awards context, since
+    "presidential nomination" is an election contest, not a shortlist."""
+    return bool(re.search(r"\bnominee?s?\b|\bnominations?\b|\bshortlist(?:ed)?\b", text))
+
+
+_AWARD_BODIES = (
+    ("oscar", r"\boscars?\b|\bacademy award"),
+    ("golden_globe", r"\bgolden globes?\b"),
+    ("grammy", r"\bgrammys?\b"),
+    ("emmy", r"\bemmys?\b"),
+    ("bafta", r"\bbaftas?\b"),
+    ("cma", r"\bcma\b|\bcountry music association\b"),
+    ("tony", r"\btony awards?\b"),
+    ("sag", r"\bsag awards?\b|\bscreen actors guild\b"),
+)
+
+
+def _award_body(text: str) -> frozenset[str]:
+    """Which awards show — an Oscar nomination is not a Golden Globe one."""
+    return frozenset(name for name, pat in _AWARD_BODIES if re.search(pat, text))
+
+
+def _counties(text: str) -> frozenset[str]:
+    """Named counties/parishes: Kent County and Eaton County are different races."""
+    # Just the name immediately before "county"/"parish"; a longer capture would
+    # swallow the verb ("... win eaton county").
+    return frozenset(m.group(1) for m in
+                     re.finditer(r"\b([a-z][a-z'’-]{2,})\s+(?:county|parish)\b", text))
+
+
+_CHAMBERS = (
+    ("senate", r"\bsenate\b|\bsenado\b"),
+    ("lower", r"\bchamber of deputies\b|\bhouse of representatives\b|\bc[aâ]mara dos deputados\b"),
+)
+
+
+def _legislative_chamber(text: str) -> frozenset[str]:
+    """Upper vs lower house — "most Senate seats" is not "Chamber of Deputies"."""
+    return frozenset(name for name, pat in _CHAMBERS if re.search(pat, text))
+
+
 def _competition_tier(text: str) -> frozenset[str]:
     return frozenset(t for t in ("division", "conference") if re.search(rf"\b{t}\b", text))
 
@@ -1915,10 +2003,26 @@ def _qualify_scope(text: str) -> frozenset[str]:
 def _finish_scope(text: str) -> frozenset[str]:
     """Where a competitor finishes: winning is 1, "top 5" is 5, "runner-up" 2."""
     out = set()
-    if re.search(r"\bwin(?:s|ner)?\b|\bchampions?\b|\b1st place\b", text):
+    if re.search(r"\bwin(?:s|ner)?\b|\bchampions?\b|\b1st place\b|\bvictor(?:y|ious)\b", text):
         out.add("1")
     for m in re.finditer(r"\btop[- ](\d+)\b", text):
         out.add(m.group(1))
+    # "2nd Place Finish" is a different contract from "top 8 finish".
+    for m in re.finditer(r"\b(\d+)(?:st|nd|rd|th)\s+place\b", text):
+        out.add(m.group(1))
+    # "finish 4th in the first round" — the word "place" is often absent.
+    for m in re.finditer(r"\bfinish(?:es|ing)?\s+(\d+)(?:st|nd|rd|th)\b", text):
+        out.add(m.group(1))
+    _ORD_BEST = {"second": "2", "third": "3", "fourth": "4", "fifth": "5",
+                 "2nd": "2", "3rd": "3", "4th": "4", "5th": "5"}
+    _mb = re.search(r"\b(second|third|fourth|fifth|2nd|3rd|4th|5th)[- ]best\b", text)
+    if _mb:
+        out.add(_ORD_BEST[_mb.group(1)])
+    # A bare "top"/"best" (no rank number) is rank 1: "Top Chinese AI Company"
+    # vs "Second-Best Chinese AI Company" are different contracts. "top 5" is
+    # excluded here — it is already captured with its number above.
+    elif re.search(r"\b(?:top|best)\b(?!\s*\d)", text):
+        out.add("1")
     for m in re.finditer(r"#(\d{1,2})\b(?!\s*seed)", text):   # "#1 searched person"
         out.add(m.group(1))
     if re.search(r"\brunner[- ]?up\b", text):
@@ -1975,7 +2079,8 @@ def settlement_risk(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> str | N
     """Same event wording, but settlement data may differ across venues. The
     pair stays visible; alerting skips it (alerter.compute_signals)."""
     both = _event_text(poly) + " " + _event_text(kalshi)
-    if re.search(r"\b(?:highest|lowest|maximum|minimum|high|low) temperature\b", both):
+    if re.search(r"\b(?:highest|lowest|maximum|minimum|high|low) temperature\b", both) \
+            or re.search(r"\bwill it (?:rain|snow)\b|\bprecipitation\b|\brainfall\b", both):
         return "weather: venues may settle on different stations"
     p_act = _contract_actions(_ascii_lower(_contract_text(poly)))
     k_act = _contract_actions(_ascii_lower(_contract_text(kalshi)))
@@ -2021,6 +2126,45 @@ def context_veto(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> str | None
     ptier, ktier = _competition_tier(pt), _competition_tier(kt)
     if ptier and ktier and ptier != ktier:
         return "division vs conference"
+    # A division/conference title is not the league championship.
+    p_overall = bool(re.search(r"\bchampions?\b|\bfinals?\b|\btitle\b", pt))
+    k_overall = bool(re.search(r"\bchampions?\b|\bfinals?\b|\btitle\b", kt))
+    if (ptier and not ktier and k_overall) or (ktier and not ptier and p_overall):
+        return "division/conference vs overall title"
+    # Award nominations only: a POLITICAL nomination ("run for the presidential
+    # nomination") is a different sense of the word and must not trip this.
+    pgr, kgr = _period_grain(pt), _period_grain(kt)
+    if pgr and kgr:
+        if pgr.isdisjoint(kgr):
+            return "different period granularity"
+        # Same granularity, different period: "best AI company end of November"
+        # vs "top AI company this month" both say "month" but settle 2 months
+        # apart, so compare the resolution dates.
+        delta = _close_delta_hours(poly.close_time, kalshi.close_time)
+        if delta is not None and delta > 24 * 20:
+            return "same granularity, different period"
+    if _superlative_stat(pt) != _superlative_stat(kt):
+        return "superlative stat vs advancement/win"
+    if _is_exit_poll(pt) != _is_exit_poll(kt):
+        return "exit poll vs election result"
+    if _is_matchup(pt) != _is_matchup(kt):
+        return "matchup (two teams) vs single-team contract"
+    if _womens_competition(pt) != _womens_competition(kt):
+        return "women's vs men's competition"
+    if _school_qualifier(_ascii_lower(poly.title)) != _school_qualifier(
+            _ascii_lower((kalshi.extra or {}).get("yes_sub_title") or "")):
+        return "different school (qualifier mismatch)"
+    if (_award_body(pt) or _award_body(kt)) and _is_nomination(pt) != _is_nomination(kt):
+        return "award nomination vs win"
+    pa_, ka_ = _award_body(pt), _award_body(kt)
+    if pa_ and ka_ and pa_.isdisjoint(ka_):
+        return "different awards body"
+    pc_, kc_ = _counties(pt), _counties(kt)
+    if pc_ and kc_ and pc_.isdisjoint(kc_):
+        return "different county"
+    pch, kch = _legislative_chamber(pt), _legislative_chamber(kt)
+    if pch and kch and pch.isdisjoint(kch):
+        return "different legislative chamber"
     if _is_price_race(pt) != _is_price_race(kt):
         return "price race (X before Y) vs single level"
     pb, kb = _central_banks(pt), _central_banks(kt)
