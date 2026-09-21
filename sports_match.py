@@ -58,11 +58,15 @@ _TIME_TOLERANCE = timedelta(hours=3)
 _GENERIC_NAME_TOKENS = frozenset({
     "fc", "sc", "cf", "hc", "sk", "fk", "cd", "ca", "ac", "afc", "sv", "vv", "rc",
     "cs", "bc", "bk", "ad", "club", "de", "la", "el", "the", "da", "do", "e", "y",
+    # Swiss hockey club prefix: Kalshi "EHC Kloten" vs Polymarket "Kloten Flyers".
+    "ehc",
 })
 # English/local spellings and abbreviations seen across the two venues.
 _NAME_ALIASES = {
     "saint": "st", "utd": "united", "munich": "munchen", "prague": "praha",
     "as": "athletics",  # Kalshi "A's" (apostrophe stripped) vs PM "Athletics"
+    # Swiss NL: Polymarket's "SCL Tigers" is SC Langnau Tigers.
+    "scl": "langnau",
 }
 _FOLD = str.maketrans({"ø": "o", "æ": "ae", "ß": "ss", "đ": "d", "ł": "l", "ı": "i"})
 
@@ -147,23 +151,27 @@ class _PGame:
         self.two_way = None       # the single 2-outcome moneyline market, if any
         self.three_way: dict = {}  # code/"tie" -> YES/NO moneyline market
         self.start = None
-        self.spreads: list = []   # (team label, line, snapshot) — YES = that team covers
-        self.totals: list = []    # (line, snapshot)             — YES = Over
+        # PM sportsMarketType -> [(subject or None, line, snapshot)]; YES is the
+        # named team covering, or "Over".
+        self.lines: dict = {}
         for s in markets:
             ex = s.extra
             mtype = ex.get("sports_market_type")
-            if mtype in ("spreads", "totals"):
+            if mtype in _PM_LINE_CLASSES:
                 self.start = self.start or _parse_pm_time(ex.get("game_start_time"))
                 line = _line_value(s)
                 outs = ex.get("outcome_labels") or []
                 if line is None:
                     continue
-                if mtype == "spreads" and len(outs) == 2:
+                kind = _PM_LINE_CLASSES[mtype][1]
+                if kind == "team_side" and len(outs) == 2:
                     # "Spread: Rays (-1.5)" with outcomes [Rays, Yankees]:
                     # token 0 wins if that team covers the line.
-                    self.spreads.append((outs[0], line, s))
-                elif mtype == "totals" and [o.lower() for o in outs] == ["over", "under"]:
-                    self.totals.append((line, s))
+                    self.lines.setdefault(mtype, []).append((outs[0], line, s))
+                elif kind in ("over_under", "team_ou", "player_ou") \
+                        and [o.lower() for o in outs] == ["over", "under"]:
+                    subject = _pm_line_subject(s, kind)
+                    self.lines.setdefault(mtype, []).append((subject, line, s))
                 continue
             if mtype != "moneyline":
                 continue
@@ -183,14 +191,40 @@ class _PGame:
 
 
 _K_EVENT_KIND_RE = re.compile(r"^([A-Z0-9]+?)(GAME|MATCH|SPREAD|TOTAL)-(.+)$")
-_K_SPREAD_RE = re.compile(r"^(?P<team>.+?)\s+wins? by (?:more than|over)\s+(?P<line>[\d.]+)", re.I)
-_K_TOTAL_RE = re.compile(r"\b(?:over|more than)\s+(?P<line>[\d.]+)\b", re.I)
+
+# Polymarket contract class -> (Kalshi series suffix, subject kind).
+# Both venues list these per game, so they attach to a game key the moneyline
+# join has already verified. A class is listed ONLY when both venues resolve the
+# same thing; Kalshi's KXNFLREC/KXMLBSB and Polymarket's corner/exact-score
+# markets have no counterpart on the other side and stay unmatched by design.
+_PM_LINE_CLASSES = {
+    "spreads":                        ("SPREAD",     "team_side"),
+    "totals":                         ("TOTAL",      "over_under"),
+    "first_half_spreads":             ("1HSPREAD",   "team_side"),
+    "second_half_spreads":            ("2HSPREAD",   "team_side"),
+    "first_half_totals":              ("1HTOTAL",    "over_under"),
+    "second_half_totals":             ("2HTOTAL",    "over_under"),
+    "team_totals":                    ("TEAMTOTAL",  "team_ou"),
+    "baseball_player_hits_runs_rbis": ("HRR",        "player_ou"),
+    "baseball_player_home_runs":      ("HR",         "player_ou"),
+}
+
+# Kalshi phrasings of the subject, per kind:
+#   team_side  "LA Rams wins 1H by over 20.5 points"   -> LA Rams
+#   team_ou    "Baltimore over 1.5 runs scored"        -> Baltimore
+#   player_ou  "Ben Rice: 1+"                          -> Ben Rice
+_K_SUBJECT_RE = {
+    "team_side": re.compile(r"^(?P<s>.+?)\s+wins?\b", re.I),
+    "team_ou": re.compile(r"^(?P<s>.+?)\s+(?:over|under)\b", re.I),
+    "player_ou": re.compile(r"^(?P<s>[^:]+):", re.I),
+}
 
 
 def _line_value(snap) -> float | None:
     """Polymarket's numeric line. The market slug encodes it unambiguously
-    ("…-total-4pt5", "…-spread-away-1pt5"); the title ("Spread -1.5", "O/U 7.5")
-    is the fallback, and titles sometimes fall back to the full question."""
+    ("…-total-4pt5", "…-hrr-drake-baldwin-0pt5"); the title ("Spread -1.5",
+    "O/U 7.5") is the fallback, because titles sometimes fall back to the
+    whole question."""
     slug = (snap.extra or {}).get("market_slug") or ""
     m = re.search(r"-(\d+)pt(\d+)\b", slug)
     if m:
@@ -202,63 +236,79 @@ def _line_value(snap) -> float | None:
     return abs(float(m.group(1))) if m else None
 
 
-def _k_line_events(k_snaps) -> dict:
-    """Kalshi SPREAD/TOTAL markets keyed by (series prefix, game-key suffix).
+def _pm_line_subject(snap, kind: str) -> str | None:
+    """Team or player a Polymarket O/U market is about: "Panthers O/U 10.5",
+    "Drake Baldwin: Hits + Runs + RBIs O/U 0.5"."""
+    title = snap.title or ""
+    if kind == "team_ou":
+        return re.split(r"\s+O/U\b", title, maxsplit=1)[0].strip() or None
+    if kind == "player_ou":
+        return title.split(":", 1)[0].strip() or None
+    return None
 
-    Kalshi lists them as their own events sharing the game's key:
-    KXMLSGAME-26SEP26VANDCU / KXMLSSPREAD-… / KXMLSTOTAL-…. Keying on the
-    EXACT series prefix keeps first-half and team-total variants
-    (KXNFL1HTEAMTOTAL) out — those are different contracts.
+
+def _k_line_value(snap) -> float | None:
+    """Kalshi's line: the strike ("1+ hits + runs + RBIs" carries floor 0.5,
+    which is Polymarket's "O/U 0.5"), falling back to the wording."""
+    strike = (snap.extra or {}).get("floor_strike")
+    if strike is None:
+        strike = (snap.extra or {}).get("cap_strike")
+    if strike is not None:
+        try:
+            return float(strike)
+        except (TypeError, ValueError):
+            pass
+    m = re.search(r"\b(?:over|more than)\s+([\d.]+)", snap.title or "", re.I)
+    return float(m.group(1)) if m else None
+
+
+def _k_line_events(k_snaps) -> dict:
+    """Kalshi line/prop markets grouped by their own event ticker.
+
+    Kalshi lists each class as its own event sharing the game key
+    (KXMLSGAME-26SEP26VANDCU / KXMLSSPREAD-… / KXNFL1HTOTAL-…), so an exact
+    event-ticker lookup keeps neighbouring classes apart.
     """
-    out: dict = defaultdict(lambda: {"SPREAD": [], "TOTAL": []})
+    out: dict = defaultdict(list)
     for s in k_snaps:
-        m = _K_EVENT_KIND_RE.match(s.event_id or "")
-        if not m or m.group(2) not in ("SPREAD", "TOTAL"):
-            continue
-        out[(m.group(1), m.group(3))][m.group(2)].append(s)
+        if s.event_id:
+            out[s.event_id].append(s)
     return out
 
 
-def _match_lines(prefix: str, suffix: str, k_lines: dict, pg: _PGame, kg: _KGame) -> list:
-    """Pair spread and total contracts for one already-verified game."""
+def _match_lines(prefix: str, suffix: str, k_by_event: dict, pg: _PGame) -> list:
+    """Pair every line/prop class for one already-verified game."""
     from matcher import MatchedPair, _close_delta_hours
 
-    pairs = []
-    bucket = k_lines.get((prefix, suffix))
-    if not bucket:
-        return pairs
-    reason = f"sports line key {prefix}*-{suffix} <-> {pg.slug}"
-
+    pairs: list = []
     used_p: set[str] = set()
-    for ks in bucket["SPREAD"]:
-        m = _K_SPREAD_RE.match((ks.extra or {}).get("yes_sub_title") or ks.title or "")
-        if not m:
+    for mtype, (k_suffix, kind) in _PM_LINE_CLASSES.items():
+        p_entries = pg.lines.get(mtype) or []
+        k_markets = k_by_event.get(f"{prefix}{k_suffix}-{suffix}") or []
+        if not p_entries or not k_markets:
             continue
-        k_team, k_line = m.group("team"), float(m.group("line"))
-        for p_team, p_line, ps in pg.spreads:
-            if ps.market_id in used_p or p_line != k_line or not _names_agree(k_team, p_team):
+        reason = f"sports line key {prefix}{k_suffix}-{suffix} <-> {pg.slug}"
+        for ks in k_markets:
+            k_line = _k_line_value(ks)
+            if k_line is None:
                 continue
-            used_p.add(ps.market_id)
-            pairs.append(MatchedPair(
-                poly=ps, kalshi=ks, title_similarity=1.0,
-                close_delta_hours=_close_delta_hours(ps.close_time, ks.close_time),
-                confidence=0.98, match_source="sports", match_reason=reason))
-            break
-
-    for ks in bucket["TOTAL"]:
-        m = _K_TOTAL_RE.search((ks.extra or {}).get("yes_sub_title") or ks.title or "")
-        if not m:
-            continue
-        k_line = float(m.group("line"))
-        for p_line, ps in pg.totals:
-            if ps.market_id in used_p or p_line != k_line:
-                continue
-            used_p.add(ps.market_id)
-            pairs.append(MatchedPair(
-                poly=ps, kalshi=ks, title_similarity=1.0,
-                close_delta_hours=_close_delta_hours(ps.close_time, ks.close_time),
-                confidence=0.98, match_source="sports", match_reason=reason))
-            break
+            k_subject = None
+            if kind != "over_under":
+                m = _K_SUBJECT_RE[kind].match((ks.extra or {}).get("yes_sub_title") or ks.title or "")
+                if not m:
+                    continue
+                k_subject = m.group("s")
+            for p_subject, p_line, ps in p_entries:
+                if ps.market_id in used_p or p_line != k_line:
+                    continue
+                if k_subject is not None and not (p_subject and _names_agree(k_subject, p_subject)):
+                    continue
+                used_p.add(ps.market_id)
+                pairs.append(MatchedPair(
+                    poly=ps, kalshi=ks, title_similarity=1.0,
+                    close_delta_hours=_close_delta_hours(ps.close_time, ks.close_time),
+                    confidence=0.98, match_source="sports", match_reason=reason))
+                break
     return pairs
 
 
@@ -327,9 +377,15 @@ def match_sports_games(k_snaps, p_snaps) -> list:
         by_day[pg.start.astimezone(_ET).date()].append(pg)
 
     # Pass 1: candidate joins (unique within the time window, same outcome shape).
-    joins: list[tuple[_KGame, _PGame, dict]] = []
+    # ``exact`` marks joins found by identical team codes (not the name fallback)
+    # — they carry their own evidence and must not be dropped by the league
+    # majority vote below (pass 10: a county one-day cup game legitimately
+    # lives in Kalshi's KXODIMATCH series alongside internationals, and the
+    # vote tie was dropping it).
+    joins: list[tuple[_KGame, _PGame, dict, bool]] = []
     for kg in kgs:
         cands = [pg for pg in by_teams.get(kg.teams, ()) if kg.time_ok(pg.start)]
+        exact = bool(cands)
         if not cands:  # name fallback: any PM game near the same time
             day = (kg.start.date() if kg.start else kg.day)
             pool = [pg for d in (day - timedelta(days=1), day, day + timedelta(days=1))
@@ -340,14 +396,29 @@ def match_sports_games(k_snaps, p_snaps) -> list:
             continue
         cmap = _code_map(kg, cands[0])
         if cmap:
-            joins.append((kg, cands[0], cmap))
+            joins.append((kg, cands[0], cmap, exact))
 
     # Pass 2: league namespace — drop joins dissenting from their series' majority.
+    # A join at the TOP of its series' vote (leader or tied leader) is kept;
+    # exact-code joins additionally survive a tie (pass 10: a county one-day
+    # cup game legitimately lives in Kalshi's KXODIMATCH series alongside
+    # internationals, and the arbitrary tie-break was dropping it). Fuzzy
+    # name-fallback joins keep the strict unique-majority rule — that path is
+    # where cross-league phantom joins (MLS hou/cin vs NFL hou/cin) occur, and
+    # an exact-code join in the MINORITY is still dropped (a shared team-code
+    # pair across leagues within the time window).
     votes: dict[str, Counter] = defaultdict(Counter)
-    for kg, pg, _ in joins:
+    for kg, pg, _, _ in joins:
         votes[kg.series][pg.prefix] += 1
-    joins = [(kg, pg, cm) for kg, pg, cm in joins
-             if votes[kg.series].most_common(1)[0][0] == pg.prefix]
+    kept: list[tuple[_KGame, _PGame, dict]] = []
+    for kg, pg, cm, exact in joins:
+        v = votes[kg.series]
+        top = v.most_common(2)
+        is_leader = v[pg.prefix] == top[0][1]
+        is_tie = len(top) > 1 and top[0][1] == top[1][1]
+        if is_leader and (exact or not is_tie):
+            kept.append((kg, pg, cm))
+    joins = kept
 
     # Pass 3: one PM game per Kalshi game and vice versa; emit contract pairs.
     pairs, used_p = [], set()
@@ -385,5 +456,5 @@ def match_sports_games(k_snaps, p_snaps) -> list:
         # they inherit its team mapping, league vote and time check.
         km = _K_EVENT_KIND_RE.match(kg.event_ticker)
         if km:
-            pairs.extend(_match_lines(km.group(1), km.group(3), k_lines, pg, kg))
+            pairs.extend(_match_lines(km.group(1), km.group(3), k_lines, pg))
     return pairs
