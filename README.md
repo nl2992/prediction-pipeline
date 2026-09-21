@@ -40,6 +40,7 @@ orders — all with a single command.
 | Reach **multi-leg** relationships a 1-to-1 matcher structurally cannot (Kalshi `Kotek, 8+ pts` ↔ the **sum** of Polymarket's `9-12%`, `12-15%`, `15-18%`, `18%+`) | `ladder_match.py` + `python -m tools.ladder_report`; 235 rungs across 25 midterm margin-of-victory races, 28 settlement-safe edges. **Review only** — no N-leg executor, no depth data |
 | Measure coverage live | `python -m tools.coverage_report [--text]` — ingestion counts, sports recall vs an independent oracle, price agreement. A funnel audit (pass 14) pins what is ingested vs held out of matching and why |
 | Price every endorsed pair from live order books, compute net-of-fee edge both directions | ~485 positive-net candidates per full scan, 51 above the alerter's 3c threshold; the top of the list AND the 3–5c band are hand-audited (16 mismatch classes removed in passes 12–13) |
+| Show the **depth-walked executable arb** in the terminal — VWAP per leg, profit by budget, break-even depth, and top-of-book vs depth-walked side by side | `BOOK SCAN` (F4) over `book_arb.py`; works off the scan's ladders or re-fetches both books live |
 | Email / dashboard / dry-run execution | `alerter.py`, `server.py`, `executor.py` |
 
 Honest caveat on the ladder work: a threshold that falls *inside* a bucket
@@ -175,6 +176,93 @@ UI change and always show a real scan:
 .venv/bin/python -m tools.capture_dashboard
 ```
 
+### How the order-book arb maths works
+
+`book_arb.py` is the part that answers "how much can I *actually* fill?". The
+alerter's headline edge uses only top-of-book, which systematically overstates
+it. Everything below is derived strictly from the displayed ladders.
+
+**1. Both venues quote YES, so the NO ladder is derived.** To buy NO you sell
+YES, so the NO buy-ladder comes from the YES *bids*:
+
+```
+no_price = 1 - yes_bid          size = that bid's size
+```
+
+That single line is where most hand-rolled attempts go wrong, so the terminal
+shows the derived NO prices rather than hiding them.
+
+**2. Two directions, one payout.** Holding YES on one venue and NO on the other
+pays exactly $1 whichever way the event resolves:
+
+| Direction | Leg A | Leg B |
+|---|---|---|
+| `poly_yes__kalshi_no` | buy PM YES (take PM asks) | buy Kalshi NO (from Kalshi YES bids) |
+| `kalshi_yes__poly_no` | buy Kalshi YES (take Kalshi asks) | buy PM NO (from PM YES bids) |
+
+So if both legs together cost less than $1 after fees, the difference is locked
+regardless of the outcome.
+
+**3. Fees.** Kalshi's taker fee is `0.07 · p · (1 − p)` per contract, charged on
+the **Kalshi leg only** — the Polymarket CLOB is fee-free. It peaks at 1.75c at
+p = 0.5 and vanishes at the extremes, so a flat "7% of payout" is far too
+pessimistic for anything near the middle of the range.
+
+**4. The lockstep walk** (`_fill`) is the core. Take the cheapest remaining
+level on each leg and pair one contract from each:
+
+```
+pair_profit = 1 - price_a - price_b - kalshi_taker_fee(kalshi_leg_price)
+q           = min(remaining_a, remaining_b)
+```
+
+Accumulate `q` contracts, advance whichever level is exhausted, repeat — and
+**stop the moment `pair_profit <= 0`**. Deeper levels are monotonically worse,
+so where the walk stops IS the executable size. Nothing beyond it is arbable at
+any price.
+
+**5. Budgets.** With a per-market budget the quantity is additionally capped by
+`(budget - cost_so_far) / price`, which is where the $1000 / $2000 / $2500 /
+$5000 table comes from: contracts filled, VWAP, profit and ROI at each size.
+
+**6. VWAP** is `cost_leg / contracts` — the real average fill price across every
+level touched, not the top quote.
+
+**7. The break-even curve.** `cumulative_curve()` walks the same depth but
+*ignores* profitability, recording `(cum_contracts, price_a, price_b,
+combined_cost_with_fee)` at each chunk boundary. Break-even is where the
+combined cost crosses $1.00 — i.e. exactly how deep the arbitrage goes before
+it dies.
+
+**8. Why this matters.** `executable_edge_at_size()` walks the ladders to fill a
+*specific* quantity, so a single contract resting at a stale price can no longer
+manufacture an edge or satisfy a minimum-size check on its own. That is the
+difference between a signal and a fill.
+
+### Seeing it in the terminal
+
+`BOOK SCAN` (sidebar action, or **F4**) runs the maths above on the selected
+pair and shows it:
+
+![Dashboard, depth-walked book scan](docs/img/dashboard-book-scan.png)
+
+Both directions are shown, best first. Note the two figures at the bottom of
+each block — on this book, top-of-book reads **+0.1327** while the depth-walked
+net is **+0.0826**. Top-of-book overstates the fill by 60%, which is the entire
+reason the panel exists.
+
+It works from the ladders the scan already carries (`POST /api/book-arb`, no
+network), and falls back to re-fetching both books live
+(`GET /api/book-arb/live?kalshi_ticker=…&poly_token_id=…`) — which is what makes
+it usable after a `FAST SCAN`, since that path fetches no order books at all.
+
+> **Fee note.** The detail pane previously subtracted a flat `0.09` while its
+> own label claimed 7% and the footer claimed something else again. None was the
+> real schedule. Both the pane and this panel now use `0.07·p·(1−p)` on the
+> Kalshi leg only, asserted in the tests against `arb.kalshi_taker_fee` rather
+> than a hardcoded number.
+
+
 ### Are there arbitrage opportunities right now?
 
 From the 2026-09-21 run: **599 candidates survive the net-of-fee filter, and the
@@ -260,6 +348,7 @@ prediction-pipeline/
 ├── contract_spec.py     # v2 structured matcher (shadow referee on every v1 pair)
 ├── ladder_match.py      # Multi-leg synthesis: Kalshi cumulative rungs ↔ sums of PM buckets
 ├── arb.py / book_arb.py # Two-leg arb detection; depth / VWAP / profit-by-stake
+│                     #   (surfaced in the dashboard as BOOK SCAN, see below)
 ├── executor.py          # Order execution engine (dry-run by default)
 ├── monitor.py           # Continuous polling loop → signals.jsonl
 ├── alerter.py           # Scheduled scan → email alerts (see docs/OPERATIONS.md)
