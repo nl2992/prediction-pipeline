@@ -59,6 +59,7 @@ from matcher import (
     _years,
     _INVERSION_ANTONYMS,
     _POLITICAL_EVENT_ACTIONS,
+    _squash,
 )
 
 if TYPE_CHECKING:
@@ -233,6 +234,36 @@ def _week_bucket(text: str) -> tuple[int, int] | None:
         n = int(m.group(1))
         return (n, n)
     return None
+
+
+# One-sided COUNT rungs ("Above 68", "at least 85", "fewer than 66", "85+"):
+# integers with a comparative cue but no count noun, which _numeric_threshold
+# deliberately skips. Each match normalises to the integer cutoff that
+# resolves YES, mirroring _numeric_threshold's count branch so equivalent
+# phrasings ("more than 84.5" -> 85, "at least 85" -> 85) compare equal.
+# Numbers followed by "." or "%" are excluded — those are pct/usd thresholds,
+# handled by the threshold gate in match_spec.
+_RUNG_UP_RE = re.compile(
+    r"\b(at least|or above|above|over|more than|greater than)\s+(\d[\d,]*)(?![\d.%])")
+_RUNG_DOWN_RE = re.compile(
+    r"\b(at most|or below|below|under|less than)\s+(\d[\d,]*)(?![\d.%])")
+# The lookbehind keeps decimals ("84.5+") from matching the "5+" tail.
+_RUNG_PLUS_RE = re.compile(r"(?<![\d.])\b(\d[\d,]*)\s*\+(?![\d.])")
+
+
+def _rung_cutoffs(text: str) -> frozenset[int]:
+    """Normalised integer cutoffs of one-sided count rungs in ``text``."""
+    low = _ascii_lower(text)
+    out: set[int] = set()
+    for m in _RUNG_UP_RE.finditer(low):
+        n = int(m.group(2).replace(",", ""))
+        out.add(n if m.group(1) == "at least" else n + 1)
+    for m in _RUNG_DOWN_RE.finditer(low):
+        n = int(m.group(2).replace(",", ""))
+        out.add(n + 1 if m.group(1) in ("at most", "or below") else n)
+    for m in _RUNG_PLUS_RE.finditer(low):
+        out.add(int(m.group(1).replace(",", "")))
+    return frozenset(out)
 
 
 # Explicit fiscal-period tags: a calendar quarter ("Q4 2026") or the word
@@ -824,9 +855,22 @@ def _field_texts(snap: "MarketSnapshot") -> tuple[str, ...]:
     )
 
 
+def _names_without_parentheticals(snap: "MarketSnapshot") -> tuple[str, ...]:
+    """Field texts with "(…)" spans removed before name extraction.
+
+    A Polymarket disambiguating parenthetical is not part of a person's name:
+    "Gary (Stephen Wilson Jr.)" yielded the phantom 2-token person
+    "stephen wilson", and the first-name-collision gate then read "Gary" vs
+    "Stephen Wilson" as two different people (pass 10 — a v2 false-reject on a
+    true CMA Song of the Year pair). Party suffixes ("(D)") are already
+    ignored by the label comparators; this keeps name extraction consistent.
+    """
+    return tuple(re.sub(r"\(.*?\)", " ", t) for t in _field_texts(snap))
+
+
 def _selected_names_per_field(snap: "MarketSnapshot") -> frozenset[str]:
     names: set[str] = set()
-    for field_text in _field_texts(snap):
+    for field_text in _names_without_parentheticals(snap):
         names.update(_selected_names(field_text))
     return frozenset(names)
 
@@ -836,7 +880,7 @@ def _bare_subject_names_per_field(snap: "MarketSnapshot") -> frozenset[str]:
     kept separate from selected_names so they never feed the hard
     selected-name-mismatch veto (see _bare_subject_name's docstring)."""
     names: set[str] = set()
-    for field_text in _field_texts(snap):
+    for field_text in _names_without_parentheticals(snap):
         name = _bare_subject_name(field_text)
         if name:
             names.add(name)
@@ -938,22 +982,32 @@ def _different_named_outcome(a: ContractSpec, b: ContractSpec) -> bool:
 
 
 def _same_outcome_label(a: ContractSpec, b: ContractSpec) -> bool:
+    # Floor 3 so short esports handles ("gary", "bang") count as outcome
+    # identity, mirroring matcher's v1 floor (pass 10): an identical label
+    # outranks the person/name heuristics, which exist to separate DIFFERENT
+    # contestants. Generic labels like "Yes" can now also match, but only when
+    # the question text is similar enough to pass the gates below.
     la = re.sub(r"[^a-z0-9]", "", _ascii_lower(re.sub(r"\(.*?\)", "", a.outcome_label)))
     lb = re.sub(r"[^a-z0-9]", "", _ascii_lower(re.sub(r"\(.*?\)", "", b.outcome_label)))
-    return len(la) >= 5 and la == lb
+    return len(la) >= 3 and la == lb
 
 
 def match_spec(
     a: ContractSpec,
     b: ContractSpec,
     min_similarity: float = 0.30,
+    same_event: bool = False,
 ) -> MatchDecision:
     """Compare two ContractSpecs field by field.
 
     Hard gates reject with an explicit reason; complementary fields flip the
     pair to inverted instead of rejecting; acceptance requires either token
     similarity over the gate or the threshold-led bridge (equal strike + shared
-    entity + same horizon).
+    entity + same horizon). ``same_event`` (squashed event-title equality,
+    computed by explain()) additionally accepts an identical outcome label:
+    a one-line PM label and a verbose Kalshi legal description ("SELF DRIVE
+    Act" vs a 40-word bill description) are the same contract, and the
+    full-text similarity gate under-fires on the length asymmetry (pass 10).
     """
     reasons: list[str] = []
     inverted = False
@@ -962,6 +1016,9 @@ def match_spec(
     same_horizon = dh is not None and dh <= 72.0
 
     # --- identity gates -----------------------------------------------------
+    if same_event and _same_outcome_label(a, b):
+        reasons.append("identical event + identical outcome label")
+        return MatchDecision(True, inverted, 1.0, reasons)
     if a.domains and b.domains and a.domains.isdisjoint(b.domains):
         return _reject(f"domain mismatch: {sorted(a.domains)} vs {sorted(b.domains)}")
     if a.jurisdictions and b.jurisdictions and a.jurisdictions.isdisjoint(b.jurisdictions):
@@ -1299,8 +1356,36 @@ def match_spec(
             inverted = True
             reasons.append("polarity flip with shared subject (inverted)")
 
+    # Count-rung gate (pass 10): ladder outcomes whose count cutoffs are
+    # disjoint are different rungs — "Above 68" vs "Above 66" in the SAME
+    # senate-vote ladder reached token similarity 0.75 and was accepted, a
+    # v2 false-positive. _numeric_threshold misses these because the bare
+    # label carries no count noun, and the $/% threshold gate above doesn't
+    # apply. Normalisation mirrors _numeric_threshold's count branch so
+    # "more than 84.5" (85) still equals "at least 85" (85).
+    ra_ = _rung_cutoffs(a.raw)
+    rb_ = _rung_cutoffs(b.raw)
+    # Tolerance of 1: "20+" (cutoff 20) and "over 20" (21) are the same rung
+    # in venue convention (audited fixture PAIR-049); only a gap of 2+ marks
+    # adjacent rungs ("Above 68" vs "Above 66").
+    if ra_ and rb_ and min(abs(x - y) for x in ra_ for y in rb_) > 1:
+        return _reject(f"rung mismatch: {sorted(ra_)} vs {sorted(rb_)}")
+
     # --- acceptance -------------------------------------------------------------
     sim = _jaccard(a.tokens, b.tokens)
+    # Identical DISTINCTIVE outcome label is sufficient acceptance evidence
+    # (pass 10, extending pass 8's philosophy that an exact label match
+    # outranks name/person heuristics): "Gary" vs "Gary (Stephen Wilson Jr.)"
+    # scored 0.29 because the Kalshi question text dominates the token sets,
+    # but the label IS the contract — a disambiguating parenthetical is not
+    # part of it. Every hard gate above (threshold, rung, range, week, fiscal,
+    # settlement-source, time-scope) has already passed. The >= 4 bar keeps
+    # generic "Yes"/"No" labels from accepting on identity alone.
+    if not inverted and same_outcome:
+        la = re.sub(r"[^a-z0-9]", "", _ascii_lower(re.sub(r"\(.*?\)", "", a.outcome_label)))
+        if len(la) >= 4:
+            reasons.append(f"identical outcome label {la!r}")
+            return MatchDecision(True, inverted, max(sim, 0.5), reasons)
     if sim >= min_similarity:
         reasons.append(f"token similarity {sim:.2f} >= {min_similarity}")
         return MatchDecision(True, inverted, sim, reasons)
@@ -1369,4 +1454,7 @@ def match_spec(
 
 def explain(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> MatchDecision:
     """One-call diagnostic: extract both specs and compare with reasons."""
-    return match_spec(extract_spec(poly), extract_spec(kalshi))
+    pe = _squash((getattr(poly, "extra", {}) or {}).get("event_title") or "")
+    ke = _squash((getattr(kalshi, "extra", {}) or {}).get("event_title") or "")
+    return match_spec(extract_spec(poly), extract_spec(kalshi),
+                      same_event=bool(pe and ke and pe == ke))
