@@ -36,7 +36,7 @@ orders — all with a single command.
 | Flag pairs whose wording matches but settlement may not (weather stations, one-sided deadlines) | kept visible, excluded from alerts (~460 pairs) |
 | Reject look-alike contracts from event context | 26 rules (single game vs season, "run for" vs nominee, county vs state, CA-04 vs MO-04, division vs conference, reach vs win, top-5 vs winner, playoff seed, vote share vs winning, week vs season, "$1t+ IPO" vs plain, stat-line values, bps range, …) with a regression test each |
 | Measure coverage live | `python -m tools.coverage_report [--text]` — ingestion counts, sports recall vs an independent oracle, price agreement |
-| Price every endorsed pair from live order books, compute net-of-fee edge both directions | ~500 positive-net candidates per full scan (58 above 3c); the largest edges are hand-audited every pass — 12 mismatch classes were removed in pass 12 alone |
+| Price every endorsed pair from live order books, compute net-of-fee edge both directions | ~485 positive-net candidates per full scan, 51 above the alerter's 3c threshold; the top of the list AND the 3–5c band are hand-audited (16 mismatch classes removed in passes 12–13) |
 | Email / dashboard / dry-run execution | `alerter.py`, `server.py`, `executor.py` |
 
 Honest caveat, measured rather than assumed: **sports pairs yield almost no

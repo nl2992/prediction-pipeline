@@ -115,6 +115,40 @@ indicate where arb surface exists, not confirmed profit.
 
 Status key: ✅ done · 🟡 partial · ⬜ open. Newest first.
 
+### 2026-09-21 (pass 13) — audited the 3–5c band, where the alerter's threshold sits
+
+**Why this band.** `MIN_NET_EMAIL` is 3c, so 3–5c is the zone that decides what
+actually reaches the operator's inbox — a mismatch here is not academic.
+
+**Method.** Hand-classified all 25 live signals in the band: **19 genuine, 6
+mismatches** across four classes.
+
+| Edge | Polymarket | Kalshi | Fault |
+|---|---|---|---|
+| +5.0c | how many **leave** the cabinet | Trump **fire** 3 members | dismissal vs departure |
+| +4.7c | Tua **Comeback** Player of the Year | **Offensive** Player of the Year | award category |
+| +4.4c, +3.5c, +3.4c | best **AI model** | best **coding** model | qualified domain vs general |
+| +4.2c | Ocampos most **assists** | lead Liga MX in **goals** | stat category (assists was missing) |
+
+The award-category rule also separates Best Actor / Best Actress / supporting
+vs lead, and the sports awards (MVP, Rookie, Coach, Comeback, OPOTY, DPOY).
+
+**Measured (live, same catalogs):**
+
+| | before | after |
+|---|---|---|
+| 3–5c band | 25 | **18** |
+| Above 3c | 58 | 51 |
+| Positive-net | 497 | 485 |
+
+All 18 survivors read as genuine: fantasy WR leader, Truth Social post buckets,
+Ecuador LigaPro, Google/Spotify rank markets, Greek PM, Best Actress, DPOY, a
+Senate vote, a French runoff qualifier, a NASCAR title.
+
+**Cumulative over passes 12–13:** the live arb list went from 557 positive-net
+signals with 13 of the top 16 wrong, to 485 with a top-of-book and 3–5c band
+that both survive hand review — 16 mismatch classes removed in two passes.
+
 ### 2026-09-21 (pass 12) — measured the ARBS, not the pairs; cleaned the top of the list
 
 **Why.** Coverage has been the metric for ten passes, but the project exists to
