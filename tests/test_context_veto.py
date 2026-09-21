@@ -369,9 +369,20 @@ class TopOfBookMismatches(unittest.TestCase):
                       "Oscar nominees: Best Visual Effects", "Spider-Man: Brand New Day"), "nomination")
 
     def test_different_awards_body(self):           # +19c
-        self.check(pm("Sam Rockwell", "Oscars 2027: Best Actor Nominations"),
-                   ks("Will Sam Rockwell be on the list of nominees for Best Supporting Actor?",
-                      "Golden Globe Nominations: Best Supporting Actor", "Sam Rockwell"), "awards body")
+        # Two faults: a different body (Oscars vs Golden Globes) AND a different
+        # category (Best Actor vs Best Supporting Actor); either reason is right.
+        p = pm("Sam Rockwell", "Oscars 2027: Best Actor Nominations")
+        k = ks("Will Sam Rockwell be on the list of nominees for Best Supporting Actor?",
+               "Golden Globe Nominations: Best Supporting Actor", "Sam Rockwell")
+        reason = context_veto(p, k)
+        self.assertIsNotNone(reason)
+        self.assertTrue("awards body" in reason or "award category" in reason, reason)
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_awards_body_alone(self):
+        self.check(pm("Ella Langley", "Grammys 2027: Female Vocalist of the Year"),
+                   ks("Will Ella Langley win Female Vocalist of the Year at the CMA Awards?",
+                      "CMA Awards: Female Vocalist of the Year", "Ella Langley"), "awards body")
 
     def test_different_county(self):                # +19c
         self.check(pm("Abdul El-Sayed (D)", "Michigan Senate Election: Kent County Winner"),
@@ -465,3 +476,34 @@ class TopOfBookMismatchesRound2(unittest.TestCase):
         self.check(pm("claude-fable-5.1-max", "Best AI model on September 21?"),
                    ks("What will be the top AI model this month? claude-fable-5.1-max",
                       "Top AI model in September?", "claude-fable-5.1-max"), "period")
+
+
+class ThreeToFiveCentBand(unittest.TestCase):
+    """The alerter emails above 3c, so this band decides what actually reaches
+    the operator. Each case was a live 3-5c 'arb' on 2026-09-21."""
+
+    def check(self, p, k, part):
+        r = context_veto(p, k)
+        self.assertIsNotNone(r, f"expected a veto for {p.title!r}")
+        self.assertIn(part, r)
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_dismissal_vs_departure(self):            # +5.0c
+        self.check(pm("3", "How many more people leave the Trump cabinet in 2026?"),
+                   ks("Will Trump fire 3 Cabinet members before 2027?",
+                      "How many Cabinet members will Trump sack?"), "dismissal")
+
+    def test_different_award_category(self):          # +4.7c
+        self.check(pm("Tua Tagovailoa", "Pro Football: 2026-27 AP Comeback Player of the Year"),
+                   ks("Will Tua Tagovailoa win the Offensive Player of the Year?",
+                      "Offensive Player of the Year Winner?", "Tua Tagovailoa"), "award category")
+
+    def test_qualified_model_domain(self):            # +4.4c
+        self.check(pm("Anthropic", "Which company has best AI model end of 2026?"),
+                   ks("Which AI company will have the best coding model on Dec 31, 2026? Anthropic",
+                      "Which AI company will have the best coding model", "Anthropic"), "model domain")
+
+    def test_assists_vs_goals(self):                  # +4.2c
+        self.check(pm("Lucas Ocampos", "Liga MX: 2026-27 Apertura Most Assists"),
+                   ks("Will Lucas Ocampos lead Liga MX in goals for the Apertura?",
+                      "Liga MX Apertura Golden Boot", "Lucas Ocampos"), "stat category")

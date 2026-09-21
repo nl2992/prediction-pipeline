@@ -1730,6 +1730,59 @@ def _period_grain(text: str) -> frozenset[str]:
     return frozenset(out)
 
 
+_AWARD_CATEGORIES = (
+    # Sports awards — a Comeback Player award is not an Offensive Player award.
+    ("comeback", r"\bcomeback player\b|\bcpoty\b"),
+    ("offensive_player", r"\boffensive player\b|\bopoty\b"),
+    ("defensive_player", r"\bdefensive player\b|\bdpoty\b"),
+    ("rookie", r"\brookie of the year\b|\broty\b"),
+    ("mvp", r"\bmvp\b|\bmost valuable player\b"),
+    ("coach", r"\bcoach of the year\b|\bmanager of the year\b|\bmoty\b"),
+    # Film/TV/music categories — "Best Actress" is not "Best Actor".
+    ("supporting_actor", r"\bbest supporting actor\b"),
+    ("supporting_actress", r"\bbest supporting actress\b"),
+    ("actor", r"(?<!supporting )\bbest actor\b"),
+    ("actress", r"(?<!supporting )\bbest actress\b"),
+    ("director", r"\bbest director\b"),
+    ("picture", r"\bbest picture\b"),
+    ("animated", r"\bbest animated\b"),
+    ("documentary", r"\bbest documentary\b"),
+    ("international", r"\bbest international\b"),
+    ("screenplay", r"\bbest (?:original |adapted )?screenplay\b"),
+    ("vfx", r"\bbest visual effects\b"),
+    ("cinematography", r"\bbest cinematography\b"),
+    ("album", r"\balbum of the year\b"),
+    ("song", r"\bsong of the year\b"),
+    ("record", r"\brecord of the year\b"),
+    ("new_artist", r"\bnew artist\b"),
+    ("entertainer", r"\bentertainer of the year\b"),
+    ("female_vocalist", r"\bfemale vocalist\b"),
+    ("male_vocalist", r"(?<!fe)\bmale vocalist\b"),
+)
+
+
+def _award_category(text: str) -> frozenset[str]:
+    """Which award — "Comeback Player" and "Offensive Player" are separate
+    contracts on the same athlete, as are Best Actor and Best Actress."""
+    return frozenset(name for name, pat in _AWARD_CATEGORIES if re.search(pat, text))
+
+
+def _model_domain(text: str) -> frozenset[str]:
+    """A qualified model crown ("best CODING model") is narrower than the
+    general one ("best AI model")."""
+    return frozenset(d for d, pat in (
+        ("coding", r"\bcoding\b|\bcode\b"),
+        ("math", r"\bmath\b"),
+        ("video", r"\btext[- ]to[- ]video\b|\bvideo model\b"),
+        ("image", r"\btext[- ]to[- ]image\b|\bimage model\b"),
+    ) if re.search(pat, text))
+
+
+def _is_dismissal(text: str) -> bool:
+    """Being FIRED is narrower than leaving (which includes resigning)."""
+    return bool(re.search(r"\bfires?\b|\bfired\b|\bdismiss(?:es|ed)?\b|\bsacks?\b", text))
+
+
 def _is_exit_poll(text: str) -> bool:
     """An exit-poll demographic split is not an election result."""
     return bool(re.search(r"\bexit polls?\b", text))
@@ -1935,6 +1988,7 @@ _LEADER_STATS = (
     ("goals", r"\bgoals?\b"),
     ("sacks", r"\bsacks?\b"),
     ("steals", r"\bstolen bases\b|\bsteals?\b"),
+    ("assists", r"\bassists?\b"),
 )
 
 
@@ -2145,6 +2199,14 @@ def context_veto(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> str | None
             return "same granularity, different period"
     if _superlative_stat(pt) != _superlative_stat(kt):
         return "superlative stat vs advancement/win"
+    pac, kac = _award_category(pt), _award_category(kt)
+    if pac and kac and pac.isdisjoint(kac):
+        return "different award category"
+    pmd, kmd = _model_domain(pt), _model_domain(kt)
+    if pmd != kmd and re.search(r"\bmodel\b", pt + kt):
+        return "qualified model domain vs general"
+    if _is_dismissal(pt) != _is_dismissal(kt) and re.search(r"\bleaves?\b|\bleave\b|\bdepart", pt + kt):
+        return "dismissal vs departure"
     if _is_exit_poll(pt) != _is_exit_poll(kt):
         return "exit poll vs election result"
     if _is_matchup(pt) != _is_matchup(kt):
