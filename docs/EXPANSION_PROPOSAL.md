@@ -115,6 +115,59 @@ indicate where arb surface exists, not confirmed profit.
 
 Status key: ✅ done · 🟡 partial · ⬜ open. Newest first.
 
+### 2026-09-21 (pass 15) — the coverage ledger: what happens to every ingested market
+
+**Why.** "Is it 100%?" has been answered so far with recall against a reference
+set. That hides the blunter question: we ingest ~104k Kalshi and ~148k
+Polymarket markets — what happens to each one? New tool:
+`python -m tools.coverage_ledger` (~4 min, no order books).
+
+**Measured (live, 2026-09-21).**
+
+| | Kalshi | Polymarket |
+|---|---|---|
+| Ingested markets | 103,566 | 148,051 |
+| Classes (series / sportsMarketType) | 3,848 | 153 |
+| **Matched** | **8,309** | **8,309** |
+| Held out on purpose (stats-only, parlay, ended) | ~1,100 | 19,895 |
+| Classes that never match anything | 3,040 | 139 |
+| Markets in those classes | **78,746 (76%)** | **76,055 (51%)** |
+
+**The answer to "100%":** ingestion is 100% and every tradeable market is
+considered, but **~8,300 pairs is close to the real size of the overlap** — not
+100% of either catalog, because each venue lists tens of thousands of contracts
+the other simply does not have.
+
+| Never matches — Kalshi | Markets | Never matches — Polymarket | Markets |
+|---|---|---|---|
+| `KXVOTEGENERAL` (vote-percent ladders) | 8,991 | `soccer_exact_score` | 10,214 |
+| `KXMIDTERMMOV` (margin buckets) | 4,552 | corner markets (4 classes) | 23,272 |
+| `KXNASDAQ100U` (hourly index ranges) | 2,800 | `soccer_team_totals` (+ halves) | 13,512 |
+| `KXMIDTERMVOTETURN` | 2,776 | `first/second_half_totals` (soccer) | 4,986 |
+| NCAAF rank polls / seeds / conf matchups | ~4,400 | — | — |
+
+**Three honest categories in that list:**
+
+1. **No counterpart at all** — corners and exact score (Kalshi lists neither);
+   hourly NASDAQ ranges and AP poll rankings (Polymarket lists neither). Nothing
+   to fix; these are the shape of the two product catalogs.
+2. **Counterpart exists but only for other sports** — Polymarket's soccer team
+   totals and soccer halves (13.5k + 5.0k markets) have Kalshi equivalents for
+   NFL/WNBA only. Matched the moment Kalshi lists soccer versions; the class
+   table already handles them.
+3. **A genuine, sizeable gap: `KXMIDTERMMOV` (4,552 markets).** Polymarket DOES
+   list midterm margin-of-victory markets. They do not pair 1-to-1 because
+   Kalshi is cumulative ("Republicans 26+ pts") and Polymarket is bucketed
+   ("Republican 25-30%"). Pairing them needs multi-leg synthesis — P(≥26) is the
+   SUM of the buckets above 26 — which means N-leg support in `book_arb` and the
+   alerter, not a matcher rule. This is the §2c item from pass 1, still the
+   largest matchable class left.
+
+**Also visible:** recall gaps inside classes that do match are concentrated in
+college football (`KXNCAAFSPREAD` 22/1,651, `KXNCAAFGAME` 1/468) — Polymarket
+lists far fewer college games, and at this hour (Sunday night) next Saturday's
+slate is not up yet, so most have no counterpart to find.
+
 ### 2026-09-21 (pass 14) — funnel audit: what gets dropped between "pull all" and "match all"
 
 **Why.** Every pass measured recall of the matcher. None measured the FUNNEL —

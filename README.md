@@ -81,13 +81,19 @@ Output of step 4 (2026-09-21, after pass 10):
              matched 92.6%, v2-endorsed 92.6% (1 matched but v2-rejected)
 ```
 
-**How much is reachable?** Pass 10 hand-labelled every remaining oracle miss
-against the exact gate that rejected it: ~24% were real (the rest is oracle
-noise and correct rejections), and those classes — bookkeeping close-time caps,
-esports handles, diacritics/party suffixes, paraphrased bill references, v2
-count-rung over-fires — are now fixed (92.6% matched = endorsed, above the
-prior ~91% measured ceiling). See the
-[pass-7 through pass-10 logs](docs/EXPANSION_PROPOSAL.md#progress-log).
+**How much is reachable?** Two measurements, both reproducible:
+
+* `python -m tools.coverage_report --text` — recall against independent oracles.
+  A hand-labelled sample of 60 misses was 63% real / 37% oracle error, so ~91% of
+  oracle pairs is the ceiling and adjusted true recall is ≈95%.
+* `python -m tools.coverage_ledger` — what happens to every ingested market.
+  **8,309 pairs is close to the real overlap of the two catalogs**: 76% of Kalshi
+  markets and 51% of Polymarket markets sit in classes the other venue does not
+  list at all (corners and exact score have no Kalshi equivalent; vote-percent
+  ladders and hourly index ranges have no Polymarket equivalent). The largest
+  genuinely matchable class left is Kalshi's 4,552 midterm margin-of-victory
+  markets, which need multi-leg synthesis (cumulative thresholds vs buckets)
+  rather than a matcher rule.
 
 Excerpt from step 2 (2026-09-18):
 
