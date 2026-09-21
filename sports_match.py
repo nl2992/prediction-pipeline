@@ -70,6 +70,45 @@ _NAME_ALIASES = {
 }
 _FOLD = str.maketrans({"ø": "o", "æ": "ae", "ß": "ss", "đ": "d", "ł": "l", "ı": "i"})
 
+# Kalshi's NFL yes_sub_title is inconsistent: some games use the nickname
+# ("ATL Falcons", "DEN Broncos" -- ordinary _names_agree handles these), others
+# use "<City words> <first letter of nickname>" ("New York G", "Los Angeles R").
+# Measured: KXNFLGAME-26SEP21NYGLAR carries "New York G" / "Los Angeles R" for
+# a Giants/Rams game, which shares no token with either nickname. The trailing
+# letter is a real discriminator (G is Giants, not Jets) so it must be checked,
+# not stripped.
+#
+# The city part is restricted to plain letter words (no "/", no "vs") as a
+# precaution: on the live Kalshi catalog the bare shape "^.+\s[A-Z]$" also
+# matches 211 unrelated titles (musicians "Lil Nas X", ballot measures
+# "Amendment I", combined matchup strings "Denver vs Los Angeles C"). None of
+# those can reach this function today -- only GAME/MATCH-series team names
+# ever flow into _names_agree -- so this is defence in depth, not a fix for
+# an observed failure, but it costs nothing to rule out the "vs"/"/" shapes.
+_K_CITY_LETTER_RE = re.compile(r"^([A-Za-z]+(?:\s[A-Za-z]+)*)\s([A-Z])$")
+
+
+def _city_letter_agrees(k_name: str, pm_name: str) -> bool:
+    """"New York G" ~ "Giants" (nickname starts with G), but NOT ~ "Jets".
+    Checked against every Polymarket token, not just the last, because the
+    discriminating letter is sometimes the FIRST word of a multi-word
+    nickname: Kalshi "Boston R" ~ PM "Red Sox" (R is "Red", not "Sox").
+
+    Only checked as a fallback after the ordinary token match fails, and only
+    against the Kalshi side (Polymarket never uses this shorthand). Callers
+    that build a code map (``_code_map``) must additionally not let this
+    create ambiguity against a name that already matched strictly -- see the
+    two-pass fallback there, motivated by a measured false positive where the
+    letter rule matched Kalshi "Los Angeles A" (the Angels) against PM
+    "Athletics" and orphaned the whole Angels/Athletics game."""
+    m = _K_CITY_LETTER_RE.match((k_name or "").strip())
+    # "/" is already excluded by the regex's letters-and-spaces city group;
+    # "vs" is plain letters, so it needs an explicit check.
+    if not m or "vs" in m.group(1).lower().split():
+        return False
+    letter = m.group(2).lower()
+    return any(t.startswith(letter) for t in _norm_tokens(pm_name))
+
 
 def _norm_tokens(name: str) -> list[str]:
     import unicodedata
@@ -94,16 +133,29 @@ def _token_agrees(s: str, longer: list[str]) -> bool:
     return False
 
 
-def _names_agree(k_name: str, pm_name: str) -> bool:
+def _names_agree_strict(k_name: str, pm_name: str) -> bool:
     """Every token of the SHORTER normalised name agrees with the longer one
     (prefix either way, or initials): "Los Angeles R" ~ "Los Angeles Rams",
     "Nippon Ham Fighters" ~ "Hokkaido Nippon-Ham Fighters", "New York G" !~
-    "New York Jets". Ambiguity (both teams agreeing) is rejected by callers."""
+    "New York Jets". Ambiguity (both teams agreeing) is rejected by callers.
+
+    This is the token-only half of ``_names_agree``, split out so
+    ``_code_map`` can run it as a first, higher-confidence pass before ever
+    trying the letter-shorthand fallback (see ``_city_letter_agrees``'s
+    docstring for why: the letter rule alone can manufacture ambiguity
+    against a name that already matches here)."""
     kt, pt = _norm_tokens(k_name), _norm_tokens(pm_name)
     if not kt or not pt:
         return False
     short, longer = (kt, pt) if len(kt) <= len(pt) else (pt, kt)
     return all(_token_agrees(t, longer) for t in short)
+
+
+def _names_agree(k_name: str, pm_name: str) -> bool:
+    """``_names_agree_strict`` plus the "<City> <Letter>" shorthand fallback.
+    Safe for callers (like ``_subject_agrees``) that test one fixed pair of
+    names rather than resolving a whole game's code map."""
+    return _names_agree_strict(k_name, pm_name) or _city_letter_agrees(k_name, pm_name)
 
 
 def _parse_pm_time(s: str | None) -> datetime | None:
@@ -390,10 +442,44 @@ def _p_games(p_snaps) -> list[_PGame]:
     return games
 
 
+def _code_prefix_bridge(kg_teams: frozenset, pg_codes: tuple) -> dict[str, str] | None:
+    """Map PM code -> Kalshi code when one venue's code is a prefix of the
+    other's for exactly one team of the pair, e.g. PM "la" / Kalshi "lar" for
+    the Rams (measured: nfl-nyg-la-2026-09-22 vs KXNFLGAME-26SEP21NYGLAR).
+
+    A bare prefix rule would be unsafe globally -- "la" alone is ambiguous
+    across leagues and franchises (Lakers/Angels/Chargers/Rams) -- so this
+    only fires within one already-candidate game, and only when the OTHER
+    team's code matches exactly between the two venues. That exact match is
+    what pins the game (and hence the league/franchise) down; the prefix
+    relation on the remaining code is then safe to accept.
+    """
+    if kg_teams == frozenset(pg_codes):
+        return {c: c for c in pg_codes}
+    if len(pg_codes) != 2:
+        return None
+    a, b = pg_codes
+    for exact_pm, other_pm in ((a, b), (b, a)):
+        if exact_pm not in kg_teams:
+            continue
+        remaining = kg_teams - {exact_pm}
+        if len(remaining) != 1:
+            continue
+        kc = next(iter(remaining))
+        if len(kc) < 2 or len(other_pm) < 2:
+            continue
+        if kc.startswith(other_pm) or other_pm.startswith(kc):
+            return {exact_pm: exact_pm, other_pm: kc}
+    return None
+
+
 def _code_map(kg: _KGame, pg: _PGame) -> dict[str, str] | None:
-    """Map PM team code -> Kalshi team code, by code equality or names."""
-    if kg.teams == pg.teams:
-        return {c: c for c in pg.codes}
+    """Map PM team code -> Kalshi team code, by code equality, the code-prefix
+    bridge (one venue's code short by a suffix, other team pinned exactly), or
+    names."""
+    bridged = _code_prefix_bridge(kg.teams, pg.codes)
+    if bridged:
+        return bridged
     # Name fallback: PM team names from 2-way outcomes or 3-way market titles.
     names: dict[str, str] = {}
     if pg.two_way is not None:
@@ -403,12 +489,34 @@ def _code_map(kg: _KGame, pg: _PGame) -> dict[str, str] | None:
         names = {c: s.title for c, s in pg.three_way.items() if c != "tie"}
     if len(names) != 2:
         return None
-    mapping = {}
+    # Two passes, strict token agreement before the letter-shorthand fallback.
+    # Measured failure with a single combined pass: PM "Athletics" matched
+    # Kalshi "Los Angeles A" (the Angels) via the letter rule ('a' ~
+    # "athletics"[0]) as well as "A's" (the real Athletics) via strict tokens,
+    # producing 2 hits -> the whole Angels/Athletics game was dropped. Running
+    # strict agreement for every name FIRST, and only sending names with ZERO
+    # strict hits into the letter fallback -- against Kalshi codes the strict
+    # pass hasn't already claimed -- keeps "Athletics" pinned to 'ath' while
+    # still letting a bare "Rams" get rescued against "Los Angeles R".
+    mapping: dict[str, str] = {}
+    used_k: set[str] = set()
+    leftover: list[tuple[str, str]] = []
     for pc, pname in names.items():
-        hits = [kc for kc in kg.teams if _names_agree(kg.name(kc), pname)]
+        hits = [kc for kc in kg.teams if _names_agree_strict(kg.name(kc), pname)]
+        if len(hits) == 1:
+            mapping[pc] = hits[0]
+            used_k.add(hits[0])
+        elif len(hits) == 0:
+            leftover.append((pc, pname))
+        else:
+            return None  # genuine strict ambiguity: not rescuable
+    for pc, pname in leftover:
+        remaining = kg.teams - used_k
+        hits = [kc for kc in remaining if _city_letter_agrees(kg.name(kc), pname)]
         if len(hits) != 1:
             return None
         mapping[pc] = hits[0]
+        used_k.add(hits[0])
     return mapping if len(set(mapping.values())) == 2 else None
 
 
