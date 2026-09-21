@@ -28,7 +28,7 @@ orders — all with a single command.
 
 | Capability | Status |
 |---|---|
-| Ingest the **entire** open catalog of both venues | Kalshi 13,278 events / 118,405 markets (14 s); Polymarket 18,916 events / 174,625 markets (12 s) |
+| Ingest the **entire** open catalog of both venues | 2026-09-21: Kalshi 103,451/103,451 open markets, Polymarket 148,215/148,215 — **100% of both**, in ~15 s and ~17 s |
 | Match everything against everything | full cross-product, no event cap; ~2.5 min of matching |
 | Pair sports games whose titles share no words ("Denver wins" ↔ "Broncos vs. Chiefs") | structured join on teams + start time; on 2026-09-21, **707 games joined / 1,625 contract pairs**, recall **95.5%** of the Kalshi games that have a Polymarket counterpart (varies with the day's slate); cross-venue price gap median 1c |
 | Reconcile the two venues' **team naming** ("Los Angeles R" ↔ "Rams", code `lar` ↔ `la`) | letter-shorthand + code-prefix bridge, strict token match first so it can't steal a real one; **+23 contract pairs, 0 lost** on a frozen catalog |
@@ -39,7 +39,7 @@ orders — all with a single command.
 | Reject look-alike contracts from event context | 26 rules (single game vs season, "run for" vs nominee, county vs state, CA-04 vs MO-04, division vs conference, reach vs win, top-5 vs winner, playoff seed, vote share vs winning, week vs season, "$1t+ IPO" vs plain, stat-line values, bps range, …) with a regression test each |
 | Reach **multi-leg** relationships a 1-to-1 matcher structurally cannot (Kalshi `Kotek, 8+ pts` ↔ the **sum** of Polymarket's `9-12%`, `12-15%`, `15-18%`, `18%+`) | `ladder_match.py` + `python -m tools.ladder_report`; 235 rungs across 25 midterm margin-of-victory races, 28 settlement-safe edges. **Review only** — no N-leg executor, no depth data |
 | Measure coverage live | `python -m tools.coverage_report [--text]` — ingestion counts, sports recall vs an independent oracle, price agreement. A funnel audit (pass 14) pins what is ingested vs held out of matching and why |
-| Price every endorsed pair from live order books, compute net-of-fee edge both directions | ~485 positive-net candidates per full scan, 51 above the alerter's 3c threshold; the top of the list AND the 3–5c band are hand-audited (16 mismatch classes removed in passes 12–13) |
+| Price every endorsed pair from live order books, compute net-of-fee edge both directions | 2026-09-21: **599 positive-net candidates**, top 50 emailed (median 6.3c, best 14.2c); the top of the list AND the 3–5c band are hand-audited (16 mismatch classes removed in passes 12–13) |
 | Answer **which pairs are arbable, and where the alpha is** | `SUMMARY` (F5): three-gate funnel, fee-model contrast (53 vs 626 positive on the same pairs), per-category/source tables, and an executable total that counts only plausible edges — $3,062 of $11,890 raw |
 | Show the **depth-walked executable arb** in the terminal — VWAP per leg, profit by budget, break-even depth, and top-of-book vs depth-walked side by side | `BOOK SCAN` (F4) over `book_arb.py`; works off the scan's ladders or re-fetches both books live |
 | Email / dashboard / dry-run execution | `alerter.py`, `server.py`, `executor.py` |
@@ -55,13 +55,15 @@ to sell, cut it to 28. Assume any ladder number quoted without real books is
 inflated ~3×.
 
 Honest caveat, measured rather than assumed: **sports pairs yield almost no
-arbitrage** (5 positive edges out of 1,127 priced pairs, best +2.5c, all on
-illiquid books) — cross-venue sports pricing is efficient, so that work bought
-coverage, not opportunities. **Every edge above 3c comes from text-matched
-pairs**, which is why the largest edges are hand-audited each pass: 13 of the
-top 16 were mismatches before pass 12, roughly 2 of the top 10 after. Treat every
-alert as a candidate until the settlement check passes. Coverage, gaps and the
-fix log live in
+arbitrage.** On the 2026-09-21 scan, 1,165 priced sports pairs produced 10
+positive edges (best 7.5c) worth **$3.20** of executable profit — against
+$3,059 from text-matched pairs. Cross-venue sports pricing is efficient, so
+that work bought coverage, not opportunities.
+
+The largest edges are hand-audited each pass because the top of the list is
+where mismatches surface: 13 of the top 16 were wrong before pass 12, roughly 2
+of the top 10 after. Treat every alert as a candidate until the settlement
+check passes. Coverage, gaps and the fix log live in
 [docs/EXPANSION_PROPOSAL.md](docs/EXPANSION_PROPOSAL.md#progress-log).
 
 ### Demo — run it yourself, step by step
@@ -323,15 +325,21 @@ asc/desc. A `GATE` selector switches population (all / arb-eligible /
 alerter-gate, defaulting to the last), and `PRICED ONLY` separates unpriced
 from unprofitable.
 
-### Are there arbitrage opportunities right now?
+### What the alerter would actually email
 
-From the 2026-09-21 run: **599 candidates survive the net-of-fee filter, and the
-top 50 by edge would be emailed** (median 6.3c, best 14.2c net).
+The sections above count arbable pairs on a saved scan. The production alerter
+runs the same gate against live books and, on its own 2026-09-21 run, reported
+**599 positive candidates and would have emailed the top 50** (median 6.3c,
+best 14.2c net).
 
-That is the honest raw number, and it is **not** a claim that 599 trades exist.
-Hand-checking the 50 that would have been emailed, several are known
-false-positive classes the matcher still passes. Two verified end-to-end from
-this run's `pairs.json`:
+> 599 here vs **626** in the funnel above is not a contradiction: they are two
+> separate scans, minutes apart, over catalogs that move. The agreement between
+> them is the point — the dashboard and the alerter now count the same
+> population.
+
+**599 is not a claim that 599 trades exist.** Hand-checking the 50 that would
+have been emailed, several are known false-positive classes the matcher still
+passes. Two verified end-to-end from that run's `pairs.json`:
 
 ```
 K: Will there be a recession in 2027? Yes
@@ -344,35 +352,14 @@ P: Iowa State  [event: 2027 Men's College Basketball National Champion]
 ```
 
 The AI settlement check that would catch these is **shadow-mode and was SKIPPED
-on this run — no API key present**.
+on this run — no API key present**. This is also why the SUMMARY view separates
+implausible edges rather than counting them: that band is where these land.
 
-Two further caveats, both measured rather than assumed:
-
-* **The scan's own ARB column under-reports, and the reason is the fee.**
-  `discover.py` scores pairs with a deliberately conservative **flat 7c**
-  (`FEE = 0.07`, "worst-case"), while Kalshi's real taker fee is
-  `0.07·p·(1−p)` — a maximum of **1.75c** at p = 0.5, on the Kalshi leg only.
-  Re-scoring the same 2026-09-21 scan both ways:
-
-  | | positive pairs |
-  |---|---|
-  | flat 7c (what the scan displayed) | **1** |
-  | accurate `0.07·p·(1−p)` | **11** |
-
-  of 1,193 arb-eligible / 1,192 priced pairs, with live books on all but one.
-  A second, separate point: a `None` in `arb_net_profit` means *not positive*,
-  **not** *not priced* — the field is only assigned when profit > 0. Conflating
-  those two is how a scan of 7,903 pairs reads as "1 priced".
-
-  The SUMMARY view reports both fee models side by side for exactly this
-  reason, and 843 pairs showed a positive *catalog* gross edge — catalog quotes
-  being systematically optimistic, roughly **3x** on the ladder measurement
-  (76 apparent edges → 28 against real books).
-* **Sports pairs yield almost no arbitrage.** Measured on the pass-12 run:
-  5 positive edges out of 1,127 priced pairs, best +2.5c, all on illiquid
-  books. Cross-venue sports pricing is efficient, so that work bought coverage,
-  not opportunities — the +23 pairs from the pass-17 naming bridge are expected
-  to behave the same way.
+One more caveat, measured rather than assumed: **catalog quotes are
+systematically optimistic.** 843 pairs showed a positive *catalog* gross edge on
+that scan, and the ladder work measured catalog-implied opportunity running
+roughly **3x** high (76 apparent edges → 28 against real books). Trust the
+depth-walked figure, not the catalog one.
 
 Treat every signal as a candidate until settlement is verified.
 
@@ -627,6 +614,21 @@ Also `--poly-timeout` (default 15 s) and `--kalshi-timeout` (default 20 s).
 pip install fastapi uvicorn
 python server.py          # http://localhost:8000 — /api/status checks both venues
 ```
+
+| View | Key | What it is for |
+|---|---|---|
+| `LIVE PAIRS` | F1 | The matched pairs, sortable by any column (net accurate, net flat 7c, exec $, exec contracts, catalog edge, sim, conf, close). `GATE` picks the population — all / arb-eligible / alerter-gate (default). `ARB ONLY` and `PRICED ONLY` are separate filters, because unpriced and unprofitable are different states |
+| `SIGNALS LOG` | F2 | The last entries from `signals.jsonl` (written by `monitor.py`) |
+| `BOOK SCAN` | F4 | Depth-walked executable arb for the selected pair — see [the maths](#how-the-order-book-arb-maths-works) |
+| `SUMMARY` | F5 | Which pairs are arbable and where the alpha is — see [above](#which-pairs-actually-have-arbitrage) |
+
+Scan actions: `FULL SCAN` (live order books) and `FAST SCAN` (F8, catalog
+mid-prices only — it does **not** price arbitrage, and the arb calculator says
+so rather than showing a misleading zero).
+
+API endpoints used by the UI: `/api/scan`, `/api/scan/fast`, `/api/signals`,
+`/api/status`, `/api/book-arb` (POST, from the scan's ladders) and
+`/api/book-arb/live` (GET, re-fetches both books).
 
 ### Operator tools (read local logs only — no network)
 
