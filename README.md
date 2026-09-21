@@ -151,32 +151,28 @@ Polymarket buckets, which a 1-to-1 matcher structurally cannot reach.
 .venv/bin/python -m uvicorn server:app --port 8000   # http://127.0.0.1:8000
 ```
 
-A terminal-style monitor over the same engine. It opens idle, with a live
-health check on both venues:
+A terminal-style monitor over the same engine. The whole tour — matched pairs,
+sorting by executable dollars, switching population, the summary, and a
+depth-walked book scan:
 
-![Dashboard, idle](docs/img/dashboard-idle.png)
+![Dashboard walkthrough](docs/img/demo.gif)
 
-`FAST SCAN` then walks both full catalogs and fills the table — **8,363 pairs
-in 353s** on this run, sortable and filterable by category:
+*(Full-motion capture: [docs/demo.webm](docs/demo.webm).)*
 
-![Dashboard, matched pairs](docs/img/dashboard-pairs.png)
+Two notes on what you are seeing. `FAST SCAN` uses catalog mid-prices only and
+**does not price arbitrage** — that is why `ARB` reads 0 after one; use
+`FULL SCAN` or the alerter for live books, and the arb calculator says so
+rather than showing a misleading zero. And the recording **replays a saved real
+scan** so it runs in seconds: the numbers on screen are genuine, only the
+several-minute catalog walk is skipped.
 
-Note `ARB 0` in the status bar: **`FAST SCAN` uses catalog mid-prices only and
-does not price arbitrage.** Use `FULL SCAN` (or the alerter) for live order
-books — the arb calculator says so explicitly rather than showing a zero.
-
-Selecting a row opens the pair detail, which is how you sanity-check a match
-before trusting it — here Polymarket's `Bank of America` against Kalshi's
-"Will Bank of America serve as lead-left underwriter on Anthropic's IPO?":
-
-![Dashboard, pair detail](docs/img/dashboard-detail.png)
-
-The screenshots are generated, not hand-taken, so they can be refreshed after a
-UI change and always show a real scan:
+Both the recording and the still screenshots are generated, so they can be
+refreshed after a UI change and always show a real scan:
 
 ```bash
-.venv/bin/pip install playwright && .venv/bin/playwright install chromium
-.venv/bin/python -m tools.capture_dashboard
+.venv/bin/pip install playwright Pillow && .venv/bin/playwright install chromium
+.venv/bin/python -m tools.capture_dashboard                    # stills
+.venv/bin/python -m tools.record_demo --payload scan.json      # demo.gif + demo.webm
 ```
 
 ### How the order-book arb maths works
@@ -249,10 +245,14 @@ pair and shows it:
 
 ![Dashboard, depth-walked book scan](docs/img/dashboard-book-scan.png)
 
-Both directions are shown, best first. Note the two figures at the bottom of
-each block — on this book, top-of-book reads **+0.1327** while the depth-walked
-net is **+0.0826**. Top-of-book overstates the fill by 60%, which is the entire
-reason the panel exists.
+Both directions are shown, best first. Two things to read off it:
+
+* **Top-of-book vs depth-walked.** On this book top-of-book reads **+0.1272**
+  while the actual depth-walked net is **+0.0441** — top-of-book overstates the
+  fill by **65%**, which is the entire reason the panel exists.
+* **ROI falls as size grows.** The by-budget table walks deeper into the book
+  at every step: $1,000 fills 1,567 contracts at 7.73% ROI, $5,000 fills 5,776
+  at 4.68%. The edge is real but it is not linear in capital.
 
 It works from the ladders the scan already carries (`POST /api/book-arb`, no
 network), and falls back to re-fetching both books live
@@ -418,7 +418,8 @@ prediction-pipeline/
 ├── kalshi/client.py     # Kalshi Trade API v2 client (public + auth)
 ├── polymarket/client.py # Polymarket CLOB + Gamma API client (public + auth)
 ├── tools/               # Live probes: smoke_test, coverage_report, coverage_ledger,
-│                     #   ladder_report, capture_dashboard, validate_{live,recall,ingestion,matcher}
+│                     #   ladder_report, validate_{live,recall,ingestion,matcher};
+│                     #   capture_dashboard + record_demo regenerate the README media
 ├── tests/               # Hermetic pytest suite (CI) + fixtures
 └── docs/                # Guides, OPERATIONS.md; docs/history/ holds validation logs
 ```
@@ -666,7 +667,8 @@ python -m tools.ladder_report --min-edge 0.05 [--json]       # multi-leg ladder 
 | `validate_ingestion` | How many more pairs would a wider event cap find? |
 | `validate_matcher` | Does the matcher still pair the curated fixture set? |
 | `ladder_report` | Where does a Kalshi cumulative rung disagree with the sum of Polymarket's buckets? |
-| `capture_dashboard` | Regenerates the README's dashboard screenshots from a real scan (needs Playwright) |
+| `capture_dashboard` | Regenerates the README's two dashboard stills — SUMMARY and BOOK SCAN — from a real scan or a replayed `--payload` (needs Playwright) |
+| `record_demo` | Records the README's animated walkthrough (`demo.gif`) and `docs/demo.webm` (needs Playwright + Pillow) |
 
 ### Tests and lint (what CI runs)
 
