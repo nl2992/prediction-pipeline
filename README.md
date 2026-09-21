@@ -31,6 +31,7 @@ orders — all with a single command.
 | Ingest the **entire** open catalog of both venues | Kalshi 13,278 events / 118,405 markets (14 s); Polymarket 18,916 events / 174,625 markets (12 s) |
 | Match everything against everything | full cross-product, no event cap; ~2.5 min of matching |
 | Pair sports games whose titles share no words ("Denver wins" ↔ "Broncos vs. Chiefs") | structured join on teams + start time, **97% of the Kalshi games that have a Polymarket counterpart**; cross-venue price gap median 1c |
+| Reconcile the two venues' **team naming** ("Los Angeles R" ↔ "Rams", code `lar` ↔ `la`) | letter-shorthand + code-prefix bridge, strict token match first so it can't steal a real one; **+23 contract pairs, 0 lost** on a frozen catalog |
 | Pair **spreads, totals, team totals, half lines and MLB player props** on those games ("wins by more than 2.5 goals" ↔ "Spread -2.5"; "1+ hits+runs+RBIs" ↔ "O/U 0.5") | 12 contract classes on the verified game key; equal-line join; football half *winners* refused (tie-leg mismatch) |
 | Pair text-alike markets (elections, awards, economics, culture…) | ~7,500 text pairs, **92.6% of an independent oracle's pairs matched — and 92.6% endorsed too** (the referee no longer rejects what the matcher finds); House races 96% |
 | Flag pairs whose wording matches but settlement may not (weather stations, one-sided deadlines) | kept visible, excluded from alerts (~460 pairs) |
@@ -60,67 +61,188 @@ alert as a candidate until the settlement check passes. Coverage, gaps and the
 fix log live in
 [docs/EXPANSION_PROPOSAL.md](docs/EXPANSION_PROPOSAL.md#progress-log).
 
-### Demo
+### Demo — run it yourself, step by step
+
+Every number and screenshot below came from a real run on 2026-09-21 against
+both live APIs. Nothing here is mocked; re-running the same commands reproduces
+them (with today's prices).
+
+**0. Install** — Python 3.11+, no credentials needed for any read-only step.
 
 ```bash
-python -m venv .venv && .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
+git clone https://github.com/nl2992/prediction-pipeline && cd prediction-pipeline
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
+```
 
-# 1. Connectivity
+**1. Check both venues answer.**
+
+```bash
 .venv/bin/python -m tools.smoke_test
+```
 
-# 2. Full-catalog discovery with live order books (~8 min), saved to JSON
-.venv/bin/python discover.py --days 730 --show-prices --output pairs.json
+**2. Ingest both catalogs and match everything.** This is the production path —
+it walks the *entire* open catalog of both venues, with no event cap.
 
-# 3. The email the alerter would send, printed instead of sent
+```bash
 .venv/bin/python alerter.py --once --dry-run
-
-# 4. Live coverage numbers (~1 min; --text adds text matching + recall, ~5 min)
-.venv/bin/python -m tools.coverage_report --text
-
-# 5. Terminal-style dashboard at http://127.0.0.1:8000
-.venv/bin/pip install uvicorn && .venv/bin/python -m uvicorn server:app --port 8000
 ```
 
-Output of step 4 (2026-09-21, after pass 10):
+```
+[1/4] Ingesting Kalshi open-market catalog…
+      [coverage] Kalshi: 103,451/103,451 open markets ingested (100.0%, incl. 18 orphans)
+[2/4] Ingesting Polymarket open-market catalog (full event catalog scan)…
+      [coverage] Polymarket: 148,215/148,215 open markets ingested (100.0%, incl. 494 orphans)
+[3/4] Running two-level group matcher (min_sim=0.3)…
+      8350 pairs found (1168 sports-key, 7182 text)
+[alerter] scan done in 619s — cap=None, 8350 pairs, 599 survivable arb(s) (>= 0.01c net)
+[alerter] DRY RUN — would email: [Pred-Arb] 50 arbs >3% net — best 423% annualised
+```
+
+**Ingestion is 100% of both open catalogs.** Matching is not 100%, and cannot
+be — see [What "100%" means](#what-100-means-two-different-questions) below.
+
+> Note: `discover.py --days 730` applies a **horizon filter** and ingests 96.8%
+> of Kalshi (3,342 markets close beyond the window). Omit `--days` for the full
+> catalog. The alerter never applies one.
+
+**3. Look at the matched pairs.**
+
+```bash
+.venv/bin/python discover.py --show-prices --output pairs.json
+```
 
 ```
-  Ingestion  Kalshi 10,925 events / 103,951 markets (14.9s)   Polymarket 18,212 events / 152,033 markets (19.9s)
-  Sports     568 games joined (973 contract pairs: 771 moneyline + 202 spread/total)
-             recall 97.0% of the games that have a PM counterpart
-             price gap median 0.01, p90 0.07, >30c: 1   (spread/total median 0.02)
-  Text       7,448 pairs, 7,148 v2-endorsed; recall of 3,946 oracle pairs:
-             matched 92.6%, v2-endorsed 92.6% (1 matched but v2-rejected)
+  #1  [elec]  sim=0.95
+      Poly:   Zohran Mamdani
+      Kalshi: Who will win the NYC mayoral election? Zohran Mamdani
+      Prices: Poly [bid=0.835 ask=0.840]   Kalshi [bid=0.830 ask=0.850]
 ```
 
-**How much is reachable?** Two measurements, both reproducible:
+**4. Measure coverage and recall against independent oracles.**
 
-* `python -m tools.coverage_report --text` — recall against independent oracles.
-  A hand-labelled sample of 60 misses was 63% real / 37% oracle error, so ~91% of
-  oracle pairs is the ceiling and adjusted true recall is ≈95%.
-* `python -m tools.coverage_ledger` — what happens to every ingested market.
-  **8,309 pairs is close to the real overlap of the two catalogs**: 76% of Kalshi
-  markets and 51% of Polymarket markets sit in classes the other venue does not
-  list at all (corners and exact score have no Kalshi equivalent; vote-percent
-  ladders and hourly index ranges have no Polymarket equivalent). The largest
-  genuinely matchable class left is Kalshi's 4,552 midterm margin-of-victory
-  markets, which need multi-leg synthesis (cumulative thresholds vs buckets)
-  rather than a matcher rule.
+```bash
+.venv/bin/python -m tools.coverage_report --text   # recall vs an oracle
+.venv/bin/python -m tools.coverage_ledger          # what happens to EVERY market
+```
 
-Excerpt from step 2 (2026-09-18):
+**5. Multi-leg ladder candidates** — Kalshi cumulative rungs vs sums of
+Polymarket buckets, which a 1-to-1 matcher structurally cannot reach.
+
+```bash
+.venv/bin/python -m tools.ladder_report --min-edge 0.05
+```
 
 ```
-[1/5] Fetching Kalshi event catalog (nested markets)…
-      15,627 events, 141,046 nested markets in 22.4s
-[4/5] Searching Polymarket events (full catalog, unfiltered)…
-      213,977 Polymarket markets from 21099 events in 19.8s
-[5/5] Running two-level group matcher (min_sim=0.3)…
-      6333 pairs found
-
-  KXMLBGAME-…TBNYY-TB   Tampa Bay wins          <->  Tampa Bay Rays (vs New York Yankees)
-  KXEPLGAME-…FULMUN-TIE Tie is the result       <->  Draw (Fulham FC vs. Manchester United FC)
-  KXHOUSERACE-OH07-26-R Will Republican win OH-07? Max Miller  <->  Max Miller (R) [OH-07]
-  KXMLBNLCY-…           Will Eury Perez win NL Cy Young?       <->  Eury Perez [MLB: 2026 NL Cy Young]
+  235 Kalshi rungs synthesised across 25 races (63 land on a bucket edge)
+  +0.163  oregon governor - kotek 8+ pts (straddled)
+          Kalshi KXMIDTERMMOV-ORGOVD-P8  bid 0.36 / ask 0.41
+          buy rung on Kalshi + sell above-only basket on PM  (4 PM legs)
 ```
+
+**6. The dashboard.**
+
+```bash
+.venv/bin/pip install uvicorn
+.venv/bin/python -m uvicorn server:app --port 8000   # http://127.0.0.1:8000
+```
+
+A terminal-style monitor over the same engine. It opens idle, with a live
+health check on both venues:
+
+![Dashboard, idle](docs/img/dashboard-idle.png)
+
+`FAST SCAN` then walks both full catalogs and fills the table — **8,363 pairs
+in 353s** on this run, sortable and filterable by category:
+
+![Dashboard, matched pairs](docs/img/dashboard-pairs.png)
+
+Note `ARB 0` in the status bar: **`FAST SCAN` uses catalog mid-prices only and
+does not price arbitrage.** Use `FULL SCAN` (or the alerter) for live order
+books — the arb calculator says so explicitly rather than showing a zero.
+
+Selecting a row opens the pair detail, which is how you sanity-check a match
+before trusting it — here Polymarket's `Bank of America` against Kalshi's
+"Will Bank of America serve as lead-left underwriter on Anthropic's IPO?":
+
+![Dashboard, pair detail](docs/img/dashboard-detail.png)
+
+The screenshots are generated, not hand-taken, so they can be refreshed after a
+UI change and always show a real scan:
+
+```bash
+.venv/bin/pip install playwright && .venv/bin/playwright install chromium
+.venv/bin/python -m tools.capture_dashboard
+```
+
+### Are there arbitrage opportunities right now?
+
+From the 2026-09-21 run: **599 candidates survive the net-of-fee filter, and the
+top 50 by edge would be emailed** (median 6.3c, best 14.2c net).
+
+That is the honest raw number, and it is **not** a claim that 599 trades exist.
+Hand-checking the 50 that would have been emailed, several are known
+false-positive classes the matcher still passes. Two verified end-to-end from
+this run's `pairs.json`:
+
+```
+K: Will there be a recession in 2027? Yes
+P: US recession by end of 2027?          <- "by end of" vs "during", a documented class
+
+K: Steel Bridge National Championship Winner: Iowa State
+P: Iowa State  [event: 2027 Men's College Basketball National Champion]
+                                          <- an ASCE student engineering contest
+                                             matched to a basketball title
+```
+
+The AI settlement check that would catch these is **shadow-mode and was SKIPPED
+on this run — no API key present**.
+
+Two further caveats, both measured rather than assumed:
+
+* **The two entry points disagree, and the reason matters.** On the same
+  catalog, `discover.py --days 730 --show-prices` computed a net edge for only
+  **1 of 7,903** pairs — `--enrich-margin` fetches live books for a subset by
+  default, and a pair with no live book gets no net number at all. 843 pairs
+  showed a positive *catalog* gross edge, but catalog quotes are systematically
+  optimistic: the ladder work measured them inflating opportunity roughly
+  **3x** (76 apparent edges → 28 against real books). Trust the alerter's
+  figure, not the catalog one.
+* **Sports pairs yield almost no arbitrage.** Measured on the pass-12 run:
+  5 positive edges out of 1,127 priced pairs, best +2.5c, all on illiquid
+  books. Cross-venue sports pricing is efficient, so that work bought coverage,
+  not opportunities — the +23 pairs from the pass-17 naming bridge are expected
+  to behave the same way.
+
+Treat every signal as a candidate until settlement is verified.
+
+### What "100%" means — two different questions
+
+The recurring goal is "pull all events, and match all". Those are two different
+targets, and only one of them can reach 100%:
+
+| Question | Status | Evidence |
+|---|---|---|
+| **Ingestion** — do we pull every open market on both venues? | **Yes, 100%** | `Kalshi 103,451/103,451 · Polymarket 147,491/147,491` on every production scan; `tools.validate_coverage` exits non-zero if a gap appears |
+| **Matching** — is every ingested market paired with one on the other venue? | **No, and it never can be** | `tools.coverage_ledger` |
+
+The second is not a bug to be fixed. **76% of Kalshi markets and 51% of
+Polymarket markets sit in classes the other venue does not list at all.**
+Polymarket has 10,316 `soccer_exact_score` and 7,602 `total_corners` markets;
+Kalshi lists no corner or exact-score market whatsoever. Kalshi has vote-percent
+ladders and hourly index ranges with no Polymarket equivalent. A market with no
+counterpart cannot be matched, and pretending otherwise would mean inventing
+pairs — which is precisely the failure mode the audits in
+[docs/EXPANSION_PROPOSAL.md](docs/EXPANSION_PROPOSAL.md#progress-log) keep
+removing.
+
+So the meaningful target is **recall against the pairs that genuinely exist**:
+
+* **Text pairs: 92.6%** of an independent oracle's pairs, and a hand-labelled
+  sample of 60 misses was 63% real / 37% oracle error — so ~91% of the oracle is
+  the realistic ceiling and adjusted true recall is **≈95%**.
+* **Sports: 97%** of Kalshi games that have a Polymarket counterpart.
+* **Ladders:** Kalshi's 4,552 midterm margin-of-victory markets are reachable
+  only as multi-leg sums, now handled review-only by `tools.ladder_report`.
 
 ---
 
@@ -144,7 +266,8 @@ prediction-pipeline/
 ├── health.py, ops.py, signal_report.py, ai_verify_report.py   # operator tools
 ├── kalshi/client.py     # Kalshi Trade API v2 client (public + auth)
 ├── polymarket/client.py # Polymarket CLOB + Gamma API client (public + auth)
-├── tools/               # Live probes: smoke_test, coverage_report, validate_{live,recall,ingestion,matcher}
+├── tools/               # Live probes: smoke_test, coverage_report, coverage_ledger,
+│                     #   ladder_report, capture_dashboard, validate_{live,recall,ingestion,matcher}
 ├── tests/               # Hermetic pytest suite (CI) + fixtures
 └── docs/                # Guides, OPERATIONS.md; docs/history/ holds validation logs
 ```
@@ -377,6 +500,7 @@ python -m tools.ladder_report --min-edge 0.05 [--json]       # multi-leg ladder 
 | `validate_ingestion` | How many more pairs would a wider event cap find? |
 | `validate_matcher` | Does the matcher still pair the curated fixture set? |
 | `ladder_report` | Where does a Kalshi cumulative rung disagree with the sum of Polymarket's buckets? |
+| `capture_dashboard` | Regenerates the README's dashboard screenshots from a real scan (needs Playwright) |
 
 ### Tests and lint (what CI runs)
 

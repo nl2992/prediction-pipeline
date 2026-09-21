@@ -877,3 +877,88 @@ Run it: `python -m tools.ladder_report --min-edge 0.05`.
 *analysable* for the first time, but those markets still do not appear as pairs,
 because they are not pairs. Honest statement of coverage is unchanged — see
 "Where the remaining gap actually is" below.
+
+---
+
+## Pass 17 — team-name reconciliation, and a reverted experiment
+
+**Where the ledger pointed.** After pass 16, the largest recall gaps in classes
+that *do* match were Polymarket's `totals` (243/7,082) and `spreads`
+(86/5,555) — 12,637 markets, ~330 matched. Diagnosis on live pools:
+
+| PM spread/total markets | 12,670 |
+|---|---|
+| …in a PM event with ANY joined contract | 680 |
+| …actually matched | 329 |
+| …in events with **no joined contract at all** | **11,990** |
+
+So 95% of the gap was not a line-matching problem. It was that **the GAME never
+joined**, and lines ride on a verified game key, so one failed game costs its
+whole ladder (~30 markets).
+
+**First hypothesis, and why it was wrong.** `_k_games` only builds a game when
+the Kalshi series ends in `GAME`/`MATCH`. `KXNFLSPREAD` does not, and Kalshi
+lists 365 NFL spread markets against only 34 `KXNFLGAME` markets — so it looked
+like Kalshi was pricing lines on games it lists no moneyline for. I implemented
+`_KLineGame` to synthesise a game from its line events (deriving the date from
+the ticker and the teams from the event title `LA Rams vs DEN Broncos: Spread`).
+
+Measured live: **60 synthesised games, 0 new pairs.** The premise was wrong —
+every `KXNFLSPREAD` event *is* already covered by a real `KXNFLGAME`; the 34 vs
+365 comparison was markets, not games. The 60 it did find were
+`KXMLBINNINGTOTAL` and `KXWTAGTOTAL`, classes with no Polymarket counterpart.
+**Reverted** (~90 lines for no measured gain).
+
+That work did surface one genuine defect: `_K_EVENT_KIND_RE`'s
+`(GAME|MATCH|SPREAD|TOTAL)` alternation mis-splits compound classes, reading
+`KXNCAAFTEAMTOTAL` as `KXNCAAFTEAM` + `TOTAL` — a namespace that addresses no
+event. It affected only the new code, so it left with it, but the same trap
+waits for anyone re-deriving a league prefix that way; strip the longest
+**known** class suffix instead.
+
+**The actual cause: team naming.** The NFL game `nfl-nyg-la-2026-09-22` failed
+to join `KXNFLGAME-26SEP21NYGLAR` for two independent reasons:
+
+* codes — Polymarket `la` vs Kalshi `lar`, so no exact match;
+* names — Kalshi `"Los Angeles R"` vs Polymarket `"Rams"`, sharing no token.
+  Kalshi abbreviates as **`<City> <first letter of nickname>`**, inconsistently:
+  some games use the nickname outright (`"DEN Broncos"`).
+
+Fixes, both narrow:
+
+* `_code_prefix_bridge` — accept a prefix relation on one team's code **only**
+  when the other team's code matches exactly. `la` is ambiguous across
+  franchises (Lakers/Angels/Chargers/Rams); the exact match on the other team is
+  what pins the game down before trusting the prefix.
+* `_city_letter_agrees` — treat the trailing letter as a real discriminator
+  ("New York G" is the Giants, not the Jets), checked against any token of the
+  Polymarket name so `"Boston R"` reaches `"Red Sox"`.
+
+**A false positive the live A/B caught before landing.** A single combined
+matching pass LOST 2 real pairs: Polymarket `"Athletics"` matched both Kalshi
+`"A's"` (strict, correct) and Kalshi `"Los Angeles A"` — the *Angels* — via the
+letter rule. Two hits meant ambiguity, and `_code_map` dropped the whole
+Angels/Athletics game. Fix: **strict token agreement resolves every name first;
+only names with zero strict hits reach the letter rule**, and only against codes
+the strict pass has not claimed.
+
+The letter pattern was also tightened to plain city words. On the live catalog
+the looser shape matched 211 distinct names including `'Cardi B'`, `'Polo G'`,
+`'LL Cool J'` and `'Amendment I'`. None can reach the join today (only
+GAME/MATCH series enter it), so that guard is precautionary, not a live fix.
+
+**Result:** 1,135 → 1,158 sports contract pairs on a frozen catalog (**+23, 0
+lost**); 1,190 on the live scan. The additions are the LAR/DEN spread and total
+ladders and the NHL Kings/Ducks game with its totals.
+
+**Known limitation, stated rather than papered over.** `_names_agree` remains
+permissive on its own — `_names_agree("Los Angeles A", "Athletics")` is still
+True — because the fix lives in `_code_map`'s assignment, not in the predicate.
+`_subject_agrees` also calls it, so a LINE subject could in principle be
+mis-assigned. Measured: **0 live line pairs currently use the city+letter
+shape**, so this is latent, not active. Containing it needs the same two-pass
+discipline inside `_match_lines`; that is the next pass's job.
+
+**Ingestion remains 100%** on both venues (103,451/103,451 and
+147,491/147,491). Matching is not 100% and cannot be — see the README's
+"What 100% means" section and `tools.coverage_ledger`.
