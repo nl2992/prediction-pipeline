@@ -362,11 +362,16 @@ def _team_equivalences(kg: "_KGame", pg: _PGame, cmap: dict) -> list:
     return out
 
 
-def _subject_agrees(k_subject: str, p_subject: str, equivalences: list) -> bool:
-    if _names_agree(k_subject, p_subject):
+def _subject_agrees(k_subject: str, p_subject: str, equivalences: list,
+                    strict: bool = False) -> bool:
+    """``strict=True`` skips the "<City> <Letter>" fallback (see
+    ``_names_agree_strict`` vs ``_names_agree``), for ``_match_lines``'s
+    strict-first pass -- see the comment there for why that pass exists."""
+    agree = _names_agree_strict if strict else _names_agree
+    if agree(k_subject, p_subject):
         return True
     for k_name, p_name in equivalences:
-        if _names_agree(k_subject, k_name) and _names_agree(p_subject, p_name):
+        if agree(k_subject, k_name) and agree(p_subject, p_name):
             return True
     return False
 
@@ -385,6 +390,7 @@ def _match_lines(prefix: str, suffix: str, k_by_event: dict, pg: _PGame,
         if not p_entries or not k_markets:
             continue
         reason = f"sports line key {prefix}{k_suffix}-{suffix} <-> {pg.slug}"
+        entries = []
         for ks in k_markets:
             if kind == "team_noline" and (ks.market_id or "").upper().endswith("-TIE"):
                 continue          # Kalshi's draw leg has no Polymarket counterpart
@@ -397,18 +403,40 @@ def _match_lines(prefix: str, suffix: str, k_by_event: dict, pg: _PGame,
                 if not m:
                     continue
                 k_subject = m.group("s")
-            for p_subject, p_line, ps in p_entries:
-                if ps.market_id in used_p or (kind != "team_noline" and p_line != k_line):
+            entries.append((ks, k_subject, k_line))
+        # Strict subjects first, letter-shorthand fallback second -- same
+        # discipline as _code_map (see its comment), applied here for the
+        # same reason: unguarded, the letter rule can steal a Polymarket line
+        # away from the team it strictly belongs to. Measured:
+        # _names_agree("Los Angeles A", "Athletics") is True (the Angels'
+        # city+letter shorthand also satisfies the letter rule against the
+        # unrelated Athletics), so without this a Kalshi Angels team-total
+        # could pair to the Polymarket Athletics team-total at the same line
+        # value instead of its own strict counterpart. Running every subject
+        # through the strict pass first, and only sending markets that found
+        # no strict partner into the letter-rule pass -- against Kalshi and
+        # Polymarket entries the strict pass hasn't already claimed -- keeps
+        # a genuine letter-shorthand match (e.g. "Los Angeles R" ~ "Rams")
+        # working while making it impossible to outrank a strict one.
+        used_k: set[str] = set()
+        for strict in (True, False):
+            for ks, k_subject, k_line in entries:
+                if ks.market_id in used_k:
                     continue
-                if k_subject is not None and not (
-                        p_subject and _subject_agrees(k_subject, p_subject, equivalences)):
-                    continue
-                used_p.add(ps.market_id)
-                pairs.append(MatchedPair(
-                    poly=ps, kalshi=ks, title_similarity=1.0,
-                    close_delta_hours=_close_delta_hours(ps.close_time, ks.close_time),
-                    confidence=0.98, match_source="sports", match_reason=reason))
-                break
+                for p_subject, p_line, ps in p_entries:
+                    if ps.market_id in used_p or (kind != "team_noline" and p_line != k_line):
+                        continue
+                    if k_subject is not None and not (
+                            p_subject and _subject_agrees(
+                                k_subject, p_subject, equivalences, strict=strict)):
+                        continue
+                    used_p.add(ps.market_id)
+                    used_k.add(ks.market_id)
+                    pairs.append(MatchedPair(
+                        poly=ps, kalshi=ks, title_similarity=1.0,
+                        close_delta_hours=_close_delta_hours(ps.close_time, ks.close_time),
+                        confidence=0.98, match_source="sports", match_reason=reason))
+                    break
     return pairs
 
 
