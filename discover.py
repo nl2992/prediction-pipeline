@@ -2091,8 +2091,17 @@ def discover(
     # ── Format results ────────────────────────────────────────────────────────
     t0 = time.time()
     from matcher import is_arb_eligible, settlement_risk
+    import arb as arb_mod
+    import book_arb
+    from pipeline import OrderBook
 
-    FEE = 0.07  # conservative worst-case fee
+    FEE = 0.07  # conservative worst-case flat fee — kept ONLY to preserve the
+    # existing arb_net_profit/arb_direction fields' positive-only semantics
+    # (discover's own printing, server.arb_count, the frontend and
+    # tests/test_core_logic.py / tests/test_server.py all depend on that
+    # meaning; do not change it). The accurate fields below use the real
+    # Kalshi taker-fee schedule instead.
+    exec_t = 0.0  # accumulated wall time inside the book_arb walk, for reporting
     results = []
     for pair in sorted(pairs, key=lambda x: -x.confidence):
         pb = pair.poly.orderbook.best_bid
@@ -2101,8 +2110,18 @@ def discover(
         ka = pair.kalshi.orderbook.best_ask
 
         arb_dir = arb_profit = None
+        # New (always-recorded) fields. IMPORTANT: None here means the pair
+        # could not be priced at all (a needed quote was missing on one leg) —
+        # NOT "not positive". A negative number means the pair WAS priced and
+        # is currently unprofitable, which is the common case. Conflating the
+        # two (e.g. treating None as "0 edge") is exactly the bug that made
+        # the dashboard report "ARB 0" on 8,000+ pairs — see server.build_summary,
+        # which relies on this distinction for its funnel counts.
+        arb_net_accurate = arb_net_flat7 = arb_direction_accurate = None
+        exec_contracts = exec_profit = exec_roi = None
         arb_eligible = pair.match_source == "sports" or is_arb_eligible(pair.poly, pair.kalshi)
         if show_prices and arb_eligible:
+            # Legacy positive-only fields — unchanged.
             if pa is not None and kb is not None:
                 profit = round(1.0 - (pa + 1.0 - kb) - FEE, 4)
                 if profit > 0:
@@ -2111,6 +2130,54 @@ def discover(
                 profit = round(1.0 - (ka + 1.0 - pb) - FEE, 4)
                 if profit > 0 and (arb_profit is None or profit > arb_profit):
                     arb_dir, arb_profit = "kalshi_yes + poly_no", profit
+
+            # Both fee models, both directions, best kept — recorded even when
+            # negative (see comment above). Kalshi taker fee applies to the
+            # Kalshi LEG price only: for poly_yes+kalshi_no that leg is the
+            # derived Kalshi NO price (1 - kalshi_bid); for kalshi_yes+poly_no
+            # it is the raw kalshi_ask.
+            candidates = []  # (direction_label, net_accurate, net_flat7, book_arb_direction_key)
+            if pa is not None and kb is not None:
+                k_leg_price = round(1.0 - kb, 6)
+                gross_cost = pa + k_leg_price
+                candidates.append((
+                    "poly_yes + kalshi_no",
+                    round(1.0 - gross_cost - arb_mod.kalshi_taker_fee(k_leg_price), 6),
+                    round(1.0 - gross_cost - FEE, 6),
+                    "poly_yes__kalshi_no",
+                ))
+            if ka is not None and pb is not None:
+                k_leg_price = ka
+                gross_cost = ka + (1.0 - pb)
+                candidates.append((
+                    "kalshi_yes + poly_no",
+                    round(1.0 - gross_cost - arb_mod.kalshi_taker_fee(k_leg_price), 6),
+                    round(1.0 - gross_cost - FEE, 6),
+                    "kalshi_yes__poly_no",
+                ))
+
+            if candidates:
+                best = max(candidates, key=lambda c: c[1])
+                arb_direction_accurate, arb_net_accurate, _, best_book_dir = best
+                arb_net_flat7 = max(c[2] for c in candidates)
+
+                # Executable figures from the live ladders (turns "edge" into
+                # "alpha") — only when both venues actually have book levels.
+                # Capped to the same top-30-levels/side used for the poly_book/
+                # kalshi_book fields below, so exec_* matches what the
+                # dashboard's BOOK SCAN panel would compute from this payload —
+                # a pure-Python walk, cheap but timed and reported below.
+                p_ob_raw, k_ob_raw = pair.poly.orderbook, pair.kalshi.orderbook
+                if (p_ob_raw.bids or p_ob_raw.asks) and (k_ob_raw.bids or k_ob_raw.asks):
+                    p_ob = OrderBook(bids=(p_ob_raw.bids or [])[:30], asks=(p_ob_raw.asks or [])[:30])
+                    k_ob = OrderBook(bids=(k_ob_raw.bids or [])[:30], asks=(k_ob_raw.asks or [])[:30])
+                    _t_exec = time.time()
+                    try:
+                        fill = book_arb.executable_arb(p_ob, k_ob, best_book_dir)["max"]
+                        exec_contracts, exec_profit, exec_roi = fill.contracts, fill.profit, fill.roi
+                    except Exception:
+                        pass  # malformed/degenerate book — leave exec_* as None
+                    exec_t += time.time() - _t_exec
 
         # Categorise using the event title (not the short outcome label like
         # "France" or "No change" which would always return "pop").
@@ -2187,6 +2254,16 @@ def discover(
             "arb_eligible":     arb_eligible,
             "arb_direction":    arb_dir,
             "arb_net_profit":   arb_profit,
+            # Real-fee-schedule fields (always recorded when priced — see the
+            # None-vs-negative comment above the candidates block). Do NOT
+            # confuse these with arb_net_profit/arb_direction above, whose
+            # positive-only semantics are unchanged for backward compat.
+            "arb_net_accurate":       arb_net_accurate,
+            "arb_net_flat7":          arb_net_flat7,
+            "arb_direction_accurate": arb_direction_accurate,
+            "exec_contracts":   exec_contracts,
+            "exec_profit":      exec_profit,
+            "exec_roi":         exec_roi,
             # Catalog-price screen bookkeeping (iteration 2 WP-B): the best
             # catalog-implied gross edge (None if not v2-endorsed, since only
             # endorsed pairs are screened) and whether this pair's book below
@@ -2196,6 +2273,7 @@ def discover(
             **v2_fields,
         })
     cov_t["format"] = round(time.time() - t0, 1)
+    cov_t["book_arb_exec"] = round(exec_t, 3)
 
     agree = sum(1 for r in results if r.get("v2_match") is True)
     disagree = [r for r in results if r.get("v2_match") is False]

@@ -188,6 +188,9 @@
     white-space: nowrap;
   }
   thead th.r { text-align: right; }
+  thead th.sortable { cursor: pointer; user-select: none; }
+  thead th.sortable:hover { color: var(--amber); }
+  thead th.sortable .sort-ind { margin-left: 3px; color: var(--amber); }
   tbody tr {
     border-bottom: 1px solid var(--border);
     cursor: pointer;
@@ -265,6 +268,54 @@
 
   /* ── Signals view ──────────────────────────────────────────── */
   #signals-view { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+
+  /* ── Summary view ──────────────────────────────────────────── */
+  #summary-view { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+  .sum-grid { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+  .sum-panel {
+    background: var(--bg1);
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+    flex: 1;
+    min-width: 260px;
+  }
+  .sum-panel.wide { flex-basis: 100%; }
+  .sum-panel.headline { border-color: var(--green2); background: #051505; }
+  .sum-panel-title {
+    color: var(--orange);
+    font-size: 10px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 4px;
+  }
+  .sum-funnel-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 0;
+    font-size: 11px;
+  }
+  .sum-funnel-row .k { color: var(--dim); }
+  .sum-funnel-row .v { color: var(--white); font-variant-numeric: tabular-nums; }
+  .sum-funnel-row .pct { color: var(--dimmer); font-size: 9px; margin-left: 6px; }
+  .sum-fee-compare { display: flex; gap: 20px; }
+  .sum-fee-col { flex: 1; text-align: center; padding: 10px; border: 1px solid var(--border); }
+  .sum-fee-col .num { font-size: 26px; font-weight: bold; }
+  .sum-fee-col .lbl { font-size: 10px; color: var(--dim); letter-spacing: 0.5px; margin-top: 4px; }
+  .sum-note { color: var(--dim); font-size: 10px; margin-top: 8px; line-height: 1.5; }
+  table.sum-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  table.sum-table th {
+    text-align: right; color: var(--dim); font-weight: normal; font-size: 10px;
+    padding: 3px 6px; border-bottom: 1px solid var(--border);
+  }
+  table.sum-table th:first-child, table.sum-table td:first-child { text-align: left; }
+  table.sum-table td { text-align: right; padding: 3px 6px; font-variant-numeric: tabular-nums; }
+  table.sum-table tr.clickable { cursor: pointer; }
+  table.sum-table tr.clickable:hover { background: var(--bg3); }
+  .sum-caveats { list-style: none; padding: 0; margin: 0; }
+  .sum-caveats li { font-size: 10px; color: var(--dim); padding: 3px 0; border-bottom: 1px dashed var(--border); }
+  .sum-caveats li:last-child { border-bottom: none; }
 
   /* ── Loading overlay ───────────────────────────────────────── */
   #loading {
@@ -399,6 +450,7 @@
       <span onclick="showView('signals')">F2 SIGNALS</span>
       <span onclick="runScan()">F3 SCAN</span>
       <span onclick="runBookArb()">F4 BOOK</span>
+      <span onclick="showView('summary')">F5 SUMMARY</span>
       <span onclick="runFastScan()">F8 FAST</span>
     </div>
   </div>
@@ -437,6 +489,9 @@
       <div class="sidebar-item" onclick="showView('signals')" id="nav-signals">
         <span>SIGNALS LOG</span><span class="badge" id="sb-signals">—</span>
       </div>
+      <div class="sidebar-item" onclick="showView('summary')" id="nav-summary">
+        <span>SUMMARY</span><span class="badge arb" id="sb-summary">—</span>
+      </div>
     </div>
     <div class="sidebar-section">
       <div class="s-header">CATEGORY</div>
@@ -448,11 +503,20 @@
       <div class="sidebar-item" onclick="setCategory('pop')"      id="cat-pop">POP</div>
     </div>
     <div class="sidebar-section">
+      <div class="s-header">GATE (which pairs count)</div>
+      <div class="sidebar-item" onclick="setGate('all')"      id="gate-all">ALL PAIRS</div>
+      <div class="sidebar-item" onclick="setGate('eligible')" id="gate-eligible">ARB-ELIGIBLE (old col)</div>
+      <div class="sidebar-item active" onclick="setGate('alerter')" id="gate-alerter">ALERTER-GATE</div>
+    </div>
+    <div class="sidebar-section">
       <div class="s-header">FILTERS</div>
       <div class="sidebar-item" onclick="toggleArbOnly()" id="filter-arb">
         <span>ARB ONLY</span><span id="arb-only-ind" style="color:var(--dimmer)">○</span>
       </div>
-      <div class="sidebar-item active" onclick="toggleSort()" id="sort-btn">SORT: ARB ▼</div>
+      <div class="sidebar-item" onclick="togglePricedOnly()" id="filter-priced">
+        <span>PRICED ONLY</span><span id="priced-only-ind" style="color:var(--dimmer)">○</span>
+      </div>
+      <div class="sidebar-item" id="sort-btn">SORT: NET ▼ (click a column header)</div>
     </div>
     <div class="sidebar-section">
       <div class="s-header">ACTIONS</div>
@@ -464,7 +528,8 @@
     <div style="padding:8px;color:var(--dimmer);font-size:9px;border-top:1px solid var(--border);">
       PRED-ARB v1.0<br>
       MIN SIM: 0.30<br>
-      FEE: KALSHI 0.07·p(1-p), POLY 0%
+      FEE: KALSHI 0.07·p(1-p), POLY 0%<br>
+      DEFAULT GATE: ALERTER (v2 match, no settlement risk)
     </div>
   </div>
 
@@ -481,13 +546,13 @@
           <button id="refresh-btn" onclick="runScan()">⟳ REFRESH</button>
         </div>
       </div>
-      <div class="tbl-wrap">
+      <div class="tbl-wrap" style="overflow-x:auto;">
         <table id="pairs-table">
           <thead>
             <tr>
               <th style="width:28px;">#</th>
               <th style="width:48px;">CAT</th>
-              <th style="width:52px;">SIM</th>
+              <th class="sortable r" data-sort="sim" style="width:52px;">SIM<span class="sort-ind"></span></th>
               <th>POLYMARKET</th>
               <th>KALSHI</th>
               <th class="r" style="width:52px;">P-BID</th>
@@ -495,13 +560,17 @@
               <th class="r" style="width:52px;">K-BID</th>
               <th class="r" style="width:52px;">K-ASK</th>
               <th class="r" style="width:52px;">Δ-MID</th>
-              <th style="width:80px;">ARB</th>
-              <th class="r" style="width:64px;">P-CLOSE</th>
-              <th class="r" style="width:64px;">K-CLOSE</th>
+              <th class="sortable r" data-sort="net_accurate" style="width:76px;">NET<span class="sort-ind"></span></th>
+              <th class="sortable r" data-sort="net_flat7" style="width:76px;">NET-F7<span class="sort-ind"></span></th>
+              <th class="sortable r" data-sort="exec_profit" style="width:64px;">EXEC $<span class="sort-ind"></span></th>
+              <th class="sortable r" data-sort="exec_contracts" style="width:64px;">EXEC CTS<span class="sort-ind"></span></th>
+              <th class="sortable r" data-sort="catalog_edge" style="width:64px;">CAT-EDGE<span class="sort-ind"></span></th>
+              <th class="sortable r" data-sort="conf" style="width:56px;">CONF<span class="sort-ind"></span></th>
+              <th class="sortable r" data-sort="close" style="width:64px;">CLOSE<span class="sort-ind"></span></th>
             </tr>
           </thead>
           <tbody id="pairs-body">
-            <tr><td colspan="13" class="empty-state">Press F3 SCAN or F8 FAST to load live data</td></tr>
+            <tr><td colspan="17" class="empty-state">Press F3 SCAN or F8 FAST to load live data</td></tr>
           </tbody>
         </table>
       </div>
@@ -548,6 +617,19 @@
       </div>
     </div>
 
+    <!-- Summary view -->
+    <div id="summary-view">
+      <div class="panel-header">
+        <span class="panel-title">SCAN SUMMARY — WHICH PAIRS HAVE ARBITRAGE</span>
+        <div class="panel-meta">
+          <span id="summary-scanned-at" class="dim">—</span>
+        </div>
+      </div>
+      <div id="summary-body" class="tbl-wrap" style="padding:14px 16px;">
+        <div class="empty-state">Run a scan first (F3 SCAN or F8 FAST) — no scan data yet.</div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -574,14 +656,45 @@ let allPairs       = [];
 let displayedPairs = [];   // sorted/filtered list currently shown in the table
 let currentCat  = 'all';
 let arbOnly     = false;
+let pricedOnly  = false;
 let selected    = null;
 let currentView = 'pairs';
-let currentSort = 'arb';  // 'arb' | 'confidence'
+let lastSummary = null;   // the `summary` object from the last scan payload (server.build_summary)
+
+// 'all' = no gate, 'eligible' = discover.py's arb_eligible (the dashboard's
+// historical ARB column — a strict eligibility filter), 'alerter' = v2_match
+// is True and no settlement_risk (alerter.compute_signals's own gate — the
+// population that actually drives alert emails). Default to 'alerter': it is
+// the honest answer to "how many pairs are arbable" (see SUMMARY view).
+let currentGate = 'alerter';
+
+// Sortable columns. `get` pulls the raw sort value off a pair row; string
+// values (close date) sort lexicographically, numeric values numerically.
+// Missing/None values always sort to the bottom regardless of direction —
+// discover.py's None means "unpriced", which is neither highest nor lowest.
+const SORT_COLUMNS = {
+  net_accurate:   { get: p => p.arb_net_accurate,  label: 'NET' },
+  net_flat7:      { get: p => p.arb_net_flat7,      label: 'NET-F7' },
+  exec_profit:    { get: p => p.exec_profit,        label: 'EXEC $' },
+  exec_contracts: { get: p => p.exec_contracts,     label: 'EXEC CTS' },
+  catalog_edge:   { get: p => p.catalog_gross_edge, label: 'CAT-EDGE' },
+  sim:            { get: p => p.title_sim,          label: 'SIM' },
+  conf:           { get: p => p.confidence,         label: 'CONF' },
+  close:          { get: p => p.kalshi_close || p.poly_close || null, label: 'CLOSE' },
+};
+let currentSort = { key: 'net_accurate', dir: 'desc' };
 
 // Kalshi's published per-contract taker fee: 0.07 * p * (1-p) — charged on the
 // Kalshi leg only (maxes ~1.75c at p=0.5, vanishes at the extremes).
 // Polymarket's CLOB is fee-free. Mirrors arb.kalshi_taker_fee exactly.
 function kalshiTakerFee(p) { return 0.07 * p * (1 - p); }
+
+// Mirrors server.PLAUSIBLE_EDGE_MAX — display-only (the actual split happens
+// server-side in build_summary; this is just the label the SUMMARY view uses).
+// A net edge above this on a $1 binary implies the venues disagree almost
+// completely, which in practice means a stale/dead book or a mismatched
+// pair, not a real opportunity.
+const PLAUSIBLE_EDGE_MAX = 0.10;
 
 // ── Clock ──────────────────────────────────────────────────────────────────
 function updateClock() {
@@ -617,9 +730,27 @@ function showView(v) {
   currentView = v;
   document.getElementById('pairs-view').style.display   = v === 'pairs'   ? 'flex' : 'none';
   document.getElementById('signals-view').style.display = v === 'signals' ? 'flex' : 'none';
+  document.getElementById('summary-view').style.display = v === 'summary' ? 'flex' : 'none';
   document.getElementById('nav-pairs').classList.toggle('active',   v === 'pairs');
   document.getElementById('nav-signals').classList.toggle('active', v === 'signals');
+  document.getElementById('nav-summary').classList.toggle('active', v === 'summary');
   if (v === 'signals') loadSignals();
+  if (v === 'summary') renderSummary();
+}
+
+// ── Gate (which pairs "count") ────────────────────────────────────────────
+function setGate(gate) {
+  currentGate = gate;
+  ['all', 'eligible', 'alerter'].forEach(g => {
+    document.getElementById('gate-' + g).classList.toggle('active', g === gate);
+  });
+  renderPairs();
+}
+
+function passesGate(p) {
+  if (currentGate === 'eligible') return !!p.arb_eligible;
+  if (currentGate === 'alerter')  return p.v2_match === true && !p.settlement_risk;
+  return true;  // 'all'
 }
 
 // ── Category ───────────────────────────────────────────────────────────────
@@ -639,6 +770,18 @@ function toggleArbOnly() {
   renderPairs();
 }
 
+// PRICED ONLY: arb_net_accurate is not None. Distinct from ARB ONLY — a pair
+// can be priced (a real number) and still be unprofitable (negative), which
+// is the common case; conflating "unpriced" with "not positive" is exactly
+// what made the dashboard's old ARB count look near-zero.
+function togglePricedOnly() {
+  pricedOnly = !pricedOnly;
+  document.getElementById('priced-only-ind').textContent = pricedOnly ? '●' : '○';
+  document.getElementById('priced-only-ind').style.color = pricedOnly ? 'var(--green)' : 'var(--dimmer)';
+  document.getElementById('filter-priced').classList.toggle('active', pricedOnly);
+  renderPairs();
+}
+
 // ── Scan ───────────────────────────────────────────────────────────────────
 async function runScan() {
   showLoading('FULL SCAN — fetching live orderbooks...');
@@ -651,9 +794,12 @@ async function runScan() {
     const d = await r.json();
     if (d.error) throw new Error(d.error);
     allPairs = d.pairs || [];
+    lastSummary = d.summary || null;
     document.getElementById('last-scan').textContent = new Date().toISOString().slice(11,19) + ' UTC';
     document.getElementById('elapsed').textContent = `ELAPSED: ${d.elapsed}s`;
     renderPairs();
+    if (currentView === 'summary') renderSummary();
+    updateSummaryBadge();
   } catch(e) {
     showError('SCAN FAILED: ' + e.message);
   } finally {
@@ -672,9 +818,12 @@ async function runFastScan() {
     const d = await r.json();
     if (d.error) throw new Error(d.error);
     allPairs = d.pairs || [];
+    lastSummary = d.summary || null;
     document.getElementById('last-scan').textContent = new Date().toISOString().slice(11,19) + ' UTC (fast)';
     document.getElementById('elapsed').textContent = `ELAPSED: ${d.elapsed}s`;
     renderPairs();
+    if (currentView === 'summary') renderSummary();
+    updateSummaryBadge();
   } catch(e) {
     showError('SCAN FAILED: ' + e.message);
   } finally {
@@ -813,35 +962,70 @@ function closeBookArb() {
 }
 
 // ── Sort ───────────────────────────────────────────────────────────────────
-function toggleSort() {
-  currentSort = currentSort === 'arb' ? 'confidence' : 'arb';
-  document.getElementById('sort-btn').textContent =
-    currentSort === 'arb' ? 'SORT: ARB ▼' : 'SORT: CONF ▼';
+// Clickable column headers drive sorting (see the listener wired in init,
+// below). `null`/`undefined` values (discover.py's "unpriced", not "zero")
+// always sort to the bottom, in either direction.
+function sortBy(key) {
+  if (!SORT_COLUMNS[key]) return;
+  if (currentSort.key === key) {
+    currentSort.dir = currentSort.dir === 'desc' ? 'asc' : 'desc';
+  } else {
+    currentSort = { key, dir: 'desc' };
+  }
+  updateSortIndicators();
   renderPairs();
+}
+
+function updateSortIndicators() {
+  document.querySelectorAll('#pairs-table th.sortable').forEach(th => {
+    const key = th.dataset.sort;
+    const ind = th.querySelector('.sort-ind');
+    ind.textContent = key === currentSort.key ? (currentSort.dir === 'desc' ? '▼' : '▲') : '';
+  });
+  const col = SORT_COLUMNS[currentSort.key];
+  document.getElementById('sort-btn').textContent =
+    `SORT: ${col.label} ${currentSort.dir === 'desc' ? '▼' : '▲'}`;
+}
+
+function comparePairs(a, b, key, dir) {
+  const getter = SORT_COLUMNS[key].get;
+  let va = getter(a), vb = getter(b);
+  const aNull = va == null || va === '';
+  const bNull = vb == null || vb === '';
+  if (aNull && bNull) return 0;
+  if (aNull) return 1;    // nulls last regardless of direction
+  if (bNull) return -1;
+  if (typeof va === 'string' || typeof vb === 'string') {
+    va = String(va); vb = String(vb);
+    return dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+  }
+  return dir === 'asc' ? va - vb : vb - va;
 }
 
 // ── Render pairs ───────────────────────────────────────────────────────────
 function renderPairs() {
   let pairs = [...allPairs];
   if (currentCat !== 'all') pairs = pairs.filter(p => p.category === currentCat);
-  if (arbOnly) pairs = pairs.filter(p => (p.arb_net_profit || 0) > 0);
+  pairs = pairs.filter(passesGate);
+  if (arbOnly) pairs = pairs.filter(p => p.arb_net_accurate != null && p.arb_net_accurate > 0);
+  if (pricedOnly) pairs = pairs.filter(p => p.arb_net_accurate != null);
 
-  if (currentSort === 'arb') {
-    pairs.sort((a, b) => (b.arb_net_profit || 0) - (a.arb_net_profit || 0));
-  }
-  // 'confidence' order comes from the server already sorted
+  pairs.sort((a, b) => comparePairs(a, b, currentSort.key, currentSort.dir));
   displayedPairs = pairs;   // keep in sync so selectRow reads the right item
+  updateSortIndicators();
 
-  const arbs = pairs.filter(p => (p.arb_net_profit || 0) > 0).length;
+  const isPositive = p => p.arb_net_accurate != null && p.arb_net_accurate > 0;
+  const arbs = pairs.filter(isPositive).length;
+  const gateGlobal = allPairs.filter(passesGate);
   document.getElementById('pair-count').textContent   = allPairs.length;
-  document.getElementById('arb-count').textContent    = allPairs.filter(p=>(p.arb_net_profit||0)>0).length;
+  document.getElementById('arb-count').textContent    = gateGlobal.filter(isPositive).length;
   document.getElementById('sb-pairs').textContent     = pairs.length;
   document.getElementById('showing-count').textContent = pairs.length;
   document.getElementById('showing-arb').textContent  = arbs + ' ARB';
 
   const tbody = document.getElementById('pairs-body');
   if (!pairs.length) {
-    tbody.innerHTML = '<tr><td colspan="13" class="empty-state">No pairs match current filters — try SCAN or change category</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="17" class="empty-state">No pairs match current filters — try SCAN, change category, or widen the GATE</td></tr>';
     return;
   }
 
@@ -851,7 +1035,7 @@ function renderPairs() {
     const pmid = (pb != null && pa != null) ? ((+pb + +pa)/2) : pb;
     const kmid = (kb != null && ka != null) ? ((+kb + +ka)/2) : kb;
     const dmid = (pmid != null && kmid != null) ? (+pmid - +kmid) : null;
-    const hasArb = (p.arb_net_profit || 0) > 0;
+    const hasArb = isPositive(p);
     const rowCls = hasArb ? 'arb-row' : '';
     const selCls = selected === i ? 'selected' : '';
 
@@ -859,13 +1043,19 @@ function renderPairs() {
     const fmtD = v => v != null
       ? `<span class="${v > 0.02 ? 'green' : v < -0.02 ? 'red' : 'dim'}">${v > 0 ? '+' : ''}${v.toFixed(3)}</span>`
       : '<span class="dim">—</span>';
+    // Signed net cell: green if positive, red if priced-but-negative,
+    // dim "—" only when genuinely unpriced (None) — never conflate the two.
+    const fmtNet = v => v == null
+      ? '<span class="no-arb">—</span>'
+      : `<span class="${v > 0 ? 'green' : 'red'}">${v > 0 ? '+' : ''}${(+v).toFixed(4)}</span>`;
+    const fmtNum = v => v != null ? (+v).toFixed(2) : '<span class="dim">—</span>';
 
     const arbCell = hasArb
-      ? `<span class="arb-badge">+${(+p.arb_net_profit).toFixed(4)}</span>`
-      : `<span class="no-arb">—</span>`;
+      ? `<span class="arb-badge">+${(+p.arb_net_accurate).toFixed(4)}</span>`
+      : fmtNet(p.arb_net_accurate);
 
-    const simPct = Math.round(p.title_sim * 100);
-    const barW   = Math.round(p.title_sim * 40);
+    const simPct = Math.round((p.title_sim || 0) * 100);
+    const barW   = Math.round((p.title_sim || 0) * 40);
 
     return `<tr class="${rowCls} ${selCls}" onclick="selectRow(${i})" data-idx="${i}">
       <td class="dim">${i+1}</td>
@@ -878,9 +1068,13 @@ function renderPairs() {
       <td class="price-cell r">${fmt(kb)}</td>
       <td class="price-cell r">${fmt(ka)}</td>
       <td class="r">${fmtD(dmid)}</td>
-      <td>${arbCell}</td>
-      <td class="dim r">${(p.poly_close||'').slice(0,10) || '—'}</td>
-      <td class="dim r">${(p.kalshi_close||'').slice(0,10) || '—'}</td>
+      <td class="r">${arbCell}</td>
+      <td class="r">${fmtNet(p.arb_net_flat7)}</td>
+      <td class="r dim">${fmtNum(p.exec_profit)}</td>
+      <td class="r dim">${fmtNum(p.exec_contracts)}</td>
+      <td class="r dim">${fmtNum(p.catalog_gross_edge)}</td>
+      <td class="r dim">${p.confidence != null ? (p.confidence*100).toFixed(0)+'%' : '—'}</td>
+      <td class="dim r">${(p.kalshi_close||p.poly_close||'').slice(0,10) || '—'}</td>
     </tr>`;
   }).join('');
 }
@@ -1066,14 +1260,26 @@ document.getElementById('cmd-input').addEventListener('keydown', async e => {
     showView('signals');
   } else if (val === 'PAIRS' || val === 'F1') {
     showView('pairs');
+  } else if (val === 'SUMMARY' || val === 'F5') {
+    showView('summary');
   } else if (val === 'ARB') {
     arbOnly = !arbOnly;
     toggleArbOnly();
+  } else if (val === 'PRICED') {
+    pricedOnly = !pricedOnly;
+    togglePricedOnly();
+  } else if (val === 'GATE ALL') {
+    setGate('all');
+  } else if (val === 'GATE ELIGIBLE') {
+    setGate('eligible');
+  } else if (val === 'GATE ALERTER') {
+    setGate('alerter');
   } else if (val === 'BOOK' || val === 'F4') {
     await runBookArb();
   } else if (val === 'HELP') {
     document.getElementById('cmd-hint').textContent =
-      'CMDS: SCAN [cat] | FAST | SIGNALS | PAIRS | ARB (toggle) | BOOK (depth-walked arb on selected row)';
+      'CMDS: SCAN [cat] | FAST | SIGNALS | PAIRS | SUMMARY | ARB (toggle) | PRICED (toggle) | ' +
+      'GATE ALL|ELIGIBLE|ALERTER | BOOK (depth-walked arb on selected row)';
     setTimeout(() => document.getElementById('cmd-hint').textContent = '', 5000);
   }
 });
@@ -1103,14 +1309,207 @@ document.addEventListener('keydown', e => {
   if (e.key === 'F2') { e.preventDefault(); showView('signals'); }
   if (e.key === 'F3') { e.preventDefault(); runScan(); }
   if (e.key === 'F4') { e.preventDefault(); runBookArb(); }
+  if (e.key === 'F5') { e.preventDefault(); showView('summary'); }
   if (e.key === 'F8') { e.preventDefault(); runFastScan(); }
   if (e.key === 'Escape') { closeBookArb(); }
 });
 
+// ── Summary view ───────────────────────────────────────────────────────────
+function updateSummaryBadge() {
+  const el = document.getElementById('sb-summary');
+  if (!lastSummary) { el.textContent = '—'; return; }
+  el.textContent = lastSummary.funnel.alerter_gate.positive_accurate;
+}
+
+function fmtPct(part, whole) {
+  if (!whole) return '';
+  return `<span class="pct">(${Math.round(part / whole * 100)}%)</span>`;
+}
+
+function renderFunnelPanel(title, bucket, highlight) {
+  const rows = [
+    ['TOTAL', bucket.total, null],
+    ['PRICED', bucket.priced, bucket.total],
+    ['POSITIVE (ACCURATE FEE)', bucket.positive_accurate, bucket.priced],
+    ['POSITIVE (FLAT 7C)', bucket.positive_flat7, bucket.priced],
+    ['> 1C EDGE', bucket.above_1c, bucket.priced],
+    ['> 3C EDGE', bucket.above_3c, bucket.priced],
+    ['> 5C EDGE', bucket.above_5c, bucket.priced],
+    ['> 10C EDGE', bucket.above_10c, bucket.priced],
+  ];
+  return `<div class="sum-panel${highlight ? ' headline' : ''}">
+    <div class="sum-panel-title">${esc(title)}</div>
+    ${rows.map(([label, v, base]) => `
+      <div class="sum-funnel-row">
+        <span class="k">${label}</span>
+        <span class="v">${v}${base != null ? fmtPct(v, base) : ''}</span>
+      </div>`).join('')}
+  </div>`;
+}
+
+function renderGroupTable(groups) {
+  const keys = Object.keys(groups).sort((a, b) => groups[b].pairs - groups[a].pairs);
+  if (!keys.length) return '<div class="dim" style="font-size:10px;">No pairs in the alerter-gate population this scan.</div>';
+  // POSITIVE is a raw count (any net > 0, plausible or not) — a different
+  // question from EXEC $ (PLAUSIBLE), which only sums dollars from the
+  // plausible band (edge <= PLAUSIBLE_EDGE_MAX), matching the EXECUTABLE
+  // panel's headline. POSITIVE (PLAUSIBLE) makes the gap between the two
+  // visible instead of hiding it — a group can have many raw positives and
+  // almost none of them plausible (stale-book artifacts).
+  return `<table class="sum-table">
+    <thead><tr><th>GROUP</th><th>PAIRS</th><th>PRICED</th><th>POSITIVE</th><th>POSITIVE (PLAUSIBLE)</th><th>BEST EDGE</th><th>EXEC $ (PLAUSIBLE)</th></tr></thead>
+    <tbody>${keys.map(k => {
+      const g = groups[k];
+      return `<tr>
+        <td>${esc(String(k).toUpperCase())}</td>
+        <td>${g.pairs}</td>
+        <td>${g.priced}</td>
+        <td class="${g.positive > 0 ? 'green' : ''}">${g.positive}</td>
+        <td class="${g.positive_plausible > 0 ? 'green' : ''}">${g.positive_plausible}</td>
+        <td class="${g.best_edge != null && g.best_edge > 0 ? 'green' : g.best_edge != null ? 'red' : ''}">${g.best_edge != null ? g.best_edge.toFixed(4) : '—'}</td>
+        <td>${g.exec_profit.toFixed(2)}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function renderTopTable(top, listName, emptyMsg) {
+  if (!top.length) return `<div class="dim" style="font-size:10px;">${esc(emptyMsg)}</div>`;
+  return `<table class="sum-table">
+    <thead><tr><th>POLYMARKET</th><th>KALSHI</th><th>CAT</th><th>NET (ACC)</th><th>NET (F7)</th><th>EXEC $</th><th>EXEC CTS</th><th>RISK</th></tr></thead>
+    <tbody>${top.map((p, i) => `
+      <tr class="clickable" onclick="jumpToPair('${listName}', ${i})">
+        <td class="title-cell">${esc(truncate(p.poly_title || '', 34))}</td>
+        <td class="title-cell">${esc(truncate(p.kalshi_title || '', 34))}</td>
+        <td>${esc((p.category||'?').toUpperCase())}</td>
+        <td class="green">+${(+p.arb_net_accurate).toFixed(4)}</td>
+        <td class="${p.arb_net_flat7 > 0 ? 'green' : 'red'}">${p.arb_net_flat7 != null ? (p.arb_net_flat7 > 0 ? '+' : '') + p.arb_net_flat7.toFixed(4) : '—'}</td>
+        <td>${p.exec_profit != null ? p.exec_profit.toFixed(2) : '—'}</td>
+        <td>${p.exec_contracts != null ? p.exec_contracts.toFixed(2) : '—'}</td>
+        <td class="${p.settlement_risk ? 'red' : 'dim'}">${p.settlement_risk ? '⚠' : '—'}</td>
+      </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function jumpToPair(listName, topIdx) {
+  const list = lastSummary && lastSummary[listName];
+  const row = list && list[topIdx];
+  if (!row) return;
+  const idx = allPairs.findIndex(p =>
+    row.poly_id != null && row.kalshi_ticker != null &&
+    p.poly_id === row.poly_id && p.kalshi_ticker === row.kalshi_ticker);
+  if (idx === -1) { showError('Could not locate that pair in the current scan (poly_id/kalshi_ticker mismatch).'); return; }
+  currentGate = 'all';
+  ['all', 'eligible', 'alerter'].forEach(g => document.getElementById('gate-' + g).classList.toggle('active', g === 'all'));
+  currentCat = 'all';
+  ['all','election','economic','political','sports','pop'].forEach(c => document.getElementById('cat-'+c).classList.toggle('active', c === 'all'));
+  arbOnly = false; pricedOnly = false;
+  showView('pairs');
+  renderPairs();
+  const dispIdx = displayedPairs.findIndex(p => p === allPairs[idx]);
+  if (dispIdx !== -1) {
+    selectRow(dispIdx);
+    const tr = document.querySelector(`#pairs-body tr[data-idx="${dispIdx}"]`);
+    if (tr) tr.scrollIntoView({ block: 'center' });
+  }
+}
+
+function renderSummary() {
+  const body = document.getElementById('summary-body');
+  const scannedAt = document.getElementById('summary-scanned-at');
+  if (!lastSummary) {
+    body.innerHTML = '<div class="empty-state">Run a scan first (F3 SCAN or F8 FAST) — no scan data yet.</div>';
+    scannedAt.textContent = '—';
+    return;
+  }
+  scannedAt.textContent = document.getElementById('last-scan').textContent || '—';
+  const s = lastSummary;
+  const f = s.funnel;
+  const booksLiveCaveat = s.caveats[0] || '';
+
+  body.innerHTML = `
+    <div class="sum-panel wide headline">
+      <div class="sum-panel-title">HEADLINE — ALERTER-GATE (v2-endorsed, no settlement risk: the population that actually drives alerts)</div>
+      <div class="sum-funnel-row" style="font-size:14px;margin-bottom:6px;">
+        <span class="k">POSITIVE PAIRS</span>
+        <span class="v g" style="font-size:18px;font-weight:bold;color:var(--green);">${f.alerter_gate.positive_accurate} / ${f.alerter_gate.total}</span>
+      </div>
+      <div class="sum-note">${esc(booksLiveCaveat)}</div>
+    </div>
+
+    <div class="sum-grid">
+      ${renderFunnelPanel('ALL PAIRS', f.all)}
+      ${renderFunnelPanel("ARB-ELIGIBLE (dashboard's historical ARB column)", f.arb_eligible)}
+      ${renderFunnelPanel('ALERTER-GATE (v2_match & !settlement_risk)', f.alerter_gate, true)}
+    </div>
+
+    <div class="sum-panel wide">
+      <div class="sum-panel-title">FEE MODEL CONTRAST — ALERTER-GATE POPULATION</div>
+      <div class="sum-fee-compare">
+        <div class="sum-fee-col">
+          <div class="num red">${f.alerter_gate.positive_flat7}</div>
+          <div class="lbl">FLAT 7C — POSITIVE PAIRS</div>
+        </div>
+        <div class="sum-fee-col">
+          <div class="num green" style="color:var(--green);">${f.alerter_gate.positive_accurate}</div>
+          <div class="lbl">ACCURATE 0.07·p·(1−p) — POSITIVE PAIRS</div>
+        </div>
+      </div>
+      <div class="sum-note">The flat 7c figure is a deliberate worst case (discover.py's legacy arb_net_profit
+        still uses it), not Kalshi's real fee schedule — the real taker fee peaks at ~1.75c at p=0.5 and
+        vanishes at the extremes. That gap, not an absence of arbitrage, is most of why the dashboard's ARB
+        count used to read near zero.</div>
+    </div>
+
+    <div class="sum-grid">
+      <div class="sum-panel">
+        <div class="sum-panel-title">BY CATEGORY (alerter-gate population)</div>
+        ${renderGroupTable(s.by_category)}
+      </div>
+      <div class="sum-panel">
+        <div class="sum-panel-title">BY SOURCE (alerter-gate population)</div>
+        ${renderGroupTable(s.by_source)}
+      </div>
+    </div>
+
+    <div class="sum-panel wide">
+      <div class="sum-panel-title">EXECUTABLE (how much can actually be deployed — plausible positive alerter-gate pairs, edge ≤ ${(PLAUSIBLE_EDGE_MAX*100).toFixed(0)}c)</div>
+      <div class="sum-fee-compare">
+        <div class="sum-fee-col"><div class="num" style="color:var(--green);">$${s.executable.profit.toFixed(2)}</div><div class="lbl">HEADLINE EXEC PROFIT (PLAUSIBLE)</div></div>
+        <div class="sum-fee-col"><div class="num">${s.executable.contracts.toFixed(2)}</div><div class="lbl">PLAUSIBLE EXEC CONTRACTS</div></div>
+        <div class="sum-fee-col"><div class="num red">$${s.executable.implausible_profit.toFixed(2)}</div><div class="lbl">SUSPECT — EDGE &gt; ${(PLAUSIBLE_EDGE_MAX*100).toFixed(0)}c (NOT COUNTED AS ALPHA)</div></div>
+      </div>
+      <div class="sum-note">A net edge above ${(PLAUSIBLE_EDGE_MAX*100).toFixed(0)}c on a $1 binary means the two
+        venues disagree almost completely after fees — in practice that is a stale/dead book or a mismatched
+        pair, not free money, so it is shown separately rather than folded into the headline number above.</div>
+    </div>
+
+    <div class="sum-panel wide">
+      <div class="sum-panel-title">TOP 15 (PLAUSIBLE) — ALERTER-GATE, BY EXEC $ (click a row to jump to it in LIVE PAIRS)</div>
+      ${renderTopTable(s.top, 'top', 'No plausible positive pairs in the alerter-gate population this scan.')}
+    </div>
+
+    <div class="sum-panel wide">
+      <div class="sum-panel-title">REVIEW QUEUE — IMPLAUSIBLE EDGE (&gt; ${(PLAUSIBLE_EDGE_MAX*100).toFixed(0)}c — likely stale book or matcher mismatch, not alpha)</div>
+      ${renderTopTable(s.top_implausible, 'top_implausible', 'No implausible-edge pairs in the alerter-gate population this scan.')}
+    </div>
+
+    <div class="sum-panel wide">
+      <div class="sum-panel-title">CAVEATS</div>
+      <ul class="sum-caveats">${s.caveats.map(c => `<li>${esc(c)}</li>`).join('')}</ul>
+    </div>
+  `;
+}
+
 // ── Init ───────────────────────────────────────────────────────────────────
+document.querySelectorAll('#pairs-table th.sortable').forEach(th => {
+  th.addEventListener('click', () => sortBy(th.dataset.sort));
+});
 checkStatus();
 setInterval(checkStatus, 30000);
 setCategory('all');
+updateSortIndicators();
+updateSummaryBadge();
 </script>
 </body>
 </html>

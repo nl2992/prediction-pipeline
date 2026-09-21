@@ -173,6 +173,249 @@ def _compute_book_arb(poly_book: OrderBook, kalshi_book: OrderBook,
     return {"directions": directions, "best_direction": best_direction}
 
 
+# ---------------------------------------------------------------------------
+# Scan summary — WHICH PAIRS HAVE ARBITRAGE and where the alpha is.
+#
+# The dashboard historically showed "ARB 0/1" on scans of 8,000+ pairs for two
+# COMPOUNDING reasons, not one:
+#   1. discover.py's legacy arb_net_profit/arb_eligible path used a flat 7c
+#      fee (today's real Kalshi taker fee, 0.07*p*(1-p), peaks at 1.75c and
+#      is usually much less) — see arb.kalshi_taker_fee.
+#   2. arb_eligible (the field the dashboard's ARB column has always used) is
+#      a much STRICTER filter than the one that actually drives alerter
+#      emails. The alerter (alerter.compute_signals) gates on
+#      ``v2_match is True and not settlement_risk`` — it does not consult
+#      arb_eligible at all. On a real 7,903-pair scan: arb_eligible passed
+#      only 1,193 pairs (11 positive under the accurate fee, 1 under flat7),
+#      while the alerter gate passed 7,430 (628 positive accurate, 54 flat7).
+#
+# So the summary below reports the funnel PER GATE — all pairs, arb_eligible
+# (labelled as the dashboard's historical ARB column), and the alerter gate
+# (labelled as the population that actually drives alerts) — rather than a
+# single chain, so the UI can show why the old on-screen number looked tiny
+# without implying there was no arbitrage.
+# ---------------------------------------------------------------------------
+
+_EDGE_THRESHOLDS = (("above_1c", 0.01), ("above_3c", 0.03), ("above_5c", 0.05), ("above_10c", 0.10))
+
+# A net edge above ~10c on a $1 binary means the two venues are pricing the
+# SAME contract ~10+ cents apart after fees — on liquid, correctly-matched
+# markets that gap gets arbed away in minutes. In practice an edge this large
+# almost always means a stale/dead book (top-of-book hasn't moved in a while)
+# or a mismatched pair (the matcher paired two different contracts), not a
+# real opportunity. A real 7,903-pair scan measured 58 alerter-gate positive
+# pairs above this threshold accounting for 73% of raw "executable" dollars
+# (net edges up to +0.96, i.e. a ~35c combined cost for a $1 payout) — headline
+# executable figures must exclude these or they actively mislead.
+PLAUSIBLE_EDGE_MAX = 0.10
+
+
+def is_alerter_gate(pair: dict) -> bool:
+    """True iff this pair would survive alerter.compute_signals's first two
+    filters (independent v2 match confirmed, no settlement ambiguity). Kept
+    as its own function — rather than inlined in build_summary — so a test
+    can pin it against alerter.compute_signals's own gating and catch drift."""
+    return pair.get("v2_match") is True and not pair.get("settlement_risk")
+
+
+def _funnel_bucket(pairs: list[dict]) -> dict:
+    """Priced/positive/edge-threshold counts for one population of pairs.
+
+    ``priced`` = has a non-None arb_net_accurate (see discover.py's comment on
+    why None means "unpriced", not "unprofitable"). All threshold counts are
+    on the ACCURATE fee number, per the brief.
+    """
+    priced = [p for p in pairs if p.get("arb_net_accurate") is not None]
+    bucket = {
+        "total": len(pairs),
+        "priced": len(priced),
+        "positive_accurate": sum(1 for p in priced if p["arb_net_accurate"] > 0),
+        "positive_flat7": sum(
+            1 for p in pairs
+            if p.get("arb_net_flat7") is not None and p["arb_net_flat7"] > 0
+        ),
+    }
+    for key, threshold in _EDGE_THRESHOLDS:
+        bucket[key] = sum(1 for p in priced if p["arb_net_accurate"] > threshold)
+    return bucket
+
+
+def _group_stats(pairs: list[dict], key_fn) -> dict:
+    """{group_key: {pairs, priced, positive, positive_plausible, best_edge,
+    exec_profit}} for one grouping of an already-priced population (used for
+    by_category/by_source). ``key_fn`` derives the group key from a pair —
+    never mutates the pairs.
+
+    ``exec_profit`` is summed over the PLAUSIBLE band only (0 < net <=
+    PLAUSIBLE_EDGE_MAX) — same population as the headline executable.profit —
+    so summing this column across groups reproduces the headline number
+    instead of contradicting it with the raw (implausible-inflated) total.
+    ``positive`` stays a raw count of net > 0 (a different question: "how many
+    pairs look positive" vs "how many dollars are plausibly real"); a group
+    can show many raw positives and few plausible dollars — e.g. a category
+    dominated by stale-book artifacts — which is exactly what
+    ``positive_plausible`` next to it is meant to surface.
+    """
+    out: dict = {}
+    for p in pairs:
+        group = key_fn(p)
+        stats = out.setdefault(group, {
+            "pairs": 0, "priced": 0, "positive": 0, "positive_plausible": 0,
+            "best_edge": None, "exec_profit": 0.0,
+        })
+        stats["pairs"] += 1
+        net = p.get("arb_net_accurate")
+        if net is not None:
+            stats["priced"] += 1
+            if net > 0:
+                stats["positive"] += 1
+                if net <= PLAUSIBLE_EDGE_MAX:
+                    stats["positive_plausible"] += 1
+                    stats["exec_profit"] += p.get("exec_profit") or 0.0
+            if stats["best_edge"] is None or net > stats["best_edge"]:
+                stats["best_edge"] = net
+    for stats in out.values():
+        stats["exec_profit"] = round(stats["exec_profit"], 4)
+    return out
+
+
+def _plausibility_bucket(pairs: list[dict]) -> dict:
+    """{pairs, with_depth, exec_profit} for one plausibility band. with_depth
+    counts pairs where the book_arb walk actually ran (exec_profit is not
+    None) — i.e. live ladders were available, not just a top-of-book quote."""
+    return {
+        "pairs":      len(pairs),
+        "with_depth": sum(1 for p in pairs if p.get("exec_profit") is not None),
+        "exec_profit": round(sum(p.get("exec_profit") or 0.0 for p in pairs), 4),
+    }
+
+
+def _plausibility_split(positive_pairs: list[dict]) -> dict:
+    """Splits an already-positive (arb_net_accurate > 0) population into
+    PLAUSIBLE (<= PLAUSIBLE_EDGE_MAX) and IMPLAUSIBLE (above it) — see the
+    module comment above PLAUSIBLE_EDGE_MAX for why the split exists."""
+    plausible   = [p for p in positive_pairs if p["arb_net_accurate"] <= PLAUSIBLE_EDGE_MAX]
+    implausible = [p for p in positive_pairs if p["arb_net_accurate"] > PLAUSIBLE_EDGE_MAX]
+    return {
+        "plausible":   _plausibility_bucket(plausible),
+        "implausible": _plausibility_bucket(implausible),
+    }
+
+
+def _top_rows(pairs: list[dict], sort_key) -> list[dict]:
+    top = sorted(pairs, key=sort_key)[:15]
+    return [{
+        "poly_title":    p.get("poly_title"),
+        "kalshi_title":  p.get("kalshi_title"),
+        "category":      p.get("category"),
+        "arb_net_accurate": p.get("arb_net_accurate"),
+        "arb_net_flat7":    p.get("arb_net_flat7"),
+        "exec_contracts":   p.get("exec_contracts"),
+        "exec_profit":      p.get("exec_profit"),
+        "settlement_risk":  p.get("settlement_risk"),
+        # Identity fields (not display data) so the dashboard can jump a
+        # clicked top-15 row to the matching row in LIVE PAIRS.
+        "poly_id":       p.get("poly_id"),
+        "kalshi_ticker": p.get("kalshi_ticker"),
+    } for p in top]
+
+
+def build_summary(pairs: list[dict]) -> dict:
+    """Scan-payload summary: which pairs have arbitrage and where the alpha
+    is. Pure function of the discover() row list — testable without a scan."""
+    all_pairs = pairs
+    arb_eligible_pairs = [p for p in pairs if p.get("arb_eligible")]
+    alerter_gate_pairs = [p for p in pairs if is_alerter_gate(p)]
+
+    funnel = {
+        "all":          _funnel_bucket(all_pairs),
+        "arb_eligible": _funnel_bucket(arb_eligible_pairs),
+        "alerter_gate": _funnel_bucket(alerter_gate_pairs),
+    }
+    fee_model_delta = {
+        gate: {"flat7_positive": b["positive_flat7"], "accurate_positive": b["positive_accurate"]}
+        for gate, b in funnel.items()
+    }
+
+    # by_category / by_source computed over the alerter-gate population — the
+    # population that actually drives alerts, per the brief's headline call.
+    by_category = _group_stats(alerter_gate_pairs, lambda p: p.get("category") or "?")
+    by_source = _group_stats(
+        alerter_gate_pairs,
+        lambda p: "sports" if p.get("match_source") == "sports" else "text",
+    )
+
+    positive_alerter = [p for p in alerter_gate_pairs
+                         if p.get("arb_net_accurate") is not None and p["arb_net_accurate"] > 0]
+
+    plausibility = _plausibility_split(positive_alerter)
+    plausible_pairs   = [p for p in positive_alerter if p["arb_net_accurate"] <= PLAUSIBLE_EDGE_MAX]
+    implausible_pairs = [p for p in positive_alerter if p["arb_net_accurate"] > PLAUSIBLE_EDGE_MAX]
+
+    # HEADLINE executable figures cover the PLAUSIBLE band only — a net edge
+    # above PLAUSIBLE_EDGE_MAX is a stale-book/mismatch signal, not alpha, and
+    # summing it into "executable profit" would actively mislead (a real scan
+    # put 73% of raw exec dollars in 58 such pairs). The implausible total is
+    # still reported, explicitly labelled, never silently dropped.
+    executable = {
+        "contracts": round(sum(p.get("exec_contracts") or 0.0 for p in plausible_pairs), 4),
+        "profit":    round(sum(p.get("exec_profit") or 0.0 for p in plausible_pairs), 4),
+        "implausible_contracts": round(sum(p.get("exec_contracts") or 0.0 for p in implausible_pairs), 4),
+        "implausible_profit":    round(sum(p.get("exec_profit") or 0.0 for p in implausible_pairs), 4),
+    }
+
+    # TOP 15: within the plausible band, ranked by realized exec_profit (what
+    # can actually be deployed), not raw net edge — raw-edge ranking is
+    # exactly what surfaced stale-book artifacts (Gears of War/CoD/GTA VI at
+    # ~0.92-0.96 net) at the top of the list. A second short list keeps the
+    # implausible pairs visible as a matcher review queue, per how this repo
+    # has always treated them, ranked by edge (the thing that flagged them).
+    top_rows = _top_rows(plausible_pairs, lambda p: -(p.get("exec_profit") or 0.0))
+    top_implausible_rows = _top_rows(implausible_pairs, lambda p: -p["arb_net_accurate"])
+
+    books_live_n = sum(1 for p in all_pairs if p.get("books_live"))
+    settlement_flagged = sum(1 for p in all_pairs if p.get("settlement_risk"))
+    ae = funnel["arb_eligible"]
+    ag = funnel["alerter_gate"]
+    caveats = [
+        f"Live order books were fetched for {books_live_n} of {len(all_pairs)} pairs this scan "
+        "(the rest kept catalog snapshot prices).",
+        "Settlement verification (contract-level, per-venue) is separate from this summary; "
+        "a pair with no settlement_risk flag can still fail it.",
+        f"{settlement_flagged} pairs carry a non-empty settlement_risk flag and are excluded "
+        "from the alerter-gate population above.",
+        f"ARB-ELIGIBLE (the dashboard's historical ARB column) showed only "
+        f"{ae['positive_accurate']} positive pairs out of {ae['total']} — a strict eligibility "
+        "filter plus (previously) a conservative flat 7c fee, not an absence of arbitrage. "
+        f"ALERTER-GATE, the population that actually drives alerts, shows {ag['positive_accurate']} "
+        f"positive pairs out of {ag['total']}.",
+    ]
+    impl = plausibility["implausible"]
+    plaus = plausibility["plausible"]
+    total_raw_exec = round(plaus["exec_profit"] + impl["exec_profit"], 4)
+    if impl["pairs"]:
+        impl_share_pct = round(impl["exec_profit"] / total_raw_exec * 100) if total_raw_exec else 0
+        caveats.append(
+            f"{impl['pairs']} alerter-gate positive pairs have an implausible net edge above "
+            f"{PLAUSIBLE_EDGE_MAX*100:.0f}c and account for ${impl['exec_profit']:.2f} "
+            f"({impl_share_pct}%) of the ${total_raw_exec:.2f} raw executable total — these read as "
+            "stale books or mismatched pairs, not arbitrage, and are excluded from the headline "
+            f"executable figure (${plaus['exec_profit']:.2f}, {plaus['pairs']} pairs)."
+        )
+
+    return {
+        "funnel": funnel,
+        "fee_model_delta": fee_model_delta,
+        "by_category": by_category,
+        "by_source": by_source,
+        "plausibility": plausibility,
+        "executable": executable,
+        "top": top_rows,
+        "top_implausible": top_implausible_rows,
+        "caveats": caveats,
+    }
+
+
 # discover() ingests the full Kalshi/Polymarket open-market catalogs by
 # default (100% coverage — see discover.ingest_kalshi / ingest_polymarket),
 # each in a handful of seconds via cursor pagination, so no event cap or
@@ -211,6 +454,7 @@ def _run_scan(
         "scanned_at": datetime.now(timezone.utc).isoformat(),
         "count": len(pairs),
         "arb_count": sum(1 for p in pairs if (p.get("arb_net_profit") or 0) > 0),
+        "summary": build_summary(pairs),
     }
 
 
