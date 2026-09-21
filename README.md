@@ -36,14 +36,17 @@ orders — all with a single command.
 | Flag pairs whose wording matches but settlement may not (weather stations, one-sided deadlines) | kept visible, excluded from alerts (~460 pairs) |
 | Reject look-alike contracts from event context | 26 rules (single game vs season, "run for" vs nominee, county vs state, CA-04 vs MO-04, division vs conference, reach vs win, top-5 vs winner, playoff seed, vote share vs winning, week vs season, "$1t+ IPO" vs plain, stat-line values, bps range, …) with a regression test each |
 | Measure coverage live | `python -m tools.coverage_report [--text]` — ingestion counts, sports recall vs an independent oracle, price agreement |
-| Price every endorsed pair from live order books, compute net-of-fee edge both directions | ~280 positive-net candidates per full scan |
+| Price every endorsed pair from live order books, compute net-of-fee edge both directions | ~500 positive-net candidates per full scan (58 above 3c); the largest edges are hand-audited every pass — 12 mismatch classes were removed in pass 12 alone |
 | Email / dashboard / dry-run execution | `alerter.py`, `server.py`, `executor.py` |
 
-Honest caveat: precision on random samples is high and the worst mismatch
-classes are now rejected, but the **largest** apparent edges are still where
-residual mismatches concentrate (e.g. "3rd place" vs "last place"), and weather
-pairs are flagged because the venues may settle on different stations. Treat
-every alert as a candidate until the settlement check passes. Coverage, gaps and the fix log are tracked in
+Honest caveat, measured rather than assumed: **sports pairs yield almost no
+arbitrage** (5 positive edges out of 1,127 priced pairs, best +2.5c, all on
+illiquid books) — cross-venue sports pricing is efficient, so that work bought
+coverage, not opportunities. **Every edge above 3c comes from text-matched
+pairs**, which is why the largest edges are hand-audited each pass: 13 of the
+top 16 were mismatches before pass 12, roughly 2 of the top 10 after. Treat every
+alert as a candidate until the settlement check passes. Coverage, gaps and the
+fix log live in
 [docs/EXPANSION_PROPOSAL.md](docs/EXPANSION_PROPOSAL.md#progress-log).
 
 ### Demo

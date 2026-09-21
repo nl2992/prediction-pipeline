@@ -115,6 +115,56 @@ indicate where arb surface exists, not confirmed profit.
 
 Status key: ✅ done · 🟡 partial · ⬜ open. Newest first.
 
+### 2026-09-21 (pass 12) — measured the ARBS, not the pairs; cleaned the top of the list
+
+**Why.** Coverage has been the metric for ten passes, but the project exists to
+find tradable edges. This pass ran the full pipeline with LIVE order books,
+computed the alerter's signals, and hand-checked the largest edges — the place
+where a mismatch actually costs money (adverse selection: a wrong pair looks
+like a big edge).
+
+**Baseline (live, 2026-09-21):** 8,099 pairs → 557 positive-net signals
+(265 >1c, 88 >3c). **13 of the top 16 edges were mismatches.**
+
+**Two structural findings.**
+
+1. **Sports pairs produce almost no arbitrage.** Of 1,127 priced sports pairs,
+   just 5 had a positive edge, the best +2.5c, all on illiquid esports books
+   with <10 contracts of depth. Cross-venue sports pricing is efficient (median
+   gap 1c, under the fee). The sports work bought *coverage and monitoring*, not
+   opportunities — worth saying plainly.
+2. **Every edge above 3c came from text-matched pairs**, so top-of-book
+   precision is what determines whether the alert list is tradable.
+
+**Twelve new vetoes, each traced to a specific bogus edge** (edge shown as it
+appeared): ordinal place vs top-N (+74c) · award nomination vs win (+18c) ·
+different awards body (+19c) · different county (+19c) · division/conference vs
+league title (+19c, +17c) · ordinal-best rank (+19c, +15c) · legislative chamber
+(+15c) · superlative stat vs advancement (+16c) · school qualifier, Texas A&M vs
+Texas (+11c) · exit poll vs election result (+21c) · matchup vs single-team
+advancement (+14c) · women's vs men's competition (+9c) · period granularity,
+day/week/month and same-grain-different-dates (+9c). Plus: "Victory" counts as
+1st place, "finish 4th" parses without "place", and the weather settlement flag
+now covers rain/snow.
+
+**Result on the same live catalogs:**
+
+| | before | after |
+|---|---|---|
+| Positive-net signals | 557 | 497 |
+| Above 3c | 88 | 58 |
+| Above 5c | 63 | 33 |
+| Top-16 that are mismatches | 13 | ~2 of top 10 |
+
+Fewer signals is the *point*: the removed ones were wrong. The top of the list
+now reads as genuine (CMA vocalist, French socialist primary, Venezuela
+leadership, Trump UN speech words, an unemployment rung).
+
+**Residual, documented rather than patched:** combo markets pairing different
+combinations (Alaska Gov/Sen), relegation vs champion, and "US recession by end
+of 2027" vs an NBER-dated recession — that last one needs the settlement check,
+not a title rule. 21 new tests, one per class.
+
 ### 2026-09-21 (pass 11) — three more contract classes, and one refused on purpose
 
 **Proposal.** Pass 10 wired nine contract classes; a survey of every Polymarket
