@@ -4,7 +4,7 @@ from __future__ import annotations
 import unittest
 
 from pipeline import MarketSnapshot, OrderBook
-from sports_match import match_sports_games
+from sports_match import _code_prefix_bridge, _names_agree, match_sports_games
 
 
 def k(ticker, sub="", series=None):
@@ -125,6 +125,69 @@ class NameFallback(unittest.TestCase):
         ks = [k("KXNFLGAME-26SEP21NYJNYG-NYJ", "New York"), k("KXNFLGAME-26SEP21NYJNYG-NYG", "New York")]
         ps = [p2("nfl-jets-giants-2026-09-22", ["New York Jets", "New York Giants"], "2026-09-22 00:15:00+00")]
         self.assertEqual(match_sports_games(ks, ps), [])
+
+
+class CityLetterAndCodeBridge(unittest.TestCase):
+    """Kalshi's "<City> <first letter of nickname>" shorthand (measured:
+    KXNFLGAME-26SEP21NYGLAR gives "New York G" / "Los Angeles R" for a
+    Giants/Rams game) and the la/lar code-prefix bridge it travels with."""
+
+    def test_city_letter_matches_correct_nickname(self):
+        self.assertTrue(_names_agree("New York G", "Giants"))
+
+    def test_city_letter_rejects_other_citymate(self):
+        # The letter is a real discriminator: G is the Giants, not the Jets.
+        self.assertFalse(_names_agree("New York G", "Jets"))
+
+    def test_nickname_style_still_agrees(self):
+        # Pre-existing convention ("DEN Broncos", "ATL Falcons vs GB Packers")
+        # must keep working unchanged.
+        self.assertTrue(_names_agree("DEN Broncos", "Broncos"))
+        self.assertTrue(_names_agree("GB Packers", "Packers"))
+
+    def test_code_bridge_joins_when_other_team_exact(self):
+        # PM slug codes are ('nyg', 'la'); Kalshi's ticker uses 'lar'. 'nyg'
+        # matches exactly, which pins the game and makes the 'la'/'lar'
+        # prefix relation on the other team safe to accept.
+        self.assertEqual(_code_prefix_bridge(frozenset({"nyg", "lar"}), ("nyg", "la")),
+                         {"nyg": "nyg", "la": "lar"})
+
+    def test_code_bridge_rejects_when_other_team_also_differs(self):
+        # Both codes differ from their Kalshi counterparts -- nothing pins the
+        # game down, so a prefix pair alone must not be accepted ('la' is
+        # ambiguous across leagues/franchises: Lakers/Angels/Chargers/Rams).
+        self.assertIsNone(_code_prefix_bridge(frozenset({"nyg", "lac"}), ("ny", "la")))
+
+    def test_end_to_end_nyg_lar_join(self):
+        # Full pipeline: bare nicknames on Polymarket, city+letter shorthand
+        # and the shortened 'lar'->'la' code on Kalshi/Polymarket respectively.
+        ks = [k("KXNFLGAME-26SEP21NYGLAR-NYG", "New York G"),
+              k("KXNFLGAME-26SEP21NYGLAR-LAR", "Los Angeles R")]
+        ps = [p2("nfl-nyg-la-2026-09-22", ["Giants", "Rams"], "2026-09-22 00:15:00+00")]
+        pairs = match_sports_games(ks, ps)
+        self.assertEqual(ids(pairs), [("KXNFLGAME-26SEP21NYGLAR-NYG", "nfl-nyg-la-2026-09-22:m")])
+
+    def test_letter_rule_does_not_steal_a_strict_match(self):
+        # Measured false positive: Kalshi "Los Angeles A" (the Angels) letter-
+        # matches PM "Athletics" ('a' ~ "athletics"[0]) just as well as the
+        # real Athletics leg ("A's"), which used to make _code_map see 2 hits
+        # for "Athletics" and drop the WHOLE Angels/Athletics game. Strict
+        # token agreement must resolve "Athletics" to 'ath' before the letter
+        # rule is even tried, leaving "Los Angeles A" to resolve strictly to
+        # 'laa' via its own "Angels"-prefix token match.
+        ks = [k("KXMLBGAME-26SEP222140LAAATH-LAA", "Los Angeles A"),
+              k("KXMLBGAME-26SEP222140LAAATH-ATH", "A's")]
+        ps = [p2("mlb-laa-oak-2026-09-22", ["Los Angeles Angels", "Athletics"],
+                 "2026-09-23 01:40:00+00")]
+        pairs = match_sports_games(ks, ps)
+        self.assertEqual(ids(pairs), [
+            ("KXMLBGAME-26SEP222140LAAATH-LAA", "mlb-laa-oak-2026-09-22:m")])
+
+    def test_letter_rule_checks_any_pm_token_not_just_the_last(self):
+        # The discriminating letter can be the FIRST word of a multi-word
+        # nickname ("Red Sox"), not just the last ("Sox") -- checking only
+        # the last token would miss this.
+        self.assertTrue(_names_agree("Boston R", "Red Sox"))
 
 
 if __name__ == "__main__":
