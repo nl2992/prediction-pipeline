@@ -104,7 +104,7 @@ it walks the *entire* open catalog of both venues, with no event cap.
 ```
 
 **Ingestion is 100% of both open catalogs.** Matching is not 100%, and cannot
-be — see [What "100%" means](#what-100-means-two-different-questions) below.
+be — see [What "100%" means](#what-100-means--two-different-questions) below.
 
 > Note: `discover.py --days 730` applies a **horizon filter** and ingests 96.8%
 > of Kalshi (3,342 markets close beyond the window). Omit `--days` for the full
