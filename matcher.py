@@ -151,6 +151,11 @@ _PHRASE_NORMALISERS: tuple[tuple[str, str], ...] = (
 
 @functools.lru_cache(maxsize=_WIDE_TEXT_CACHE_SIZE)
 def _tokens(title: str) -> frozenset[str]:
+    # Fold accents before tokenising so "Vinícius Júnior" == "Vinicius Junior"
+    # and "Fenerbahçe" == "Fenerbahce" (pass 10; mirrors the coverage oracle's
+    # _fold). ASCII fast path: most titles are ASCII, and isascii() is O(1).
+    if not title.isascii():
+        title = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode()
     title = title.lower()
     for pat, repl in _PHRASE_NORMALISERS:
         title = re.sub(pat, repl, title)
@@ -356,6 +361,7 @@ _ECON_TERMS = frozenset({
 
 _OFFICE_PATTERNS: tuple[tuple[str, str], ...] = (
     ("president", r"\b(president|presidential|presidency)\b"),
+    ("vice_president", r"\b(vice\s+president\w*|vp)\b"),
     ("senate", r"\b(senate|senator)\b"),
     ("house", r"\b(house|representative|congressional district|congress)\b"),
     ("governor", r"\b(governor|governorship|gubernatorial)\b"),
@@ -900,6 +906,13 @@ _KNOWN_ORGS = (
     # e.g. BRICS and OPEC both extract empty org sets and the org-mismatch gate is
     # skipped, so the matcher pairs "leave BRICS" with "leave OPEC" (#13).
     "brics", "opec", "nato", "asean", "unesco", "nafta", "mercosur",
+    # Earnings-call companies (pass 10). Both venues run "What will X say
+    # during their next earnings call?" events whose outcomes are topics
+    # ("GLP-1", "Revenue"); the shared-topic books join across COMPANIES
+    # (Costco ↔ PepsiCo) because the company name only sits in the event
+    # title. Distinctive tokens only — no common nouns ("target").
+    "costco", "pepsico", "walmart", "mcdonalds", "blackberry",
+    "kroger", "starbucks", "general mills", "coca-cola", "coca cola",
 )
 _KNOWN_AI_PRODUCTS = ("claude", "gpt", "gemini", "llama", "grok")
 
@@ -1207,6 +1220,11 @@ _GENERIC_NAME_TERMS = frozenset({
     # detection uses _sports_league (regex), which is unaffected, so the
     # NBA-vs-WNBA distinction is preserved.
     "nba", "wnba", "nfl", "nhl", "mlb", "mls", "ncaa",
+    # Esports/event phrases are not people: "VALORANT Champions" and
+    # "Tournament MVP" were extracted as phantom proper names from esports
+    # titles and then failed to overlap each other, vetoing true MVP pairs
+    # (pass 10). "Valorant" is a game, never a person/team name component.
+    "valorant", "champions", "tournament", "mvp",
     # Named (non-acronym) domestic soccer leagues, same reasoning: Kalshi's
     # event title "Bundesliga Champion" was glommed as a phantom 2-token
     # proper name ("bundesliga champion"), colliding with a real single-word
@@ -1601,7 +1619,9 @@ def _sports_league(text: str) -> set[str]:
     # "Los Angeles Kings (Stanley Cup)" share only the city, but mls vs nhl are
     # disjoint -> rejected (run 57). Same-sport pairs share a league, so they are
     # unaffected.
-    if re.search(r"\bwnba\b|women'?s? (?:pro )?basketball", low):
+    if re.search(r"\bcollege basketball\b|\bmarch madness\b|\bncaa (?:men'?s\s+)?basketball\b", low):
+        leagues.add("college_basketball")
+    elif re.search(r"\bwnba\b|women'?s? (?:pro )?basketball", low):
         leagues.add("wnba")
     elif re.search(r"\bnba\b|\bpro basketball\b|\bnba finals\b", low):
         leagues.add("nba")
@@ -1775,7 +1795,8 @@ _ORD_WORDS = {"first": "1", "second": "2", "third": "3", "fourth": "4", "last": 
 def _finish_places(text: str) -> frozenset[str]:
     """Specific finishing positions: "3rd place" -> {"3"}, "last place" -> {"last"}."""
     out = set()
-    for m in re.finditer(r"\b(\d+)(?:st|nd|rd|th)[ -]place\b|\b(first|second|third|fourth|last)[ -]place\b", text):
+    for m in re.finditer(r"\b(\d+)(?:st|nd|rd|th)[ -]place\b|\b(first|second|third|fourth|last)[ -]place\b",
+                         text, flags=re.I):
         out.add(m.group(1) or _ORD_WORDS[m.group(2)])
     return frozenset(out)
 
@@ -1978,11 +1999,13 @@ def _is_succession(text: str) -> bool:
 
 def _same_outcome_label(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> bool:
     """PM outcome label equals Kalshi's yes_sub_title (party suffixes such as
-    "(D)" and punctuation/case ignored), e.g. "Ed Case (D)" / "Ed Case"."""
+    "(D)" and punctuation/case ignored), e.g. "Ed Case (D)" / "Ed Case".
+    The floor is 3 chars so short esports handles ("s0pp", "bang") still count
+    as outcome identity (pass 10); "No" (2) stays excluded."""
     sub = (kalshi.extra or {}).get("yes_sub_title") or ""
     a = _squash(re.sub(r"\(.*?\)", "", poly.title or ""))
     b = _squash(re.sub(r"\(.*?\)", "", sub))
-    return len(a) >= 5 and a == b
+    return len(a) >= 3 and a == b
 
 
 def context_veto(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> str | None:
@@ -2008,6 +2031,23 @@ def context_veto(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> str | None
     pp_, kp_ = _finish_places(pt), _finish_places(kt)
     if pp_ and kp_ and pp_.isdisjoint(kp_):
         return "different finishing position"
+    # One-sided placement vs a plain win question about the SAME contestant
+    # (pass 10): "Will Tarcísio de Freitas WIN the first round?" is not the
+    # "First Round: 3rd Place" contract, even though only one side carries a
+    # position token. Scoped to a placement wording on the place side, a
+    # win/winner wording on the other, and an actual shared name — a bare
+    # "…: 2nd Place" outcome next to a "…: Winner" outcome with no common
+    # contestant does not fire (that asymmetry is handled elsewhere).
+    if bool(pp_) != bool(kp_):
+        # Names come from the ORIGINAL-case snapshot fields: _event_text (and
+        # therefore pt/kt) is lowercased, and _proper_names needs capitals.
+        p_raw = f'{(getattr(poly, "extra", {}) or {}).get("event_title") or ""} {poly.title or ""}'
+        k_raw = f'{(getattr(kalshi, "extra", {}) or {}).get("event_title") or ""} {kalshi.title or ""}'
+        pn, kn = _proper_names(p_raw), _proper_names(k_raw)
+        if pn and kn and _names_overlap(pn, kn):
+            place_text, other_text = (pt, kt) if pp_ else (kt, pt)
+            if _is_win_market(other_text) and re.search(r"\b(finish|place)\b", place_text, flags=re.I):
+                return "finishing position vs winning"
     py_, ky_ = _period_years(pt)[0], _period_years(kt)[0]
     if py_ and ky_ and py_.isdisjoint(ky_):
         return "different year / period"
@@ -2070,13 +2110,34 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
     """Return False for high-confidence false-positive patterns."""
     if context_veto(poly, kalshi):
         return False
+    # Fast path (pass 10): an IDENTICAL event title plus an IDENTICAL outcome
+    # label is the same contract even when one side's wording dodges the
+    # domain/action parsers below — Kalshi's paraphrased bill references ("How
+    # many Senate members will vote Yea on a crypto market structure bill (as
+    # defined in KXCRYPTOSTRUCTURE)?" for the Clarity Act) and placement
+    # questions ("Will Grüne finish 2nd…?" vs a bare "Grüne" 2nd-Place label)
+    # both land here. context_veto above still applies.
+    pe = (getattr(poly, "extra", {}) or {}).get("event_title") or ""
+    ke = (getattr(kalshi, "extra", {}) or {}).get("event_title") or ""
+    if pe and ke and _squash(pe) == _squash(ke) and _same_outcome_label(poly, kalshi):
+        return True
     p_text = _snapshot_text(poly)
     k_text = _snapshot_text(kalshi)
+    # Exact outcome identity (the PM label IS Kalshi's yes_sub_title) outranks
+    # the domain/name/jurisdiction HEURISTICS below, which exist to separate
+    # DIFFERENT contestants. Semantic differences are still caught by
+    # context_veto and the action checks. Computed early: the domain checks
+    # right below honour it (pass 10 — a bare "Kelly Ayotte (R)" label parses
+    # NO domain, and must not be vetoed against the party-worded Kalshi
+    # question for the same race).
+    same_outcome = _same_outcome_label(poly, kalshi)
     p_domains = _domains(p_text)
     k_domains = _domains(k_text)
     if p_domains and k_domains and p_domains.isdisjoint(k_domains):
         return False
-    if (p_domains == {"election"} and not k_domains) or (k_domains == {"election"} and not p_domains):
+    if not same_outcome and (
+        (p_domains == {"election"} and not k_domains) or (k_domains == {"election"} and not p_domains)
+    ):
         return False
     p_all_juris = _jurisdictions(p_text)
     k_all_juris = _jurisdictions(k_text)
@@ -2090,11 +2151,6 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
     # US states count as domestic, so this only fires on foreign countries.
     p_foreign = bool(p_all_juris & _FOREIGN_COUNTRIES)
     k_foreign = bool(k_all_juris & _FOREIGN_COUNTRIES)
-    # Exact outcome identity (the PM label IS Kalshi's yes_sub_title) outranks the
-    # name/jurisdiction HEURISTICS below, which exist to separate DIFFERENT
-    # contestants. Semantic differences are still caught by context_veto and the
-    # action checks.
-    same_outcome = _same_outcome_label(poly, kalshi)
     if not same_outcome and ((p_foreign and not k_all_juris) or (k_foreign and not p_all_juris)):
         return False
     p_matchup = _matchup_signature(p_text)
@@ -2177,6 +2233,7 @@ def is_compatible_match(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
     if ("removal" in p_actions) != ("removal" in k_actions):
         return False
     if not _same_horizon and not same_outcome \
+            and _jaccard(_tokens(poly.title or ""), _tokens(kalshi.title or "")) < 0.8 \
             and ("deadline" in p_actions) != ("deadline" in k_actions):
         return False
     if ("comparison" in p_actions) != ("comparison" in k_actions):
@@ -2580,7 +2637,24 @@ def is_close_time_compatible(
     if _same_outcome_label(poly, kalshi) and _is_succession(_ascii_lower(_contract_text(poly))) \
             and _is_succession(_ascii_lower(_contract_text(kalshi))):
         return True
-    return delta_h <= max_non_sports_delta_hours
+    if delta_h <= max_non_sports_delta_hours:
+        return True
+    # Pass 10: identical contracts carry formal far-out expiries on EITHER
+    # side, and either venue may be the one holding them — the Mamdani
+    # minimum-wage pair has IDENTICAL titles but PM closes 2031 vs Kalshi
+    # 2027; the "Will OpenAI or Anthropic IPO first?" pair is verbatim the
+    # same question with Kalshi's formal 2040 expiry. A big close-time gap on
+    # near-identical wording is bookkeeping, not scope: settle the question
+    # with text evidence, and let settlement_risk flag the horizon so alerts
+    # skip it. The 0.8 title bar keeps year-differing variants ("...in 2026?"
+    # vs "...in 2027?") under the cap where they belong.
+    if _jaccard(_tokens(poly.title), _tokens(kalshi.title)) >= 0.8:
+        return True
+    pe = (getattr(poly, "extra", {}) or {}).get("event_title") or ""
+    ke = (getattr(kalshi, "extra", {}) or {}).get("event_title") or ""
+    if pe and ke and _squash(pe) == _squash(ke) and _same_outcome_label(poly, kalshi):
+        return True
+    return False
 
 
 # ---------------------------------------------------------------------------

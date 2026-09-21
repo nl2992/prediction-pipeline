@@ -387,6 +387,10 @@ def _k_snap(m: dict, fetched_at: str, event_title: str = "", series_ticker: str 
             "settle_src": settle_src,
             "series_ticker": series_ticker,
             "yes_sub_title": m.get("yes_sub_title") or "",
+            # Numeric strike of a line/prop market ("1+ hits" carries floor 0.5,
+            # i.e. the same line Polymarket writes as "O/U 0.5").
+            "floor_strike": m.get("floor_strike"),
+            "cap_strike": m.get("cap_strike"),
         },
     )
 
@@ -960,6 +964,7 @@ def _match_outcomes_within_group(
         _close_delta_hours,
         is_close_time_compatible,
         is_compatible_match,
+        _squash,
     )
 
     scored = []
@@ -971,15 +976,29 @@ def _match_outcomes_within_group(
         # 0.15 floor below (Costco earnings words, NFL best/worst record).
         k_sub = (k.extra or {}).get("yes_sub_title") or ""
         k_sub_toks = _normalise_tokens(k_sub) if k_sub else frozenset()
+        # Squash-compare the bare label: hyphen/spacing variants ("Junghwan
+        # Lee" / "Jung-Hwan Lee") and party-suffixed labels ("Kelly Ayotte" /
+        # "Kelly Ayotte (R)") are one outcome. Adjacent ladder rungs never
+        # squash equal, so numeric markets are unaffected (pass 10).
+        k_squash = _squash(re.sub(r"\(.*?\)", "", k_sub)) if k_sub else ""
         k_mid = k.orderbook.mid or k.orderbook.best_bid
         for p in p_outcomes:
             p_toks = _normalise_tokens(p.title)
             title_sim = _jaccard(k_toks, p_toks)
             # Label-to-label only for NAMED outcomes: on numeric ladders ("Below
             # 5.21%", "25 bps increase") a lifted label score lets the price-led
-            # mode below pick an adjacent rung ("below 5.22%").
-            if k_sub_toks and not any(ch.isdigit() for ch in p.title + k_sub):
+            # mode below pick an adjacent rung ("below 5.22%"). EXCEPT when the
+            # label is VERBATIM the PM title ("f0rsakeN") — an exact match can
+            # never confuse rungs, and esports handles always contain digits
+            # (pass 10).
+            exact_label = bool(k_sub) and p.title.strip() == k_sub.strip()
+            squash_label = bool(k_sub) and len(k_squash) >= 5 \
+                and k_squash == _squash(re.sub(r"\(.*?\)", "", p.title or ""))
+            if k_sub_toks and (exact_label or squash_label
+                               or not any(ch.isdigit() for ch in p.title + k_sub)):
                 title_sim = max(title_sim, _jaccard(k_sub_toks, p_toks))
+            if squash_label:
+                title_sim = 1.0
             # Price proximity is useful only after the two outcomes share some
             # lexical evidence.  Without this floor, a categorical Polymarket
             # outcome like "Andy Beshear" can match a generic Kalshi question
