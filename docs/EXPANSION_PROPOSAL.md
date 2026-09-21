@@ -791,3 +791,89 @@ signals, 46 above 3c), the top of the list is dominated by:
 These pass both v1 and v2 today. The alerter's AI settlement check is the
 last line of defence, but the matcher should reject them itself. **Next pass:**
 add each class as a v2 field-level rule, with a regression test per class.
+
+---
+
+## Pass 16 — multi-leg ladder synthesis (`ladder_match.py`)
+
+**Target.** The pass-15 coverage ledger named `KXMIDTERMMOV` (4,552 Kalshi
+markets) as the largest class that is genuinely matchable but structurally
+unreachable. Polymarket *does* list midterm margin-of-victory markets; they
+never pair 1-to-1 because the venues quote different shapes:
+
+| Kalshi | Polymarket |
+|---|---|
+| `Kotek, 8+ pts` — cumulative, YES iff margin ≥ 8 | `Kotek 9-12%` — disjoint buckets partitioning the race |
+
+The counterpart of a rung is a **sum of buckets**, so no 1-to-1 matcher rule can
+ever find it. Alignment measured live first: 603 Kalshi MOV events, 486 PM MOV
+events, **68 races on both venues**, and the ladders only partly line up —
+Rhode Island's Kalshi rungs (7, 10, 13, 16) meet PM's 5-point edges at 10 and
+25, while Georgia's (1, 4, 7, 10) never meet PM's 3/6/9/12 edges at all.
+
+**The key idea: a straddled threshold is still tradeable, one way.** The first
+cut treated a threshold falling inside a bucket as an *estimate* with bounds.
+That was weaker than the truth. Pick the basket per direction and both sides
+become exact settlement dominance:
+
+- **ABOVE-only** basket (buckets entirely ≥ threshold) pays 1 only when the rung
+  does → it is *dominated* → **buy the rung, sell that basket**.
+- **ABOVE + STRADDLING** basket pays 1 whenever the rung does → it *dominates*
+  → **sell the rung, buy that basket**.
+
+A positive edge then holds however the straddling bucket resolves — no estimate
+anywhere. When the threshold lands on a bucket edge the straddle set is empty,
+both baskets coincide, and the rung replicates in both directions (`exact`).
+
+**Two bugs caught by auditing the first live run.** The first run reported 76
+positive edges of 218 priced, several near 20c. That was too good, and it was:
+
+1. *Priced off marks, not books.* `ladder_match` read `snap.orderbook.best_bid`,
+   which for Polymarket is `outcomePrices` — a single mid written to **both**
+   sides so the matcher's `price_sim` keeps working (`discover._catalog_bid_ask`
+   documents this). The real top-of-book is `catalog_bid`/`catalog_ask` in
+   `extra`. Every PM leg showing `bid == ask` to four decimals was the tell.
+2. *One price for both directions.* Buying a basket pays **asks**; selling it
+   receives **bids**. Using a single number booked a spread that doesn't exist.
+
+Fixing both: **76 positive → 28**, and >3c candidates **47 → 16**. The marks
+were inflating the opportunity roughly 3×.
+
+**A soundness hole the live data nearly hid.** The dominating basket only
+dominates if PM's buckets cover the *whole* upper tail. A capped top bucket
+(`10-15%` with no `15%+`) pays nothing on a 20-point win, so buying it leaves a
+short rung uncovered; a gap in the middle does the same. PM mixes shapes inside
+one race — Kansas Senate has a full 5-point ladder for Marshall and a bare
+`Hamilton Wins` for the other side — so this is not hypothetical.
+`_covers_tail()` now requires contiguity and an unbounded top before quoting a
+buy-side basket. Selling the ABOVE-only basket needs no such check: every bucket
+in it sits entirely above the threshold regardless of what the rest looks like.
+No live race currently fails the check, so the numbers didn't move — it is
+insurance, and it caught three of my own test fixtures, which had capped tops.
+
+**Live result (2026-09-21).** 235 rungs synthesised across 25 races, 63
+edge-aligned; 28 positive edges, 16 above 3c. Largest verified by hand:
+
+> Oregon Governor, `Kotek, 8+ pts`. Buy the rung at 0.41; sell PM's 9-12, 12-15,
+> 15-18 and 18%+ at bids totalling 0.59. Margin ≥ 9: both pay, net 0. Margin
+> 8-9: rung pays, basket doesn't, +1. Margin < 8: neither pays. Worst case
+> **+0.163** after the Kalshi taker fee.
+
+**Review-only, by design — nothing here feeds the alerter.** Three reasons, none
+of which price data can resolve:
+
+- the executor has no **N-leg** support, and legging into a 4-bucket basket one
+  order at a time is not the arb that was priced;
+- Gamma's catalog quotes carry **no depth**, so a fat edge may sit on a book
+  with a few dollars in it (Oregon's `Kotek 6-9%` quotes 0.01/0.099 — a 10×
+  spread, i.e. an empty book; the winning direction happens to touch only the
+  tight legs, but nothing guarantees that);
+- a rung and a bucket may define the margin differently (two-party share vs all
+  votes), a **settlement** question no quote will answer.
+
+Run it: `python -m tools.ladder_report --min-edge 0.05`.
+
+**Coverage effect.** This is reach, not recall: it makes a 4,552-market class
+*analysable* for the first time, but those markets still do not appear as pairs,
+because they are not pairs. Honest statement of coverage is unchanged — see
+"Where the remaining gap actually is" below.

@@ -35,9 +35,20 @@ orders — all with a single command.
 | Pair text-alike markets (elections, awards, economics, culture…) | ~7,500 text pairs, **92.6% of an independent oracle's pairs matched — and 92.6% endorsed too** (the referee no longer rejects what the matcher finds); House races 96% |
 | Flag pairs whose wording matches but settlement may not (weather stations, one-sided deadlines) | kept visible, excluded from alerts (~460 pairs) |
 | Reject look-alike contracts from event context | 26 rules (single game vs season, "run for" vs nominee, county vs state, CA-04 vs MO-04, division vs conference, reach vs win, top-5 vs winner, playoff seed, vote share vs winning, week vs season, "$1t+ IPO" vs plain, stat-line values, bps range, …) with a regression test each |
+| Reach **multi-leg** relationships a 1-to-1 matcher structurally cannot (Kalshi `Kotek, 8+ pts` ↔ the **sum** of Polymarket's `9-12%`, `12-15%`, `15-18%`, `18%+`) | `ladder_match.py` + `python -m tools.ladder_report`; 235 rungs across 25 midterm margin-of-victory races, 28 settlement-safe edges. **Review only** — no N-leg executor, no depth data |
 | Measure coverage live | `python -m tools.coverage_report [--text]` — ingestion counts, sports recall vs an independent oracle, price agreement. A funnel audit (pass 14) pins what is ingested vs held out of matching and why |
 | Price every endorsed pair from live order books, compute net-of-fee edge both directions | ~485 positive-net candidates per full scan, 51 above the alerter's 3c threshold; the top of the list AND the 3–5c band are hand-audited (16 mismatch classes removed in passes 12–13) |
 | Email / dashboard / dry-run execution | `alerter.py`, `server.py`, `executor.py` |
+
+Honest caveat on the ladder work: a threshold that falls *inside* a bucket
+still trades, because the right basket per direction is an exact settlement
+dominance (buy the rung / sell the buckets entirely above it; or sell the rung /
+buy those plus the straddling one). But the first live run reported 76 positive
+edges and was wrong — it priced off `outcomePrices`, a single Polymarket *mid*
+written to both sides of the snapshot book, instead of the real
+`catalog_bid`/`catalog_ask`. Correcting that, and charging asks to buy and bids
+to sell, cut it to 28. Assume any ladder number quoted without real books is
+inflated ~3×.
 
 Honest caveat, measured rather than assumed: **sports pairs yield almost no
 arbitrage** (5 positive edges out of 1,127 priced pairs, best +2.5c, all on
@@ -122,6 +133,7 @@ prediction-pipeline/
 ├── sports_match.py      # Structured sports join: moneylines, spreads, totals
 ├── matcher.py           # v1 matcher: Jaccard + close-time + deterministic vetoes
 ├── contract_spec.py     # v2 structured matcher (shadow referee on every v1 pair)
+├── ladder_match.py      # Multi-leg synthesis: Kalshi cumulative rungs ↔ sums of PM buckets
 ├── arb.py / book_arb.py # Two-leg arb detection; depth / VWAP / profit-by-stake
 ├── executor.py          # Order execution engine (dry-run by default)
 ├── monitor.py           # Continuous polling loop → signals.jsonl
@@ -353,6 +365,7 @@ python -m tools.validate_live --min-pairs 20 --max-events 200 [--json]
 python -m tools.validate_recall --production 0.30 --relaxed 0.20 --max-events 200 [--json]
 python -m tools.validate_ingestion --prod-cap 200 --wide-cap 500 [--json]
 python -m tools.validate_matcher --n 20 --offset 0 --min-sim 0.30 [--json]
+python -m tools.ladder_report --min-edge 0.05 [--json]       # multi-leg ladder candidates (review only)
 ```
 
 | Probe | Question it answers |
@@ -363,6 +376,7 @@ python -m tools.validate_matcher --n 20 --offset 0 --min-sim 0.30 [--json]
 | `validate_recall` | How many more pairs would a lower similarity threshold find? |
 | `validate_ingestion` | How many more pairs would a wider event cap find? |
 | `validate_matcher` | Does the matcher still pair the curated fixture set? |
+| `ladder_report` | Where does a Kalshi cumulative rung disagree with the sum of Polymarket's buckets? |
 
 ### Tests and lint (what CI runs)
 
