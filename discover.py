@@ -471,6 +471,22 @@ def _p_snap(m: dict, fetched_at: str):
     )
 
 
+def _pm_market_is_stale(m: dict, now: datetime) -> bool:
+    """A Polymarket market can sit "open" long after its end date (resolution
+    pending). Its event has already happened, so it cannot be a live counterpart,
+    and its last-trade price produces phantom edges — a live scan showed a +5.7c
+    "arb" on a speech market that ended five days earlier.
+
+    Sports are exempt while their game_start_time is still ahead: a rescheduled
+    game keeps a stale end date but is genuinely upcoming.
+    """
+    end = _parse_dt(m.get("endDate") or m.get("endDateIso"))
+    if end is None or end >= now - timedelta(days=1):
+        return False
+    gst = _parse_dt((m.get("gameStartTime") or "").strip() or None)
+    return not (gst is not None and gst >= now)
+
+
 def _p_snap_from_event(m: dict, ev_title: str, ev_slug: str, fetched_at: str):
     """Build a Polymarket snapshot from a market embedded in a /events response.
 
@@ -1632,7 +1648,11 @@ def ingest_polymarket(
             if not m.get("active"):
                 _exclude("inactive")
                 continue
-            p_snaps.append(_p_snap_from_event(m, ev_title, ev_slug, fetched_at))
+            snap = _p_snap_from_event(m, ev_title, ev_slug, fetched_at)
+            if _pm_market_is_stale(m, datetime.now(timezone.utc)):
+                # Ingested (coverage stays 100%) but held out of matching.
+                snap.extra["match_excluded"] = "ended"
+            p_snaps.append(snap)
     cov["embedded_markets"] = embedded_markets
 
     orphans_added = 0
@@ -2005,6 +2025,10 @@ def discover(
     # ingested above for full coverage but held OUT of the matcher only, so
     # matching precision is unchanged from before full-coverage ingestion.
     match_k_snaps = [s for s in k_snaps if not s.extra.get("match_excluded")]
+    # Same on the Polymarket side: markets whose end date has passed are still
+    # "open" in the catalog but their event already happened, so their stale
+    # last-trade price manufactures phantom edges.
+    match_p_snaps = [s for s in p_snaps if not s.extra.get("match_excluded")]
     print(f"[3/4] Running two-level group matcher (min_sim={min_sim})  "
           f"({len(match_k_snaps):,}/{len(k_snaps):,} Kalshi markets eligible)…", flush=True)
     t0 = time.time()
@@ -2012,12 +2036,12 @@ def discover(
     # venues ("Denver wins" vs "Broncos vs. Chiefs"), so the text matcher
     # cannot find them. Matched markets are removed from the text pools.
     from sports_match import match_sports_games
-    sports_pairs = match_sports_games(match_k_snaps, p_snaps)
+    sports_pairs = match_sports_games(match_k_snaps, match_p_snaps)
     used_k = {pr.kalshi.market_id for pr in sports_pairs}
     used_p = {pr.poly.market_id for pr in sports_pairs}
     text_pairs = _match_groups_then_individual(
         [s for s in match_k_snaps if s.market_id not in used_k],
-        [s for s in p_snaps if s.market_id not in used_p],
+        [s for s in match_p_snaps if s.market_id not in used_p],
         min_sim=min_sim,
     )
     pairs = sports_pairs + text_pairs

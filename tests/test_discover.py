@@ -1089,3 +1089,46 @@ class OutcomeLabelMatching(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EndedPolymarketMarkets(unittest.TestCase):
+    """A PM market can sit "open" past its end date while resolution is pending.
+    Its event already happened, so its last-trade price manufactures phantom
+    edges — a live scan showed a +5.7c "arb" on a speech that was five days old.
+    Such markets stay INGESTED (coverage is still 100%) but are tagged
+    match_excluded so the matcher never sees them."""
+
+    def setUp(self):
+        from datetime import datetime, timezone
+        self.now = datetime.now(timezone.utc)
+
+    def test_ended_market_is_stale(self):
+        from datetime import timedelta
+        from discover import _pm_market_is_stale
+        old = (self.now - timedelta(days=5)).isoformat()
+        self.assertTrue(_pm_market_is_stale({"endDate": old}, self.now))
+
+    def test_future_market_is_not_stale(self):
+        from datetime import timedelta
+        from discover import _pm_market_is_stale
+        soon = (self.now + timedelta(days=5)).isoformat()
+        self.assertFalse(_pm_market_is_stale({"endDate": soon}, self.now))
+
+    def test_missing_end_date_is_not_stale(self):
+        from discover import _pm_market_is_stale
+        self.assertFalse(_pm_market_is_stale({}, self.now))
+
+    def test_rescheduled_game_with_future_start_is_kept(self):
+        # PM keeps the original end date on a rescheduled game; gameStartTime is
+        # the truth, and the sports join relies on it.
+        from datetime import timedelta
+        from discover import _pm_market_is_stale
+        m = {"endDate": (self.now - timedelta(days=150)).isoformat(),
+             "gameStartTime": (self.now + timedelta(days=3)).strftime("%Y-%m-%d %H:%M:%S+00")}
+        self.assertFalse(_pm_market_is_stale(m, self.now))
+
+    def test_just_ended_within_a_day_is_kept(self):
+        from datetime import timedelta
+        from discover import _pm_market_is_stale
+        m = {"endDate": (self.now - timedelta(hours=6)).isoformat()}
+        self.assertFalse(_pm_market_is_stale(m, self.now))
