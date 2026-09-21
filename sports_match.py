@@ -159,11 +159,16 @@ class _PGame:
             mtype = ex.get("sports_market_type")
             if mtype in _PM_LINE_CLASSES:
                 self.start = self.start or _parse_pm_time(ex.get("game_start_time"))
-                line = _line_value(s)
                 outs = ex.get("outcome_labels") or []
-                if line is None:
+                line = _line_value(s)
+                if line is None and _PM_LINE_CLASSES[mtype][1] != "team_noline":
                     continue
                 kind = _PM_LINE_CLASSES[mtype][1]
+                if kind == "team_noline":
+                    # "Seattle Sounders FC" (groupItemTitle) + Yes/No outcomes.
+                    if [o.lower() for o in outs] == ["yes", "no"] and (s.title or "").strip():
+                        self.lines.setdefault(mtype, []).append((s.title.strip(), None, s))
+                    continue
                 if kind == "team_side" and len(outs) == 2:
                     # "Spread: Rays (-1.5)" with outcomes [Rays, Yankees]:
                     # token 0 wins if that team covers the line.
@@ -205,6 +210,15 @@ _PM_LINE_CLASSES = {
     "first_half_totals":              ("1HTOTAL",    "over_under"),
     "second_half_totals":             ("2HTOTAL",    "over_under"),
     "team_totals":                    ("TEAMTOTAL",  "team_ou"),
+    "first_half_team_totals":         ("1HTEAMTOTAL", "team_ou"),
+    "second_half_team_totals":        ("2HTEAMTOTAL", "team_ou"),
+    # Soccer halves: Polymarket asks per team ("Seattle leading at halftime",
+    # Yes/No), which is exactly Kalshi's "Seattle wins 1st half". Football and
+    # basketball halves are NOT here: every Kalshi half-winner event carries a
+    # TIE leg while Polymarket's 1H/2H moneyline is 2-way, so a draw settles
+    # differently — the same shape mismatch the game join refuses.
+    "soccer_halftime_result":         ("1H",         "team_noline"),
+    "soccer_second_half_result":      ("2H",         "team_noline"),
     "baseball_player_hits_runs_rbis": ("HRR",        "player_ou"),
     "baseball_player_home_runs":      ("HR",         "player_ou"),
 }
@@ -215,6 +229,7 @@ _PM_LINE_CLASSES = {
 #   player_ou  "Ben Rice: 1+"                          -> Ben Rice
 _K_SUBJECT_RE = {
     "team_side": re.compile(r"^(?P<s>.+?)\s+wins?\b", re.I),
+    "team_noline": re.compile(r"^(?P<s>.+?)\s+wins?\b", re.I),
     "team_ou": re.compile(r"^(?P<s>.+?)\s+(?:over|under)\b", re.I),
     "player_ou": re.compile(r"^(?P<s>[^:]+):", re.I),
 }
@@ -241,7 +256,9 @@ def _pm_line_subject(snap, kind: str) -> str | None:
     "Drake Baldwin: Hits + Runs + RBIs O/U 0.5"."""
     title = snap.title or ""
     if kind == "team_ou":
-        return re.split(r"\s+O/U\b", title, maxsplit=1)[0].strip() or None
+        subj = re.split(r"\s+O/U\b", title, maxsplit=1)[0]
+        # "Broncos 1H O/U 6.5" -> "Broncos"
+        return re.sub(r"\s+(?:1H|2H|1st Half|2nd Half)$", "", subj.strip(), flags=re.I) or None
     if kind == "player_ou":
         return title.split(":", 1)[0].strip() or None
     return None
@@ -276,10 +293,38 @@ def _k_line_events(k_snaps) -> dict:
     return out
 
 
-def _match_lines(prefix: str, suffix: str, k_by_event: dict, pg: _PGame) -> list:
+def _team_equivalences(kg: "_KGame", pg: _PGame, cmap: dict) -> list:
+    """(kalshi name, polymarket name) pairs the GAME join already verified, so a
+    line market can say "Denver" on one venue and "Broncos" on the other."""
+    out = []
+    pm_names: dict = {}
+    if pg.two_way is not None:
+        outs = pg.two_way.extra.get("outcome_labels") or []
+        pm_names = dict(zip(pg.codes, outs, strict=False))
+    else:
+        pm_names = {c: s.title for c, s in pg.three_way.items() if c != "tie"}
+    for p_code, k_code in (cmap or {}).items():
+        k_name, p_name = kg.name(k_code), pm_names.get(p_code)
+        if k_name and p_name:
+            out.append((k_name, p_name))
+    return out
+
+
+def _subject_agrees(k_subject: str, p_subject: str, equivalences: list) -> bool:
+    if _names_agree(k_subject, p_subject):
+        return True
+    for k_name, p_name in equivalences:
+        if _names_agree(k_subject, k_name) and _names_agree(p_subject, p_name):
+            return True
+    return False
+
+
+def _match_lines(prefix: str, suffix: str, k_by_event: dict, pg: _PGame,
+                 kg: "_KGame" = None, cmap: dict = None) -> list:
     """Pair every line/prop class for one already-verified game."""
     from matcher import MatchedPair, _close_delta_hours
 
+    equivalences = _team_equivalences(kg, pg, cmap) if kg is not None else []
     pairs: list = []
     used_p: set[str] = set()
     for mtype, (k_suffix, kind) in _PM_LINE_CLASSES.items():
@@ -289,8 +334,10 @@ def _match_lines(prefix: str, suffix: str, k_by_event: dict, pg: _PGame) -> list
             continue
         reason = f"sports line key {prefix}{k_suffix}-{suffix} <-> {pg.slug}"
         for ks in k_markets:
-            k_line = _k_line_value(ks)
-            if k_line is None:
+            if kind == "team_noline" and (ks.market_id or "").upper().endswith("-TIE"):
+                continue          # Kalshi's draw leg has no Polymarket counterpart
+            k_line = None if kind == "team_noline" else _k_line_value(ks)
+            if k_line is None and kind != "team_noline":
                 continue
             k_subject = None
             if kind != "over_under":
@@ -299,9 +346,10 @@ def _match_lines(prefix: str, suffix: str, k_by_event: dict, pg: _PGame) -> list
                     continue
                 k_subject = m.group("s")
             for p_subject, p_line, ps in p_entries:
-                if ps.market_id in used_p or p_line != k_line:
+                if ps.market_id in used_p or (kind != "team_noline" and p_line != k_line):
                     continue
-                if k_subject is not None and not (p_subject and _names_agree(k_subject, p_subject)):
+                if k_subject is not None and not (
+                        p_subject and _subject_agrees(k_subject, p_subject, equivalences)):
                     continue
                 used_p.add(ps.market_id)
                 pairs.append(MatchedPair(
@@ -456,5 +504,5 @@ def match_sports_games(k_snaps, p_snaps) -> list:
         # they inherit its team mapping, league vote and time check.
         km = _K_EVENT_KIND_RE.match(kg.event_ticker)
         if km:
-            pairs.extend(_match_lines(km.group(1), km.group(3), k_lines, pg))
+            pairs.extend(_match_lines(km.group(1), km.group(3), k_lines, pg, kg, cmap))
     return pairs

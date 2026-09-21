@@ -191,3 +191,57 @@ class SpreadsAndTotals(unittest.TestCase):
         ps += [pline("nfl-atl-gb-2026-09-25", "nfl-atl-gb-2026-09-25-total-37pt5",
                      "Falcons vs. Packers: O/U 37.5", "totals", ["Over", "Under"], "2026-09-25 20:00:00+00")]
         self.assertFalse([pr for pr in match_sports_games(ks, ps) if "TOTAL" in pr.kalshi.market_id])
+
+
+class HalfClasses(unittest.TestCase):
+    """1H team totals pair on an equal line; soccer half results pair per team;
+    football/basketball half WINNERS do not (Kalshi has a tie leg, PM does not)."""
+
+    def _soccer_game(self):
+        et = "KXBRASILEIROBGAME-26SEP25ATHBOT"
+        ks = [k(f"{et}-ATH", "Athletic Club", "KXBRASILEIROBGAME"),
+              k(f"{et}-BOT", "Botafogo", "KXBRASILEIROBGAME"),
+              k(f"{et}-TIE", "Tie", "KXBRASILEIROBGAME")]
+        slug = "bra2-ath-bot-2026-09-25"
+        start = "2026-09-25 22:00:00+00"
+        ps = [p3(slug, "ath", "Athletic Club", start),
+              p3(slug, "draw", "Draw", start),
+              p3(slug, "bot", "Botafogo FC", start)]
+        return ks, ps, slug, start
+
+    def test_soccer_halftime_result_pairs_per_team(self):
+        ks, ps, slug, start = self._soccer_game()
+        ks += [kline("KXBRASILEIROB1H-26SEP25ATHBOT-ATH", "Athletic Club wins 1st Half", "KXBRASILEIROB1H"),
+               kline("KXBRASILEIROB1H-26SEP25ATHBOT-TIE", "Tie 1st Half", "KXBRASILEIROB1H")]
+        ps += [pline(slug, f"{slug}-halftime-result-home", "Athletic Club",
+                     "soccer_halftime_result", ["Yes", "No"], start)]
+        got = {pr.kalshi.market_id: pr.poly.market_id for pr in match_sports_games(ks, ps)}
+        self.assertEqual(got.get("KXBRASILEIROB1H-26SEP25ATHBOT-ATH"),
+                         f"{slug}-halftime-result-home")
+        # Kalshi's draw leg must never pair — Polymarket has no halftime-draw market.
+        self.assertNotIn("KXBRASILEIROB1H-26SEP25ATHBOT-TIE", got)
+
+    def test_first_half_team_total_pairs_on_equal_line(self):
+        et = "KXNFLGAME-26SEP27LARDEN"
+        ks = [k(f"{et}-LAR", "Los Angeles R", "KXNFLGAME"), k(f"{et}-DEN", "Denver", "KXNFLGAME")]
+        ps = [p2("nfl-lar-den-2026-09-27", ["Rams", "Broncos"], "2026-09-27 20:00:00+00")]
+        ks += [kline("KXNFL1HTEAMTOTAL-26SEP27LARDEN-DEN7", "Denver over 6.5 1H points scored",
+                     "KXNFL1HTEAMTOTAL")]
+        ps += [pline("nfl-lar-den-2026-09-27", "nfl-lar-den-2026-09-27-1h-team-total-den-6pt5",
+                     "Broncos 1H O/U 6.5", "first_half_team_totals", ["Over", "Under"],
+                     "2026-09-27 20:00:00+00")]
+        got = {pr.kalshi.market_id: pr.poly.market_id for pr in match_sports_games(ks, ps)}
+        self.assertEqual(got.get("KXNFL1HTEAMTOTAL-26SEP27LARDEN-DEN7"),
+                         "nfl-lar-den-2026-09-27-1h-team-total-den-6pt5")
+
+    def test_football_half_winner_not_paired_tie_shape(self):
+        # KXNFL1H / KXNCAAF1H / KXWNBA*WINNER all carry a TIE leg; PM's 1H
+        # moneyline is 2-way, so a drawn half settles differently.
+        et = "KXNFLGAME-26SEP27LARDEN"
+        ks = [k(f"{et}-LAR", "Los Angeles R", "KXNFLGAME"), k(f"{et}-DEN", "Denver", "KXNFLGAME")]
+        ps = [p2("nfl-lar-den-2026-09-27", ["Rams", "Broncos"], "2026-09-27 20:00:00+00")]
+        ks += [kline("KXNFL1H-26SEP27LARDEN-DEN", "Denver wins 1st Half", "KXNFL1H")]
+        ps += [pline("nfl-lar-den-2026-09-27", "nfl-lar-den-2026-09-27-1h-moneyline",
+                     "1H Moneyline", "first_half_moneyline", ["Broncos", "Rams"],
+                     "2026-09-27 20:00:00+00")]
+        self.assertFalse([pr for pr in match_sports_games(ks, ps) if "1H-" in pr.kalshi.market_id])
