@@ -308,3 +308,46 @@ class HalfClasses(unittest.TestCase):
                      "1H Moneyline", "first_half_moneyline", ["Broncos", "Rams"],
                      "2026-09-27 20:00:00+00")]
         self.assertFalse([pr for pr in match_sports_games(ks, ps) if "1H-" in pr.kalshi.market_id])
+
+
+class LineLetterRuleContainment(unittest.TestCase):
+    """_match_lines must apply the same strict-before-letter discipline that
+    _code_map already applies (see its comment). _code_map only contained the
+    "<City> <Letter>" fallback for the GAME-level team join; _subject_agrees
+    (used by _match_lines to pick which Kalshi line goes with which
+    Polymarket line) still ran the unguarded ``_names_agree``, which also
+    tries the letter rule.
+
+    Measured on unmodified code: ``_names_agree("Los Angeles A", "Athletics")``
+    is True -- the Angels' city+letter shorthand ('A' ~ "athletics"[0]) also
+    satisfies the letter rule against the unrelated Athletics. Inside a game
+    that has both an Angels and an Athletics team-total at the same line
+    value, that lets a Kalshi Angels line be paired to the Polymarket
+    Athletics line instead of its own strict Polymarket counterpart -- a
+    silently wrong pair that would produce a phantom edge. 0 live line pairs
+    use this shape today (measured), so this is latent, not active; this test
+    pins the fix so it stays that way."""
+
+    def test_letter_rule_does_not_steal_a_team_total_line(self):
+        et = "KXMLBGAME-26SEP222140LAAATH"
+        ks = [k(f"{et}-LAA", "Los Angeles A"), k(f"{et}-ATH", "A's")]
+        game_slug = "mlb-laa-oak-2026-09-22"
+        ps = [p2(game_slug, ["Los Angeles Angels", "Athletics"], "2026-09-23 01:40:00+00")]
+        ks += [kline("KXMLBTEAMTOTAL-26SEP222140LAAATH-LAA4",
+                     "Los Angeles A over 4.5 runs scored", "KXMLBTEAMTOTAL"),
+               kline("KXMLBTEAMTOTAL-26SEP222140LAAATH-ATH4",
+                     "A's over 4.5 runs scored", "KXMLBTEAMTOTAL")]
+        # Athletics' line is listed FIRST: a single greedy pass (no strict-
+        # first ordering) lets the Angels' Kalshi market claim it via the
+        # letter rule before the real Angels leg is ever tried.
+        ps += [pline(game_slug, f"{game_slug}-team-total-oak-4pt5",
+                     "Athletics O/U 4.5", "team_totals", ["Over", "Under"],
+                     "2026-09-23 01:40:00+00"),
+               pline(game_slug, f"{game_slug}-team-total-laa-4pt5",
+                     "Los Angeles Angels O/U 4.5", "team_totals", ["Over", "Under"],
+                     "2026-09-23 01:40:00+00")]
+        got = {pr.kalshi.market_id: pr.poly.market_id for pr in match_sports_games(ks, ps)}
+        self.assertEqual(got.get("KXMLBTEAMTOTAL-26SEP222140LAAATH-LAA4"),
+                         f"{game_slug}-team-total-laa-4pt5")
+        self.assertEqual(got.get("KXMLBTEAMTOTAL-26SEP222140LAAATH-ATH4"),
+                         f"{game_slug}-team-total-oak-4pt5")
