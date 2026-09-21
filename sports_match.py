@@ -48,6 +48,27 @@ _K_EVENT_RE = re.compile(r"^[A-Z0-9]+-(\d\d)([A-Z]{3})(\d\d)(\d{4})?")
 _PM_GAME_SLUG_RE = re.compile(r"^([a-z0-9]+)-([a-z0-9]+)-([a-z0-9]+)-\d{4}-\d\d-\d\d$")
 _TIE_CODES = {"tie", "draw"}
 
+# Polymarket sometimes splits one game's markets across several EVENTS: the
+# moneyline lives in the base event ("mls-vwh-dcu-2026-09-26") while extra
+# lines live in sibling events named "<base slug>-<suffix>", which
+# _PM_GAME_SLUG_RE rejects outright because the suffix runs past the date.
+# Measured on a frozen full-catalog snapshot, these are the sibling suffixes
+# whose contract classes _PM_LINE_CLASSES already knows how to match:
+#   -more-markets        29,855 markets across 545 games (spreads, totals,
+#                         soccer team totals, 1H/2H totals -- all classes
+#                         _PM_LINE_CLASSES already handles); of those, 97
+#                         games / 5,762 markets have a base game ALREADY
+#                         joined to Kalshi, so those lines are unlocked as
+#                         soon as the sibling is merged into the base game.
+#   -halftime-result      1,846 markets (soccer_halftime_result)
+#   -second-half-result   1,886 markets (soccer_second_half_result)
+# Excluded on purpose: "-total-corners" (26,337 markets) and "-exact-score"
+# (10,301 markets) have no Kalshi counterpart at all -- merging them would
+# just bloat _PGame.lines with markets _match_lines can never pair.
+_PM_SIBLING_SUFFIXES = frozenset({"more-markets", "halftime-result", "second-half-result"})
+_PM_SIBLING_SLUG_RE = re.compile(
+    r"^(.+)-(?:" + "|".join(re.escape(s) for s in _PM_SIBLING_SUFFIXES) + r")$")
+
 # A Kalshi ticker with an HHMM start must be within this of PM gameStartTime;
 # date-only tickers fall back to "same ET calendar day, +-1".
 _TIME_TOLERANCE = timedelta(hours=3)
@@ -456,15 +477,51 @@ def _k_games(k_snaps) -> list[_KGame]:
 
 
 def _p_games(p_snaps) -> list[_PGame]:
-    by_event: dict[str, list] = defaultdict(list)
+    # Group by BASE game slug, not raw event_id: see _PM_SIBLING_SUFFIXES.
+    # A snapshot's own event_id is left untouched (other code uses it for
+    # pair identity) -- only this grouping key changes, and _PGame.slug is
+    # built from the BASE slug so match_reason and pass 3's one-game-per-PM-
+    # game dedupe keep working exactly as before.
+    by_base: dict[str, list] = defaultdict(list)
+    base_match: dict[str, re.Match] = {}
     for s in p_snaps:
-        by_event[s.event_id].append(s)
-    games = []
-    for slug, snaps in by_event.items():
-        m = _PM_GAME_SLUG_RE.match(slug or "")
-        if not m:
+        slug = s.event_id or ""
+        m = _PM_GAME_SLUG_RE.match(slug)
+        if m:
+            by_base[slug].append(s)
+            base_match.setdefault(slug, m)
             continue
-        g = _PGame(slug, m.group(1), (m.group(2), m.group(3)), snaps)
+        sm = _PM_SIBLING_SLUG_RE.match(slug)
+        if not sm:
+            continue
+        base_slug = sm.group(1)
+        bm = _PM_GAME_SLUG_RE.match(base_slug)
+        if not bm:
+            continue
+        by_base[base_slug].append(s)
+        base_match.setdefault(base_slug, bm)
+
+    games = []
+    for base_slug, snaps in by_base.items():
+        m = base_match[base_slug]
+        # A sibling's markets can list the same contract as the base event
+        # (or, less commonly, two siblings could overlap); de-dup by
+        # market_id before building the game so _PGame.lines never carries
+        # the same market twice.
+        seen: set[str] = set()
+        deduped = []
+        for s in snaps:
+            if s.market_id in seen:
+                continue
+            seen.add(s.market_id)
+            deduped.append(s)
+        # A sibling can exist with no base event in the snapshot set (e.g. the
+        # base game already closed/rolled off). We don't special-case that: a
+        # sibling-only group has no moneyline/three-way market, so g.start
+        # (possibly set from a line market's game_start_time) is not enough --
+        # the guard below still drops it, correctly, since there's no
+        # moneyline for the Kalshi join to anchor on.
+        g = _PGame(base_slug, m.group(1), (m.group(2), m.group(3)), deduped)
         if g.start is not None and (g.two_way is not None or g.three_way):
             games.append(g)
     return games
