@@ -115,7 +115,59 @@ indicate where arb surface exists, not confirmed profit.
 
 Status key: ✅ done · 🟡 partial · ⬜ open. Newest first.
 
-### 2026-09-20 (pass 9) — spreads and totals: a contract class matched 0%
+### 2026-09-21 (pass 10) — diagnosed the remaining ~8%: bookkeeping caps, handles, accents, v2 rungs
+
+**Diagnosis.** Passes 7–9 put text recall AT the hand-labelled ceiling (~91.9%),
+so this pass classified **every** remaining oracle miss by the exact gate that
+rejected it (an instrumented port of `is_compatible_match`, greedy-theft
+tracing, hand-labelling of each bucket — same method as pass 7). Of 363 misses:
+~88 (24%) real (down from pass 7's 63% — the big classes were already fixed),
+210 correct v1 rejections, 65 oracle noise (in 63 of 65 "stolen-slot" cases the
+thief pairing was the correct sibling, v2-endorsed — the oracle picked the
+wrong duplicate). Bucket detail: 252 v1-vetoed / 98 never-candidate /
+11 below-gate / 2 v2-rejected.
+
+**Implemented (one regression test per class, `tests/test_pass10_recall.py`).**
+
+| # | Fix | Where |
+|---|---|---|
+| 1 | Close-time 400-day cap + one-sided deadline veto no longer fire on near-identical titles (Jaccard ≥ 0.8) — Mamdani min-wage (verbatim titles, PM formal 2031 expiry vs Kalshi 2027), "OpenAI or Anthropic IPO first?" word-order pair; `settlement_risk` still flags the horizon | `matcher.py` |
+| 2 | Esports handles: group-path label lift allows verbatim digit labels ("f0rsakeN"); `_same_outcome_label` floor 5→3 ("s0pp", "bang"); "VALORANT Champions"/"Tournament MVP" added to generic name terms so they stop producing phantom people | `discover.py`, `matcher.py` |
+| 3 | `_tokens` NFKD-folds accents ("Vinícius Júnior" = "Vinicius Junior", "Te Pāti Māori"); group path squash-compares labels, reconciling hyphen variants ("Jung-Hwan Lee") and party suffixes ("Kelly Ayotte (R)") | `matcher.py`, `discover.py` |
+| 4 | Identical event title + identical outcome label is a compatibility fast path (still subject to `context_veto`): Clarity Act paraphrases ("a crypto market structure bill (as defined in KXCRYPTOSTRUCTURE)"), Grüne 2nd-place; election-domain one-sided veto skipped when the label matches; "VP" added to the office gazetteer (Hegseth VP-vs-President precision) | `matcher.py` |
+| 5 | v2: parentheticals stripped before name extraction ("Gary (Stephen Wilson Jr.)" — pass 7's 2 residual over-fires); identical DISTINCTIVE label (≥4 chars) is sufficient acceptance evidence after all hard gates; new count-rung gate rejects disjoint integer cutoffs ("Above 68" vs "Above 66" rode token similarity 0.75 to a false endorsement), with ±1 tolerance for venue convention ("20+" == "over 20", audited fixture PAIR-049) and comma/decimal-safe parsing | `contract_spec.py` |
+| 6 | Sports: Swiss-hockey aliases (EHC Kloten↔Kloten Flyers, SC Langnau Tigers↔SCL Tigers), county-cricket one-day cups survive a league-vote tie when the join is exact-code (Leicestershire↔Middlesex); line join extended to first/second-half spreads & totals, team totals and baseball HRR/HR player props — each class keyed by its EXACT Kalshi event ticker, Kalshi `floor_strike`/`cap_strike` plumbed through as the line | `sports_match.py`, `discover.py` |
+| 7 | Precision: earnings-call company gazetteer (Costco↔PepsiCo GLP-1 FP — the org gate was tech-only); college vs pro basketball split in `_sports_league` (Miami FP); one-sided finishing-position veto ("3rd Place" outcome vs "win the first round?" on the same contestant — `_finish_places` was also case-sensitive, "3rd Place" capital-P never matched) | `matcher.py` |
+
+**Measured** (live A/B; before = 2026-09-20 catalog, after = 2026-09-21 — Monday
+vs Sunday composition differs, so read the recall rates, not the pair counts).
+
+| | pass 9 (9/20) | pass 10 (9/21) |
+|---|---|---|
+| Oracle pairs MATCHED | 91.9% | **92.6%** |
+| Oracle pairs V2-ENDORSED | 91.9% | **92.6%** |
+| Matched but v2-rejected | 2 | **1** |
+| Sports recall vs oracle | 95.3% | **97.0%** |
+| Sports price agreement | median 0.75c | median 1c, >30c: **1** |
+| Text pairs / endorsed | 7,964 / 7,545 | 7,448 / 7,148 |
+
+The 0.7pt text gain is above the pass-7 hand-labelled ceiling of ~91.9%,
+consistent with the diagnosed real-miss classes now matching; the endorsed
+rate tracks matched exactly again (nothing lost between matcher and alert
+gate). No regression in any audited fixture (912 hermetic tests green,
+including the v2 endorsed-audit precision floors).
+
+**Caveats, recorded deliberately:** (a) the near-identical-title relaxations
+(#1) trust text evidence over close-time bookkeeping — the year-differing
+variants ("...in 2026?" vs "...in 2027?") stay under the cap because their
+Jaccard is < 0.8; (b) the new sports line/prop classes (first-half, team
+totals, HRR/HR) are joined by exact event key + equal line and inherit the
+moneyline join's game verification, but their settlement-source parity is
+younger than moneylines' — the alerter's AI settlement check remains the
+enforcing gate on this class; (c) the rung gate is v2-side only; v1 continues
+to rely on its price-led mode and stat-line vetoes for rung discipline.
+
+
 
 **Proposal.** Text recall (91.9%) now sits AT the hand-labelled oracle ceiling
 (~91%), so more wording rules would chase the oracle's own errors. The
