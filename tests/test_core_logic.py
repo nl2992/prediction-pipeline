@@ -1005,6 +1005,154 @@ class CoreLogicTests(unittest.TestCase):
         mock_enrich_poly.assert_not_called()
         mock_enrich_kalshi.assert_not_called()
 
+    @patch("discover._enrich_kalshi")
+    @patch("discover._enrich_polymarket")
+    @patch("discover._match_groups_then_individual")
+    @patch("polymarket.client.PolymarketClient.get_all_events")
+    @patch("kalshi.client.KalshiClient.get_markets")
+    @patch("kalshi.client.KalshiClient.get_all_events")
+    def test_arb_net_accurate_recorded_even_when_flat7_is_negative(
+        self,
+        mock_events,
+        mock_markets,
+        mock_poly_events,
+        mock_match,
+        mock_enrich_poly,
+        mock_enrich_kalshi,
+    ) -> None:
+        # Kalshi's real taker fee (0.07*p*(1-p), maxes ~1.75c at p=0.5) is far
+        # smaller than the flat 7c figure discover.py's LEGACY arb_net_profit
+        # still uses. This pair is profitable under the accurate fee but NOT
+        # under flat7 — exactly the gap that made the dashboard report near-0
+        # arbitrage. poly_yes + kalshi_no: kalshi leg = 1 - kalshi_bid = 0.50.
+        poly = titled_snap(
+            "polymarket", "poly-x", "Will X happen in 2026?",
+            "2027-01-01T00:00:00Z", extra={"event_title": "Will X happen in 2026?"},
+        )
+        poly.orderbook = OrderBook(
+            bids=[PriceLevel(0.30, 10.0)],   # kalshi_yes+poly_no direction stays unprofitable
+            asks=[PriceLevel(0.47, 20.0)],
+        )
+        kalshi = titled_snap(
+            "kalshi", "KXX-27", "Will X happen in 2026?",
+            "2027-01-01T00:00:00Z", extra={"event_title": "Will X happen in 2026?"},
+        )
+        kalshi.orderbook = OrderBook(
+            bids=[PriceLevel(0.50, 15.0)],
+            asks=[PriceLevel(0.60, 10.0)],   # kalshi_yes+poly_no direction stays unprofitable
+        )
+        mock_events.return_value = [{
+            "title": "Will X happen in 2026?", "event_ticker": "KXX-27",
+            "close_time": "2027-01-01T00:00:00Z",
+        }]
+        mock_markets.return_value = {
+            "markets": [{
+                "ticker": "KXX-27", "event_ticker": "KXX-27",
+                "title": "Will X happen in 2026?", "status": "active",
+                "close_time": "2027-01-01T00:00:00Z",
+                "yes_bid_dollars": "0.50", "yes_ask_dollars": "0.60",
+            }],
+            "cursor": None,
+        }
+        mock_poly_events.return_value = [{
+            "title": "Will X happen in 2026?",
+            "slug": "will-x-happen-in-2026",
+            "markets": [{
+                "conditionId": "poly-x", "active": True,
+                "question": "Will X happen in 2026?",
+                "outcomePrices": ["0.47", "0.53"],
+            }],
+        }]
+        mock_match.return_value = [MatchedPair(poly, kalshi, 1.0, 1.0, 0.0)]
+
+        rows = discover(show_prices=True, market_sweep=False)
+        row = rows[0]
+
+        pa, kb = 0.47, 0.50
+        k_leg = round(1.0 - kb, 6)
+        expected_accurate = round(1.0 - (pa + k_leg) - kalshi_taker_fee(k_leg), 6)
+        expected_flat7 = round(1.0 - (pa + k_leg) - 0.07, 6)
+
+        self.assertTrue(row["arb_eligible"])
+        self.assertEqual(row["arb_direction_accurate"], "poly_yes + kalshi_no")
+        self.assertEqual(row["arb_net_accurate"], expected_accurate)
+        self.assertEqual(row["arb_net_flat7"], expected_flat7)
+        self.assertGreater(row["arb_net_accurate"], 0)
+        self.assertLess(row["arb_net_flat7"], 0)
+        # Legacy positive-only field is unaffected: it only sees the flat-7
+        # model and only ever stores positive numbers, so it stays None here.
+        self.assertIsNone(row["arb_net_profit"])
+        self.assertIsNone(row["arb_direction"])
+        # Executable figures: both venues have live ladders (single level
+        # each, from titled_snap/OrderBook above), so book_arb.executable_arb
+        # should have run and recorded a positive fill.
+        self.assertIsNotNone(row["exec_contracts"])
+        self.assertGreater(row["exec_contracts"], 0)
+        self.assertIsNotNone(row["exec_profit"])
+        self.assertGreater(row["exec_profit"], 0)
+
+    @patch("discover._enrich_kalshi")
+    @patch("discover._enrich_polymarket")
+    @patch("discover._match_groups_then_individual")
+    @patch("polymarket.client.PolymarketClient.get_all_events")
+    @patch("kalshi.client.KalshiClient.get_markets")
+    @patch("kalshi.client.KalshiClient.get_all_events")
+    def test_arb_net_accurate_none_means_unpriced_not_unprofitable(
+        self,
+        mock_events,
+        mock_markets,
+        mock_poly_events,
+        mock_match,
+        mock_enrich_poly,
+        mock_enrich_kalshi,
+    ) -> None:
+        # A pair missing a needed quote (here: no Kalshi bid) can't be priced
+        # in EITHER direction, so arb_net_accurate/arb_net_flat7 must stay
+        # None — not some sentinel negative number that would be conflated
+        # with "priced and unprofitable" by a summary/funnel.
+        poly = titled_snap(
+            "polymarket", "poly-y", "Will Y happen in 2026?",
+            "2027-01-01T00:00:00Z", extra={"event_title": "Will Y happen in 2026?"},
+        )
+        poly.orderbook = OrderBook(bids=[], asks=[PriceLevel(0.47, 20.0)])
+        kalshi = titled_snap(
+            "kalshi", "KXY-27", "Will Y happen in 2026?",
+            "2027-01-01T00:00:00Z", extra={"event_title": "Will Y happen in 2026?"},
+        )
+        kalshi.orderbook = OrderBook(bids=[], asks=[])
+        mock_events.return_value = [{
+            "title": "Will Y happen in 2026?", "event_ticker": "KXY-27",
+            "close_time": "2027-01-01T00:00:00Z",
+        }]
+        mock_markets.return_value = {
+            "markets": [{
+                "ticker": "KXY-27", "event_ticker": "KXY-27",
+                "title": "Will Y happen in 2026?", "status": "active",
+                "close_time": "2027-01-01T00:00:00Z",
+                "yes_bid_dollars": None, "yes_ask_dollars": None,
+            }],
+            "cursor": None,
+        }
+        mock_poly_events.return_value = [{
+            "title": "Will Y happen in 2026?",
+            "slug": "will-y-happen-in-2026",
+            "markets": [{
+                "conditionId": "poly-y", "active": True,
+                "question": "Will Y happen in 2026?",
+                "outcomePrices": ["0.47", "0.53"],
+            }],
+        }]
+        mock_match.return_value = [MatchedPair(poly, kalshi, 1.0, 1.0, 0.0)]
+
+        rows = discover(show_prices=True, market_sweep=False)
+        row = rows[0]
+
+        self.assertIsNone(row["arb_net_accurate"])
+        self.assertIsNone(row["arb_net_flat7"])
+        self.assertIsNone(row["arb_direction_accurate"])
+        self.assertIsNone(row["exec_contracts"])
+        self.assertIsNone(row["exec_profit"])
+
     def test_arb_gate_rejects_time_scope_mismatch(self) -> None:
         poly = titled_snap(
             "polymarket",
