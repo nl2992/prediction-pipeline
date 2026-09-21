@@ -115,6 +115,29 @@ indicate where arb surface exists, not confirmed profit.
 
 Status key: ✅ done · 🟡 partial · ⬜ open. Newest first.
 
+### 2026-09-21 — live verification of the pass-10 line classes
+
+Ran the join against the live catalogs at 03:06 UTC to confirm the nine
+contract classes actually fire (not just pass their unit tests):
+
+| Class | Pairs live | Note |
+|---|---|---|
+| moneyline | 766 | |
+| spreads / totals | 87 / 241 | |
+| team totals | 33 | proves the class-table path end to end |
+| 1H/2H spreads & totals | 0 | **data, not a bug**: the only joined game with PM first-half totals (cfb-librty-coast) has no Kalshi `…1HTOTAL` event |
+| MLB player props (HRR, HR) | 0 | no joined game carried PM `baseball_player_*` markets at that hour |
+
+Finding worth recording: `KXNCAAF1H` (702 markets) is a first-half **WINNER**
+market (3-way, with a tie leg), not a half total — college football halves are
+named differently from `KXNFL1HTOTAL`. Polymarket has no football half-winner
+class, so it stays unmatched by design; its soccer equivalent
+(`soccer_halftime_result`) is a candidate for a future pass.
+
+Coverage at that run: Kalshi 10,980 events / 104,908 markets; Polymarket 18,034
+events / 149,068 markets; 601 games joined, 1,124 contract pairs; sports recall
+95.5%; cross-venue price gap median 1c (spread/total 1.5c).
+
 ### 2026-09-21 (pass 10) — diagnosed the remaining ~8%: bookkeeping caps, handles, accents, v2 rungs
 
 **Diagnosis.** Passes 7–9 put text recall AT the hand-labelled ceiling (~91.9%),
