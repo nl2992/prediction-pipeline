@@ -123,5 +123,81 @@ class ApiSignals(unittest.TestCase):
         self.assertEqual(json.loads(resp.body), {"signals": []})
 
 
+class BookArb(unittest.TestCase):
+    """/api/book-arb + /api/book-arb/live: the depth-walked executable arb
+    (book_arb.py) finally surfaced in the dashboard (was alerter-email-only)."""
+
+    CROSSING_POLY = {"bids": [[0.40, 100], [0.39, 200]], "asks": [[0.42, 100], [0.43, 200]]}
+    CROSSING_KALSHI = {"bids": [[0.55, 150], [0.54, 150]], "asks": [[0.58, 100], [0.59, 100]]}
+
+    def test_crossing_books_positive_profit_and_sane_vwaps(self):
+        body = json.loads(server.api_book_arb({
+            "poly_book": self.CROSSING_POLY, "kalshi_book": self.CROSSING_KALSHI,
+        }).body)
+        best = body["directions"][body["best_direction"]]
+        self.assertGreater(best["max"]["profit"], 0)
+        self.assertGreater(best["max"]["contracts"], 0)
+        # VWAPs must fall strictly within the ladder's price range used (they're
+        # cost-weighted averages over 0.42-0.43 / 0.45-0.46, never outside it).
+        self.assertTrue(0.42 <= best["max"]["vwap_a"] <= 0.43)
+        self.assertTrue(0.45 <= best["max"]["vwap_b"] <= 0.46)
+
+    def test_non_crossing_books_zero_contracts(self):
+        poly_book = {"bids": [[0.10, 100]], "asks": [[0.90, 100]]}
+        kalshi_book = {"bids": [[0.10, 100]], "asks": [[0.90, 100]]}
+        body = json.loads(server.api_book_arb({
+            "poly_book": poly_book, "kalshi_book": kalshi_book,
+        }).body)
+        for d in body["directions"].values():
+            self.assertEqual(d["max"]["contracts"], 0.0)
+
+    def test_breakeven_contracts_matches_hand_computed_ladder(self):
+        # legA (poly yes) = [(0.42,100),(0.43,200)], legB (kalshi no, derived
+        # from bids) = [(0.45,150),(0.46,150)] -> every chunk's combined cost
+        # (with the Kalshi-leg fee) stays under $1.00, so break-even is the
+        # full 300-contract depth of this pair, not some intermediate point.
+        body = json.loads(server.api_book_arb({
+            "poly_book": self.CROSSING_POLY, "kalshi_book": self.CROSSING_KALSHI,
+        }).body)
+        d = body["directions"]["poly_yes__kalshi_no"]
+        self.assertEqual(d["breakeven_contracts"], 300.0)
+        self.assertTrue(all(pt["combined_cost_with_fee"] < 1.0 for pt in d["curve"]))
+
+    def test_top_of_book_net_overstates_thin_top_level(self):
+        # Only 1 contract available at the best price on each leg; the book
+        # stays profitable (just less so) once you have to walk past it. A
+        # dashboard that only shows top-of-book would claim the best-case
+        # per-contract net (~0.74) is achievable at any size, when the realized
+        # per-contract economics once real depth is required are much thinner.
+        poly_book = {"bids": [[0.05, 10]], "asks": [[0.10, 1], [0.30, 1000]]}
+        kalshi_book = {"bids": [[0.85, 1], [0.60, 1000]], "asks": [[0.95, 10]]}
+        body = json.loads(server.api_book_arb({
+            "poly_book": poly_book, "kalshi_book": kalshi_book,
+        }).body)
+        d = body["directions"]["poly_yes__kalshi_no"]
+        realized_net_per_contract = d["max"]["profit"] / d["max"]["contracts"]
+        self.assertGreater(d["top_of_book_net"] - realized_net_per_contract, 0.1)
+
+    def test_fee_applied_matches_arb_kalshi_taker_fee(self):
+        from arb import kalshi_taker_fee
+        body = json.loads(server.api_book_arb({
+            "poly_book": self.CROSSING_POLY, "kalshi_book": self.CROSSING_KALSHI,
+        }).body)
+        d = body["directions"]["poly_yes__kalshi_no"]  # kalshi leg = B (the NO leg)
+        ask_a, ask_b = 0.42, 0.45  # top of each ladder
+        expected = round(1.0 - ask_a - ask_b - kalshi_taker_fee(ask_b), 6)
+        self.assertEqual(d["top_of_book_net"], expected)
+
+    def test_live_endpoint_returns_error_not_500_on_venue_failure(self):
+        from unittest.mock import MagicMock
+        kc = MagicMock(); kc.return_value.get_orderbook.side_effect = RuntimeError("kalshi down")
+        pc = MagicMock()
+        with patch("kalshi.client.KalshiClient", kc), patch("polymarket.client.PolymarketClient", pc):
+            body = json.loads(server.api_book_arb_live(
+                kalshi_ticker="TICKER-1", poly_token_id="123",
+            ).body)
+        self.assertIn("error", body)
+
+
 if __name__ == "__main__":
     unittest.main()

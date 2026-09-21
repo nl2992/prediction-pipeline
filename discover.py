@@ -2142,6 +2142,10 @@ def discover(
             "poly_title":       pair.poly.title,
             "poly_event_title": p_event_title,
             "poly_id":          pair.poly.market_id,
+            # CLOB token id (not the condition/market id above) — needed by the
+            # dashboard's live book-arb re-fetch (GET /api/book-arb/live), which
+            # calls PolymarketClient.get_orderbook(token_id) directly.
+            "poly_token_id":    (pair.poly.extra.get("clob_token_ids") or [None])[0],
             "poly_slug":        pair.poly.event_id,
             "poly_close":       (pair.poly.close_time or "")[:10],
             "poly_bid":         pb,

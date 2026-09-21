@@ -281,6 +281,69 @@
   .spinner { color: var(--orange); font-size: 14px; animation: blink 0.8s infinite; }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
 
+  /* ── Book-arb (depth-walked executable arb) modal ─────────────────────── */
+  #book-arb-modal {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.82);
+    z-index: 110;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 28px 16px;
+  }
+  #book-arb-modal.show { display: flex; }
+  #book-arb-box {
+    background: var(--bg1);
+    border: 2px solid var(--orange2);
+    width: 100%;
+    max-width: 980px;
+    max-height: calc(100vh - 56px);
+    overflow-y: auto;
+    padding: 0;
+  }
+  #book-arb-box .ba-header {
+    position: sticky; top: 0;
+    background: var(--orange);
+    color: #000;
+    padding: 5px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: bold;
+    font-size: 12px;
+    letter-spacing: 0.5px;
+  }
+  #book-arb-box .ba-close {
+    cursor: pointer;
+    background: #000;
+    color: var(--orange);
+    padding: 1px 7px;
+    font-size: 11px;
+  }
+  #book-arb-box .ba-close:hover { background: var(--orange2); color: #000; }
+  #book-arb-body { padding: 10px 14px 16px; }
+  .ba-section-title {
+    color: var(--orange);
+    font-size: 10px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    margin: 14px 0 6px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 3px;
+  }
+  .ba-section-title:first-child { margin-top: 0; }
+  .ba-dir-block { border: 1px solid var(--border); padding: 8px 10px; margin-bottom: 10px; }
+  .ba-dir-block.ba-best { border-color: var(--green2); }
+  .ba-dir-label { font-size: 11px; font-weight: bold; color: var(--amber); }
+  .ba-ladders { display: flex; gap: 24px; margin-top: 6px; flex-wrap: wrap; }
+  .ba-ladder { flex: 1; min-width: 200px; }
+  .ba-ladder-title { color: var(--dim); font-size: 9px; letter-spacing: 0.5px; margin-bottom: 2px; }
+  table.ba-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+  table.ba-table th { text-align: right; color: var(--dim); font-weight: normal; padding: 1px 6px; }
+  table.ba-table th:first-child, table.ba-table td:first-child { text-align: left; }
+  table.ba-table td { text-align: right; padding: 1px 6px; font-variant-numeric: tabular-nums; }
+  .ba-budget-row td { border-top: 1px solid var(--border); }
+
   /* ── Scrollbar ─────────────────────────────────────────────── */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
@@ -335,6 +398,7 @@
       <span onclick="showView('pairs')">F1 PAIRS</span>
       <span onclick="showView('signals')">F2 SIGNALS</span>
       <span onclick="runScan()">F3 SCAN</span>
+      <span onclick="runBookArb()">F4 BOOK</span>
       <span onclick="runFastScan()">F8 FAST</span>
     </div>
   </div>
@@ -394,12 +458,13 @@
       <div class="s-header">ACTIONS</div>
       <div class="sidebar-item" onclick="runScan()">⟳ FULL SCAN</div>
       <div class="sidebar-item" onclick="runFastScan()">⚡ FAST SCAN</div>
+      <div class="sidebar-item" onclick="runBookArb()">▤ BOOK SCAN</div>
     </div>
     <div style="flex:1;"></div>
     <div style="padding:8px;color:var(--dimmer);font-size:9px;border-top:1px solid var(--border);">
       PRED-ARB v1.0<br>
       MIN SIM: 0.30<br>
-      FEE: POLY 2% KALSHI 7%
+      FEE: KALSHI 0.07·p(1-p), POLY 0%
     </div>
   </div>
 
@@ -492,6 +557,17 @@
   <div style="color:var(--dim);font-size:11px;" id="loading-msg">Fetching Kalshi event catalog</div>
 </div>
 
+<!-- Book-arb (depth-walked executable arb) modal -->
+<div id="book-arb-modal" onclick="if(event.target===this) closeBookArb()">
+  <div id="book-arb-box">
+    <div class="ba-header">
+      <span>▤ BOOK SCAN — DEPTH-WALKED EXECUTABLE ARB</span>
+      <span class="ba-close" onclick="closeBookArb()">✕ CLOSE (ESC)</span>
+    </div>
+    <div id="book-arb-body">—</div>
+  </div>
+</div>
+
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
 let allPairs       = [];
@@ -501,6 +577,11 @@ let arbOnly     = false;
 let selected    = null;
 let currentView = 'pairs';
 let currentSort = 'arb';  // 'arb' | 'confidence'
+
+// Kalshi's published per-contract taker fee: 0.07 * p * (1-p) — charged on the
+// Kalshi leg only (maxes ~1.75c at p=0.5, vanishes at the extremes).
+// Polymarket's CLOB is fee-free. Mirrors arb.kalshi_taker_fee exactly.
+function kalshiTakerFee(p) { return 0.07 * p * (1 - p); }
 
 // ── Clock ──────────────────────────────────────────────────────────────────
 function updateClock() {
@@ -601,6 +682,134 @@ async function runFastScan() {
     btn.disabled = false;
     btn.textContent = '⟳ REFRESH';
   }
+}
+
+// ── Book scan (depth-walked executable arb) ─────────────────────────────────
+// Direction metadata for the panel — mirrors book_arb._DIRECTIONS. leg B's
+// price for poly_yes__kalshi_no (and leg A's for kalshi_yes__poly_no) is the
+// DERIVED NO price (1 - yes bid), never a raw book price — shown explicitly
+// because that derivation is exactly what people get wrong.
+const BOOK_ARB_DIR_META = {
+  poly_yes__kalshi_no: {
+    label: 'POLY YES + KALSHI NO',
+    legATitle: 'LEG A — POLY YES (ask)',
+    legBTitle: 'LEG B — KALSHI NO (derived: 1 − kalshi YES bid)',
+  },
+  kalshi_yes__poly_no: {
+    label: 'KALSHI YES + POLY NO',
+    legATitle: 'LEG A — KALSHI YES (ask)',
+    legBTitle: 'LEG B — POLY NO (derived: 1 − poly YES bid)',
+  },
+};
+
+function baLadderTable(title, levels) {
+  const rows = (levels || []).slice(0, 6).map(l =>
+    `<tr><td>${(+l.price).toFixed(4)}</td><td class="r">${(+l.size).toFixed(2)}</td></tr>`
+  ).join('');
+  return `<div class="ba-ladder">
+    <div class="ba-ladder-title">${esc(title)}</div>
+    <table class="ba-table"><thead><tr><th>PRICE</th><th>SIZE</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="2" class="dim">— no depth —</td></tr>'}</tbody></table>
+  </div>`;
+}
+
+function baDirectionBlock(dirKey, d, isBest) {
+  const meta = BOOK_ARB_DIR_META[dirKey];
+  const netPerContract = d.max.contracts > 0 ? d.max.profit / d.max.contracts : 0;
+  const topNet = d.top_of_book_net;
+  const pColor = v => v > 0 ? 'g' : 'r';
+
+  const budgetRows = Object.entries(d.by_budget).map(([budget, f]) => `
+    <tr class="ba-budget-row">
+      <td>$${budget}</td><td>${f.contracts.toFixed(2)}</td>
+      <td>${f.vwap_a.toFixed(4)}</td><td>${f.vwap_b.toFixed(4)}</td>
+      <td class="${f.profit>0?'green':'red'}">${f.profit>=0?'+':''}${f.profit.toFixed(2)}</td>
+      <td class="${f.roi>0?'green':'red'}">${(f.roi*100).toFixed(2)}%</td>
+    </tr>`).join('');
+
+  return `
+  <div class="ba-dir-block ${isBest ? 'ba-best' : ''}">
+    <div class="ba-dir-label">${isBest ? '★ BEST — ' : ''}${meta.label}</div>
+    <div class="ba-ladders">
+      ${baLadderTable(meta.legATitle, d.ladders.leg_a)}
+      ${baLadderTable(meta.legBTitle, d.ladders.leg_b)}
+    </div>
+
+    <div class="ba-section-title">MAX EXECUTABLE (UNBOUNDED DEPTH)</div>
+    <div class="detail-row"><span class="detail-key">CONTRACTS</span><span class="detail-val">${d.max.contracts.toFixed(2)}</span>
+      <span class="detail-key" style="margin-left:16px;">VWAP A / B</span><span class="detail-val">${d.max.vwap_a.toFixed(4)} / ${d.max.vwap_b.toFixed(4)}</span></div>
+    <div class="detail-row"><span class="detail-key">COST A / B</span><span class="detail-val">$${d.max.cost_a.toFixed(2)} / $${d.max.cost_b.toFixed(2)}</span>
+      <span class="detail-key" style="margin-left:16px;">PROFIT</span><span class="detail-val ${pColor(d.max.profit)}">${d.max.profit>=0?'+':''}${d.max.profit.toFixed(2)}</span>
+      <span class="detail-key" style="margin-left:16px;">ROI</span><span class="detail-val ${pColor(d.max.roi)}">${(d.max.roi*100).toFixed(2)}%</span></div>
+
+    <div class="ba-section-title">BY BUDGET (PER MARKET)</div>
+    <table class="ba-table">
+      <thead><tr><th>BUDGET</th><th>CONTRACTS</th><th>VWAP A</th><th>VWAP B</th><th>PROFIT</th><th>ROI</th></tr></thead>
+      <tbody>${budgetRows}</tbody>
+    </table>
+
+    <div class="ba-section-title">BREAK-EVEN DEPTH</div>
+    <div class="detail-row"><span class="detail-key">CONTRACTS</span><span class="detail-val">${d.breakeven_contracts.toFixed(2)}</span>
+      <span class="detail-key dim" style="margin-left:16px;font-size:9px;">(depth at which combined cost + fee crosses $1.00)</span></div>
+
+    <div class="ba-section-title">TOP-OF-BOOK vs DEPTH-WALKED NET</div>
+    <div class="detail-row">
+      <span class="detail-key">TOP-OF-BOOK</span>
+      <span class="detail-val ${topNet != null ? pColor(topNet) : 'dim'}">${topNet != null ? (topNet>=0?'+':'')+topNet.toFixed(4) : 'N/A'}</span>
+      <span class="detail-key" style="margin-left:16px;">DEPTH-WALKED (MAX)</span>
+      <span class="detail-val ${pColor(netPerContract)}">${netPerContract>=0?'+':''}${netPerContract.toFixed(4)}</span>
+    </div>
+  </div>`;
+}
+
+function renderBookArb(data, pair) {
+  const body = document.getElementById('book-arb-body');
+  const dirs = Object.keys(BOOK_ARB_DIR_META);
+  const order = dirs.slice().sort((a, b) => (a === data.best_direction ? -1 : b === data.best_direction ? 1 : 0));
+  body.innerHTML = `
+    <div class="detail-row"><span class="detail-key">POLYMARKET</span><span class="detail-val o">${esc(pair.poly_title||'')}</span></div>
+    <div class="detail-row"><span class="detail-key">KALSHI</span><span class="detail-val a">${esc(pair.kalshi_title||'')}</span></div>
+    ${order.map(k => baDirectionBlock(k, data.directions[k], k === data.best_direction)).join('')}
+  `;
+}
+
+async function runBookArb() {
+  const p = (selected != null) ? displayedPairs[selected] : null;
+  if (!p) { showError('BOOK SCAN: select a pair row first.'); return; }
+
+  const hasBook = b => b && (((b.bids||[]).length) || ((b.asks||[]).length));
+  const useBooks = hasBook(p.poly_book) && hasBook(p.kalshi_book);
+  const canGoLive = !!(p.kalshi_ticker && p.poly_token_id);
+  if (!useBooks && !canGoLive) {
+    showError('BOOK SCAN: this row has no order-book depth (run FULL SCAN) and no ticker/token id for a live fetch.');
+    return;
+  }
+
+  showLoading('BOOK SCAN — walking order book depth...');
+  try {
+    let r;
+    if (useBooks) {
+      r = await fetch('/api/book-arb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ poly_book: p.poly_book, kalshi_book: p.kalshi_book }),
+      });
+    } else {
+      r = await fetch(`/api/book-arb/live?kalshi_ticker=${encodeURIComponent(p.kalshi_ticker)}&poly_token_id=${encodeURIComponent(p.poly_token_id)}`);
+    }
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    renderBookArb(data, p);
+    document.getElementById('book-arb-modal').classList.add('show');
+  } catch(e) {
+    showError('BOOK SCAN FAILED: ' + e.message);
+  } finally {
+    hideLoading();
+  }
+}
+
+function closeBookArb() {
+  document.getElementById('book-arb-modal').classList.remove('show');
 }
 
 // ── Sort ───────────────────────────────────────────────────────────────────
@@ -757,14 +966,19 @@ function renderDetail(p) {
       <span class="detail-val">${(p.title_sim*100).toFixed(1)}%</span>
     </div>`;
 
-  // Arb calc
-  const FEE = 0.09;
+  // Arb calc. Kalshi charges a taker fee of 0.07*p*(1-p) on ITS leg only (maxes
+  // out at 1.75c at p=0.5); Polymarket's CLOB is fee-free. Mirrors arb.kalshi_taker_fee.
   let arbHtml = '<div class="detail-title">ARB CALC</div>';
   if (pb != null && pa != null && kb != null && ka != null) {
-    const costPYK   = +pa + (1 - +kb);
-    const profitPYK = +(1 - costPYK - FEE).toFixed(4);
+    // DIR A: POLY YES + KALSHI NO — Kalshi leg is the NO price (1 - kalshi bid).
+    const kalshiNoPrice = 1 - +kb;
+    const feePYK    = kalshiTakerFee(kalshiNoPrice);
+    const costPYK   = +pa + kalshiNoPrice;
+    const profitPYK = +(1 - costPYK - feePYK).toFixed(4);
+    // DIR B: KALSHI YES + POLY NO — Kalshi leg is the Kalshi ask price.
+    const feeKYP    = kalshiTakerFee(+ka);
     const costKYP   = +ka + (1 - +pb);
-    const profitKYP = +(1 - costKYP - FEE).toFixed(4);
+    const profitKYP = +(1 - costKYP - feeKYP).toFixed(4);
     const bestDir   = profitPYK >= profitKYP ? 'POLY YES + KALSHI NO' : 'KALSHI YES + POLY NO';
     const bestProfit = Math.max(profitPYK, profitKYP);
     const pctStr = (bestProfit * 100).toFixed(2) + '%';
@@ -789,7 +1003,7 @@ function renderDetail(p) {
       <div class="detail-row"><span class="detail-key">NET PROFIT</span>
         <span class="detail-val ${bestProfit > 0 ? 'g' : 'r'}" style="font-size:13px;font-weight:bold;">${bestProfit > 0 ? '+' : ''}${bestProfit.toFixed(4)} (${pctStr})</span></div>
       <div class="detail-row"><span class="detail-key">FEE MODEL</span>
-        <span class="detail-val dim">MAX(POLY 2%, KALSHI 7%) = 7%</span></div>`;
+        <span class="detail-val dim">KALSHI 0.07·p·(1-p) ON ITS LEG ONLY, POLY 0%</span></div>`;
   } else {
     arbHtml += '<div style="color:var(--dimmer);font-size:10px;margin-top:4px;">No live prices available — run FULL SCAN</div>';
   }
@@ -855,9 +1069,11 @@ document.getElementById('cmd-input').addEventListener('keydown', async e => {
   } else if (val === 'ARB') {
     arbOnly = !arbOnly;
     toggleArbOnly();
+  } else if (val === 'BOOK' || val === 'F4') {
+    await runBookArb();
   } else if (val === 'HELP') {
     document.getElementById('cmd-hint').textContent =
-      'CMDS: SCAN [cat] | FAST | SIGNALS | PAIRS | ARB (toggle)';
+      'CMDS: SCAN [cat] | FAST | SIGNALS | PAIRS | ARB (toggle) | BOOK (depth-walked arb on selected row)';
     setTimeout(() => document.getElementById('cmd-hint').textContent = '', 5000);
   }
 });
@@ -886,7 +1102,9 @@ document.addEventListener('keydown', e => {
   if (e.key === 'F1') { e.preventDefault(); showView('pairs'); }
   if (e.key === 'F2') { e.preventDefault(); showView('signals'); }
   if (e.key === 'F3') { e.preventDefault(); runScan(); }
+  if (e.key === 'F4') { e.preventDefault(); runBookArb(); }
   if (e.key === 'F8') { e.preventDefault(); runFastScan(); }
+  if (e.key === 'Escape') { closeBookArb(); }
 });
 
 // ── Init ───────────────────────────────────────────────────────────────────
