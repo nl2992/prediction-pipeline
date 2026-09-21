@@ -30,9 +30,10 @@ orders — all with a single command.
 |---|---|
 | Ingest the **entire** open catalog of both venues | Kalshi 13,278 events / 118,405 markets (14 s); Polymarket 18,916 events / 174,625 markets (12 s) |
 | Match everything against everything | full cross-product, no event cap; ~2.5 min of matching |
-| Pair sports games whose titles share no words ("Denver wins" ↔ "Broncos vs. Chiefs") | structured join on teams + start time, **97% of the Kalshi games that have a Polymarket counterpart**; cross-venue price gap median 1c |
+| Pair sports games whose titles share no words ("Denver wins" ↔ "Broncos vs. Chiefs") | structured join on teams + start time; on 2026-09-21, **707 games joined / 1,625 contract pairs**, recall **95.5%** of the Kalshi games that have a Polymarket counterpart (varies with the day's slate); cross-venue price gap median 1c |
 | Reconcile the two venues' **team naming** ("Los Angeles R" ↔ "Rams", code `lar` ↔ `la`) | letter-shorthand + code-prefix bridge, strict token match first so it can't steal a real one; **+23 contract pairs, 0 lost** on a frozen catalog |
-| Pair **spreads, totals, team totals, half lines and MLB player props** on those games ("wins by more than 2.5 goals" ↔ "Spread -2.5"; "1+ hits+runs+RBIs" ↔ "O/U 0.5") | 12 contract classes on the verified game key; equal-line join; football half *winners* refused (tie-leg mismatch) |
+| Pair **spreads, totals, team totals, half lines and MLB player props** on those games ("wins by more than 2.5 goals" ↔ "Spread -2.5"; "1+ hits+runs+RBIs" ↔ "O/U 0.5") | 12 contract classes on the verified game key; equal-line join; **850 spread/total pairs**; football half *winners* refused (tie-leg mismatch) |
+| Follow a game across Polymarket's **split events** — its ladder often lives in a sibling event (`…-2026-09-26-more-markets`), not the base one | 29,855 markets sat in sibling events the game-slug pattern rejected; folding the matchable suffixes in gave **+434 line pairs, 0 lost**, median cross-venue gap 0.005. Corner and exact-score siblings stay excluded — Kalshi lists neither |
 | Pair text-alike markets (elections, awards, economics, culture…) | ~7,500 text pairs, **92.6% of an independent oracle's pairs matched — and 92.6% endorsed too** (the referee no longer rejects what the matcher finds); House races 96% |
 | Flag pairs whose wording matches but settlement may not (weather stations, one-sided deadlines) | kept visible, excluded from alerts (~460 pairs) |
 | Reject look-alike contracts from event context | 26 rules (single game vs season, "run for" vs nominee, county vs state, CA-04 vs MO-04, division vs conference, reach vs win, top-5 vs winner, playoff seed, vote share vs winning, week vs season, "$1t+ IPO" vs plain, stat-line values, bps range, …) with a regression test each |
@@ -223,7 +224,7 @@ targets, and only one of them can reach 100%:
 | Question | Status | Evidence |
 |---|---|---|
 | **Ingestion** — do we pull every open market on both venues? | **Yes, 100%** | `Kalshi 103,451/103,451 · Polymarket 147,491/147,491` on every production scan; `tools.validate_coverage` exits non-zero if a gap appears |
-| **Matching** — is every ingested market paired with one on the other venue? | **No, and it never can be** | `tools.coverage_ledger` |
+| **Matching** — is every ingested market paired with one on the other venue? | **No, and it never can be** | `tools.coverage_ledger`: 3,036 of Kalshi's 3,846 classes (78,474 markets) and 140 of Polymarket's 154 classes (75,504 markets) never match anything |
 
 The second is not a bug to be fixed. **76% of Kalshi markets and 51% of
 Polymarket markets sit in classes the other venue does not list at all.**
@@ -240,7 +241,9 @@ So the meaningful target is **recall against the pairs that genuinely exist**:
 * **Text pairs: 92.6%** of an independent oracle's pairs, and a hand-labelled
   sample of 60 misses was 63% real / 37% oracle error — so ~91% of the oracle is
   the realistic ceiling and adjusted true recall is **≈95%**.
-* **Sports: 97%** of Kalshi games that have a Polymarket counterpart.
+* **Sports: 95.5%** of Kalshi games that have a Polymarket counterpart
+  (2026-09-21: 707 games joined, 1,625 contract pairs). This number moves with
+  the day's slate — it is a live measurement, not a fixed score.
 * **Ladders:** Kalshi's 4,552 midterm margin-of-victory markets are reachable
   only as multi-leg sums, now handled review-only by `tools.ladder_report`.
 

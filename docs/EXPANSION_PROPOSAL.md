@@ -962,3 +962,95 @@ discipline inside `_match_lines`; that is the next pass's job.
 **Ingestion remains 100%** on both venues (103,451/103,451 and
 147,491/147,491). Matching is not 100% and cannot be — see the README's
 "What 100% means" section and `tools.coverage_ledger`.
+
+---
+
+## Pass 18 — Polymarket's sibling line events, and closing pass 17's latent hole
+
+Two fixes. One recovers a large, genuinely matchable set of markets; the other
+hardens a risk pass 17 documented but did not contain.
+
+### 18a — `-more-markets`: one game, several Polymarket events
+
+Pass 17 established that 95% of the unmatched spread/total gap was games that
+never joined, not lines that failed to pair. This pass found out why for the
+reachable part of it.
+
+**Polymarket splits a single game across multiple events.** The moneyline lives
+in the base event; the extra lines live in a sibling whose slug carries a
+suffix:
+
+```
+mls-vwh-dcu-2026-09-26                 <- base game, already joined to Kalshi
+mls-vwh-dcu-2026-09-26-more-markets    <- spreads / totals / team totals
+```
+
+`_PM_GAME_SLUG_RE` requires the slug to END at the date, so **every sibling
+event was rejected before a game could be built**, and its whole ladder was
+invisible — even when the base game joined perfectly.
+
+Measured on a frozen full catalog, by suffix:
+
+| Suffix | Markets | Reachable? |
+|---|---|---|
+| `-more-markets` | **29,855** (545 games) | yes — classes we already handle |
+| `-total-corners` | 26,337 | **no** — Kalshi lists no corner market |
+| `-exact-score` | 10,301 | **no** — Kalshi lists no exact-score market |
+| `-player-props` | 2,727 | partly |
+| `-second-half-result` / `-halftime-result` | 1,886 / 1,846 | yes |
+
+Of the `-more-markets` total, **5,762 markets belong to 97 games already joined
+to Kalshi**. `_p_games` now groups by BASE slug and folds in siblings whose
+suffix is in `_PM_SIBLING_SUFFIXES`. Corners and exact score are deliberately
+excluded — unmatchable by definition, and merging them would only add noise.
+
+Care taken: each snapshot keeps its own `event_id` (other code uses it for pair
+identity); only the grouping key changes. `_PGame.slug` stays the base slug so
+`match_reason` and the one-PM-game-per-Kalshi-game dedupe keep working. Markets
+listed on both base and sibling are de-duped by `market_id`. A sibling with no
+base event is dropped by the existing moneyline/three-way guard.
+
+**Result: 1,158 → 1,592 sports contract pairs (+434, 0 lost).** Every addition
+is a line pair; moneyline stays at 775, confirming these games were already
+joined and only their ladders were missing.
+
+**Precision check on the 434 additions** — median cross-venue price gap
+**0.005**, p90 0.020. One pair exceeded 0.30 and is a *correct* match
+(Central Español −2.5) against an empty Kalshi book defaulting to a 0.5 mid.
+Two venues pricing within half a cent are quoting the same contract; this is
+the same evidence standard passes 12–13 used.
+
+### 18b — the latent hole from pass 17 was not hypothetical
+
+Pass 17 closed the city+letter rule's ambiguity in `_code_map` but left
+`_subject_agrees` on the permissive predicate, and recorded the residual risk
+honestly. Writing the regression test showed it was **reachable, not latent**:
+on unmodified `main`, a game carrying both an Angels and an Athletics team-total
+at the same line value pairs the Kalshi ANGELS line to the Polymarket ATHLETICS
+line, because `_names_agree("Los Angeles A", "Athletics")` is True.
+
+```
+AssertionError: 'mlb-laa-oak-2026-09-22-team-total-oak-4pt5'
+             != 'mlb-laa-oak-2026-09-22-team-total-laa-4pt5'
+```
+
+A wrong line pair does not merely miss an arb — it *invents* one, pricing two
+different teams' totals against each other. `_subject_agrees` gained a `strict`
+flag and `_match_lines` now runs strict-first per contract class, the same
+discipline `_code_map` uses. **0 live pairs changed**, because no current slate
+uses that shape; the fix removes the trap rather than repairing damage.
+
+### Coverage after this pass
+
+Ingestion stays **100%** on both venues (103,352/103,352 Kalshi;
+147,634/147,634 Polymarket). The ledger's shape is unchanged and worth
+restating plainly, because it is what bounds matching:
+
+* Kalshi: 3,036 of 3,846 classes never match — **78,474 markets**;
+* Polymarket: 140 of 154 classes never match — **75,504 markets**.
+
+Those are contracts the other venue does not list. Pass 18 did not move that
+ceiling and no matcher rule can; it recovered markets that were matchable and
+were being dropped by a slug pattern. That is the distinction the README's
+"What 100% means" section draws, and it remains the honest answer to
+"match all".
