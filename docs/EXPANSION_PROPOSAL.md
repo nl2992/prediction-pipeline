@@ -115,6 +115,39 @@ indicate where arb surface exists, not confirmed profit.
 
 Status key: ✅ done · 🟡 partial · ⬜ open. Newest first.
 
+### 2026-09-21 (pass 14) — funnel audit: what gets dropped between "pull all" and "match all"
+
+**Why.** Every pass measured recall of the matcher. None measured the FUNNEL —
+how many markets never reach the matcher at all, and why.
+
+| Stage | Kalshi | Polymarket |
+|---|---|---|
+| Catalog (nested) | 10,882 events / 105,544 markets | 17,975 events / 214,725 markets |
+| Dropped: not tradeable | 2,120 (finalized/inactive/closed/initialized) | 66,530 (inactive or closed) |
+| Kept | 103,424 (98.0%) | 148,195 (69.0%) |
+| **Of the kept: end date already PAST** | — | **23,748 (16%)** |
+| Of the kept: beyond a 730-day horizon | 3,384 | 256 |
+
+**Two findings.**
+
+1. **Ended-but-open Polymarket markets (23,748).** Resolution is pending, so the
+   catalog still says open, but the event has happened — they cannot be a live
+   counterpart and their stale last-trade price manufactures edges. A live scan
+   carried a **+5.7c "arb" on an Andy Burnham speech market that ended five days
+   earlier**, and it had passed the pass-13 band review as genuine. Now tagged
+   `match_excluded="ended"`: still ingested (coverage accounting stays 100%,
+   which `health.py` enforces), never matched. Sports are exempt while
+   `gameStartTime` is ahead, since a rescheduled game keeps a stale end date.
+2. **The 730-day horizon** used to drop 3,384 long-dated Kalshi markets —
+   including the **2028 general election**, which closes just past that window.
+   Verified already fixed in parallel work (`days=None` in discover and the
+   alerter); recorded here because the funnel is where it shows up.
+
+**Measured (live):** signals on an already-ended Polymarket leg **4 → 0**; pairs
+47 → 26 (the remainder end within a day, or are Kalshi-side). Top of the list
+after: CMA vocalist, Venezuela leadership ×2, French primary, Trump UN words,
+recession definition, two Oscar supporting-actor contracts.
+
 ### 2026-09-21 (pass 13) — audited the 3–5c band, where the alerter's threshold sits
 
 **Why this band.** `MIN_NET_EMAIL` is 3c, so 3–5c is the zone that decides what
