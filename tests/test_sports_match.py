@@ -4,7 +4,7 @@ from __future__ import annotations
 import unittest
 
 from pipeline import MarketSnapshot, OrderBook
-from sports_match import _code_prefix_bridge, _names_agree, match_sports_games
+from sports_match import _code_prefix_bridge, _names_agree, _p_games, match_sports_games
 
 
 def k(ticker, sub="", series=None):
@@ -308,3 +308,79 @@ class HalfClasses(unittest.TestCase):
                      "1H Moneyline", "first_half_moneyline", ["Broncos", "Rams"],
                      "2026-09-27 20:00:00+00")]
         self.assertFalse([pr for pr in match_sports_games(ks, ps) if "1H-" in pr.kalshi.market_id])
+
+
+class SiblingEvents(unittest.TestCase):
+    """Polymarket splits one game across several EVENTS: the moneyline lives in
+    the base event ("nfl-atl-gb-2026-09-25") while extra lines live in sibling
+    events named "<base>-more-markets" / "-halftime-result" /
+    "-second-half-result" -- slugs _PM_GAME_SLUG_RE rejects outright because
+    they run past the date. _p_games must fold the sibling's markets into the
+    base game (see _PM_SIBLING_SUFFIXES)."""
+
+    def _game(self):
+        et = "KXNFLGAME-26SEP25ATLGB"
+        ks = [k(f"{et}-ATL", "Atlanta", "KXNFLGAME"), k(f"{et}-GB", "GB Packers", "KXNFLGAME")]
+        ps = [p2("nfl-atl-gb-2026-09-25", ["Falcons", "Packers"], "2026-09-25 20:00:00+00")]
+        return ks, ps
+
+    def test_more_markets_sibling_lines_are_reachable(self):
+        ks, ps = self._game()
+        ks += [kline("KXNFLSPREAD-26SEP25ATLGB-GB4", "GB Packers wins by over 3.5 points",
+                     "KXNFLSPREAD")]
+        # The spread line lives on a SIBLING event, not the base game's slug.
+        ps += [pline("nfl-atl-gb-2026-09-25-more-markets",
+                     "nfl-atl-gb-2026-09-25-more-markets-spread-home-3pt5",
+                     "Spread -3.5", "spreads", ["Packers", "Falcons"], "2026-09-25 20:00:00+00")]
+        got = {pr.kalshi.market_id: pr.poly.market_id for pr in match_sports_games(ks, ps)}
+        self.assertEqual(got.get("KXNFLSPREAD-26SEP25ATLGB-GB4"),
+                         "nfl-atl-gb-2026-09-25-more-markets-spread-home-3pt5")
+
+    def test_p_games_merges_sibling_into_one_game_keeping_base_slug(self):
+        ks, ps = self._game()
+        ps += [pline("nfl-atl-gb-2026-09-25-more-markets",
+                     "nfl-atl-gb-2026-09-25-more-markets-spread-home-3pt5",
+                     "Spread -3.5", "spreads", ["Packers", "Falcons"], "2026-09-25 20:00:00+00")]
+        games = _p_games(ps)
+        self.assertEqual(len(games), 1)
+        g = games[0]
+        # _PGame.slug stays the BASE slug (match_reason / pass-3 dedupe rely on it).
+        self.assertEqual(g.slug, "nfl-atl-gb-2026-09-25")
+        self.assertIn("spreads", g.lines)
+        self.assertEqual(len(g.lines["spreads"]), 1)
+
+    def test_total_corners_sibling_is_not_merged(self):
+        ks, ps = self._game()
+        ks += [kline("KXNFLSPREAD-26SEP25ATLGB-GB4", "GB Packers wins by over 3.5 points",
+                     "KXNFLSPREAD")]
+        # Same contract shape as a real merge-able sibling, but "-total-corners"
+        # has no Kalshi counterpart at all and must NOT be folded into the game.
+        ps += [pline("nfl-atl-gb-2026-09-25-total-corners",
+                     "nfl-atl-gb-2026-09-25-total-corners-spread-home-3pt5",
+                     "Spread -3.5", "spreads", ["Packers", "Falcons"], "2026-09-25 20:00:00+00")]
+        games = _p_games(ps)
+        self.assertEqual(len(games), 1)
+        self.assertEqual(games[0].lines, {})
+        self.assertFalse([pr for pr in match_sports_games(ks, ps) if "SPREAD" in pr.kalshi.market_id])
+
+    def test_duplicate_market_listed_on_base_and_sibling_is_not_double_added(self):
+        ks, ps = self._game()
+        dup = pline("nfl-atl-gb-2026-09-25", "nfl-atl-gb-2026-09-25-spread-home-3pt5",
+                    "Spread -3.5", "spreads", ["Packers", "Falcons"], "2026-09-25 20:00:00+00")
+        ps.append(dup)
+        # Same market_id re-listed under the sibling event -- must be de-duped.
+        sibling_dup = MarketSnapshot("polymarket", dup.market_id,
+                                      "nfl-atl-gb-2026-09-25-more-markets", dup.title, "open",
+                                      None, "", OrderBook(bids=[], asks=[]), extra=dict(dup.extra))
+        ps.append(sibling_dup)
+        games = _p_games(ps)
+        self.assertEqual(len(games), 1)
+        self.assertEqual(len(games[0].lines["spreads"]), 1)
+
+    def test_sibling_only_game_with_no_base_event_is_dropped(self):
+        # No base moneyline in the snapshot set at all -- nothing for a Kalshi
+        # join to anchor on, so the guard in _p_games drops it.
+        ps = [pline("nfl-atl-gb-2026-09-25-more-markets",
+                    "nfl-atl-gb-2026-09-25-more-markets-spread-home-3pt5",
+                    "Spread -3.5", "spreads", ["Packers", "Falcons"], "2026-09-25 20:00:00+00")]
+        self.assertEqual(_p_games(ps), [])
