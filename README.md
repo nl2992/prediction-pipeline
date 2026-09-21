@@ -40,6 +40,7 @@ orders — all with a single command.
 | Reach **multi-leg** relationships a 1-to-1 matcher structurally cannot (Kalshi `Kotek, 8+ pts` ↔ the **sum** of Polymarket's `9-12%`, `12-15%`, `15-18%`, `18%+`) | `ladder_match.py` + `python -m tools.ladder_report`; 235 rungs across 25 midterm margin-of-victory races, 28 settlement-safe edges. **Review only** — no N-leg executor, no depth data |
 | Measure coverage live | `python -m tools.coverage_report [--text]` — ingestion counts, sports recall vs an independent oracle, price agreement. A funnel audit (pass 14) pins what is ingested vs held out of matching and why |
 | Price every endorsed pair from live order books, compute net-of-fee edge both directions | ~485 positive-net candidates per full scan, 51 above the alerter's 3c threshold; the top of the list AND the 3–5c band are hand-audited (16 mismatch classes removed in passes 12–13) |
+| Answer **which pairs are arbable, and where the alpha is** | `SUMMARY` (F5): three-gate funnel, fee-model contrast (53 vs 626 positive on the same pairs), per-category/source tables, and an executable total that counts only plausible edges — $3,062 of $11,890 raw |
 | Show the **depth-walked executable arb** in the terminal — VWAP per leg, profit by budget, break-even depth, and top-of-book vs depth-walked side by side | `BOOK SCAN` (F4) over `book_arb.py`; works off the scan's ladders or re-fetches both books live |
 | Email / dashboard / dry-run execution | `alerter.py`, `server.py`, `executor.py` |
 
@@ -263,6 +264,65 @@ it usable after a `FAST SCAN`, since that path fetches no order books at all.
 > than a hardcoded number.
 
 
+### Which pairs actually have arbitrage?
+
+`SUMMARY` (sidebar, or **F5**) answers this directly after a scan:
+
+![Dashboard, scan summary](docs/img/dashboard-summary.png)
+
+The headline is the **alerter gate** — v2-endorsed with no settlement risk,
+i.e. the population that actually drives emails. From the 2026-09-21 scan:
+
+| Population | priced | positive (accurate fee) | positive (flat 7¢) |
+|---|---|---|---|
+| All pairs (7,903) | 6,812 | 771 | 91 |
+| `arb_eligible` — the dashboard's old ARB column (1,193) | 1,192 | **11** | **1** |
+| **Alerter gate (7,430)** | 6,359 | **626** | 53 |
+
+The dashboard used to read "ARB 0" on 8,000 pairs. That was never an absence of
+arbitrage — it was a strict eligibility filter stacked on a deliberately
+conservative flat 7¢ fee (`discover.py`'s `FEE = 0.07`). Kalshi's real taker fee
+is `0.07·p·(1−p)`, a maximum of **1.75¢**. Same pairs, same books: **53 positive
+under the flat model, 626 under the real one.** 626 against the alerter's own
+independently reported 599 corroborates the gate.
+
+A related trap, now fixed: `arb_net_profit` was only assigned when positive, so
+`None` meant *unprofitable*, not *unpriced*. `arb_net_accurate` and
+`arb_net_flat7` are recorded even when negative.
+
+### Where the alpha actually is
+
+Raw executable profit across positive pairs is ~$11,890. **That number is
+junk**, and the summary refuses to headline it:
+
+| | pairs | executable $ |
+|---|---|---|
+| Plausible (edge ≤ 10¢) | 594 | **$3,062.64** |
+| Implausible (edge > 10¢) | 32 | $8,827.15 |
+
+A net edge of +0.9593 means paying ~4¢ for a guaranteed $1. That is a stale
+book or a mismatched pair, not money. So the headline counts the plausible band
+only; the suspect pairs are shown beside it in red and routed to a **review
+queue** for the matcher, which is how this repo has always treated high-edge
+artifacts. Grouped `EXEC $` sums the same band, with a test pinning that the
+grouped dollars equal the headline so the two cannot drift apart.
+
+Split by source, on real data:
+
+| source | pairs | positive | executable $ |
+|---|---|---|---|
+| text | 6,264 | 616 | **$3,059.44** |
+| sports | 1,166 | 10 | **$3.20** |
+
+That independently reproduces the finding documented since pass 12: sports
+pairs bought coverage, not opportunities.
+
+**Sorting.** Column headers sort the pairs table (net accurate, net flat 7¢,
+exec $, exec contracts, catalog edge, similarity, confidence, close), with
+asc/desc. A `GATE` selector switches population (all / arb-eligible /
+alerter-gate, defaulting to the last), and `PRICED ONLY` separates unpriced
+from unprofitable.
+
 ### Are there arbitrage opportunities right now?
 
 From the 2026-09-21 run: **599 candidates survive the net-of-fee filter, and the
@@ -288,14 +348,26 @@ on this run — no API key present**.
 
 Two further caveats, both measured rather than assumed:
 
-* **The two entry points disagree, and the reason matters.** On the same
-  catalog, `discover.py --days 730 --show-prices` computed a net edge for only
-  **1 of 7,903** pairs — `--enrich-margin` fetches live books for a subset by
-  default, and a pair with no live book gets no net number at all. 843 pairs
-  showed a positive *catalog* gross edge, but catalog quotes are systematically
-  optimistic: the ladder work measured them inflating opportunity roughly
-  **3x** (76 apparent edges → 28 against real books). Trust the alerter's
-  figure, not the catalog one.
+* **The scan's own ARB column under-reports, and the reason is the fee.**
+  `discover.py` scores pairs with a deliberately conservative **flat 7c**
+  (`FEE = 0.07`, "worst-case"), while Kalshi's real taker fee is
+  `0.07·p·(1−p)` — a maximum of **1.75c** at p = 0.5, on the Kalshi leg only.
+  Re-scoring the same 2026-09-21 scan both ways:
+
+  | | positive pairs |
+  |---|---|
+  | flat 7c (what the scan displayed) | **1** |
+  | accurate `0.07·p·(1−p)` | **11** |
+
+  of 1,193 arb-eligible / 1,192 priced pairs, with live books on all but one.
+  A second, separate point: a `None` in `arb_net_profit` means *not positive*,
+  **not** *not priced* — the field is only assigned when profit > 0. Conflating
+  those two is how a scan of 7,903 pairs reads as "1 priced".
+
+  The SUMMARY view reports both fee models side by side for exactly this
+  reason, and 843 pairs showed a positive *catalog* gross edge — catalog quotes
+  being systematically optimistic, roughly **3x** on the ladder measurement
+  (76 apparent edges → 28 against real books).
 * **Sports pairs yield almost no arbitrage.** Measured on the pass-12 run:
   5 positive edges out of 1,127 priced pairs, best +2.5c, all on illiquid
   books. Cross-venue sports pricing is efficient, so that work bought coverage,
