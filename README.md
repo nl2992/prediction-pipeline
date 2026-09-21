@@ -31,7 +31,7 @@ orders — all with a single command.
 | Ingest the **entire** open catalog of both venues | Kalshi 13,278 events / 118,405 markets (14 s); Polymarket 18,916 events / 174,625 markets (12 s) |
 | Match everything against everything | full cross-product, no event cap; ~2.5 min of matching |
 | Pair sports games whose titles share no words ("Denver wins" ↔ "Broncos vs. Chiefs") | structured join on teams + start time, **97% of the Kalshi games that have a Polymarket counterpart**; cross-venue price gap median 1c |
-| Pair **spreads and totals** on those games ("wins by more than 2.5 goals" ↔ "Spread -2.5") | +558 contract pairs, matched 0% before pass 9; equal-line join (now incl. first-half/team-total/player-prop classes), price gap median ~1c |
+| Pair **spreads, totals, team totals, half lines and MLB player props** on those games ("wins by more than 2.5 goals" ↔ "Spread -2.5"; "1+ hits+runs+RBIs" ↔ "O/U 0.5") | 12 contract classes on the verified game key; equal-line join; football half *winners* refused (tie-leg mismatch) |
 | Pair text-alike markets (elections, awards, economics, culture…) | ~7,500 text pairs, **92.6% of an independent oracle's pairs matched — and 92.6% endorsed too** (the referee no longer rejects what the matcher finds); House races 96% |
 | Flag pairs whose wording matches but settlement may not (weather stations, one-sided deadlines) | kept visible, excluded from alerts (~460 pairs) |
 | Reject look-alike contracts from event context | 26 rules (single game vs season, "run for" vs nominee, county vs state, CA-04 vs MO-04, division vs conference, reach vs win, top-5 vs winner, playoff seed, vote share vs winning, week vs season, "$1t+ IPO" vs plain, stat-line values, bps range, …) with a regression test each |

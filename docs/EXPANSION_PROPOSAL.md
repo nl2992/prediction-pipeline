@@ -115,6 +115,32 @@ indicate where arb surface exists, not confirmed profit.
 
 Status key: ✅ done · 🟡 partial · ⬜ open. Newest first.
 
+### 2026-09-21 (pass 11) — three more contract classes, and one refused on purpose
+
+**Proposal.** Pass 10 wired nine contract classes; a survey of every Polymarket
+`sportsMarketType` against Kalshi's series families showed what was still
+uncovered. Three classes are genuinely matchable, one looks matchable and is not.
+
+| Class | Kalshi | Polymarket | Verdict |
+|---|---|---|---|
+| Half TEAM totals | `KX*1HTEAMTOTAL` (320 mkts) | `first_half_team_totals` (416) | ✅ matched |
+| Soccer halftime / 2nd-half result | `KX*1H` / `KX*2H` per-team legs | `soccer_halftime_result` (1,851), `soccer_second_half_result` (1,914) | ✅ matched per team; Kalshi's TIE leg never pairs |
+| Football / basketball half WINNER | `KXNCAAF1H` (702), `KXWNBA1HWINNER`, `KXNFL1H` | `first_half_moneyline` (33), `second_half_moneyline` (67) | ❌ **refused**: every Kalshi half-winner event carries a tie leg (252/252 live) while PM's half moneyline is 2-way, so a drawn half settles differently |
+
+**Also implemented:** team subjects now resolve through the game join's already
+verified mapping, so a line market may say "Denver" on one venue and "Broncos"
+on the other, and the Polymarket subject parser strips trailing `1H`/`2H`
+markers ("Broncos 1H O/U 6.5" → Broncos).
+
+**Live result: 0 pairs from the new classes right now — and that is data, not a
+bug.** Kalshi lists 1H team totals for Sep 27 games (which ARE joined);
+Polymarket lists them for Oct 25 games (not yet joined). They pair when the two
+venues' windows overlap. Unit tests pin each class so the wiring stays honest.
+
+**Sports totals at this run:** 1,130 contract pairs (765 moneyline, 91 spread,
+241 total, 33 team total); cross-venue price gap median 1c, p90 8.5c, one pair
+above 30c.
+
 ### 2026-09-21 — live verification of the pass-10 line classes
 
 Ran the join against the live catalogs at 03:06 UTC to confirm the nine
