@@ -14,7 +14,7 @@ class SchemaInit(unittest.TestCase):
         store.init_db()  # must not raise on a second call
         with store.connect() as conn:
             row = conn.execute("SELECT version FROM schema_version").fetchone()
-            self.assertEqual(row["version"], 1)
+            self.assertEqual(row["version"], store.SCHEMA_VERSION)
             tables = {
                 r["name"] for r in conn.execute(
                     "SELECT name FROM sqlite_master WHERE type='table'"
@@ -33,6 +33,58 @@ class SchemaInit(unittest.TestCase):
             self.assertEqual(fk, 1)
         finally:
             conn.close()
+
+    def test_migrates_v1_db_adding_new_columns_without_data_loss(self):
+        # Hand-build a schema_version=1 DB (no duplicate_pair_keys /
+        # books_json columns) with one existing scan + pair row, then confirm
+        # init_db() migrates it in place: columns appear, old data survives,
+        # version is bumped.
+        conn = store.connect()
+        try:
+            conn.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)")
+            conn.execute("INSERT INTO schema_version (version) VALUES (1)")
+            conn.execute("""
+                CREATE TABLE scans (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, started_at TEXT NOT NULL,
+                    finished_at TEXT, status TEXT NOT NULL, mode TEXT NOT NULL,
+                    params_json TEXT, coverage_json TEXT, error TEXT,
+                    pair_count INTEGER, arb_count INTEGER, summary_json TEXT
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE pair_snapshots (
+                    scan_id INTEGER NOT NULL, pair_key TEXT NOT NULL, rank INTEGER,
+                    kalshi_ticker TEXT, poly_token_id TEXT, poly_id TEXT, category TEXT,
+                    net REAL, exec_profit REAL, exec_contracts REAL, close_time TEXT,
+                    pair_json TEXT NOT NULL, PRIMARY KEY (scan_id, pair_key)
+                )
+            """)
+            conn.execute(
+                "INSERT INTO scans (id, started_at, status, mode, pair_count) "
+                "VALUES (1, 'x', 'completed', 'full', 1)"
+            )
+            conn.execute(
+                "INSERT INTO pair_snapshots (scan_id, pair_key, rank, pair_json) "
+                "VALUES (1, 'K1|T1', 0, '{\"kalshi_ticker\": \"K1\"}')"
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        store.init_db()
+
+        with store.connect() as conn:
+            version = conn.execute("SELECT version FROM schema_version").fetchone()["version"]
+            self.assertEqual(version, store.SCHEMA_VERSION)
+            scan_cols = {r["name"] for r in conn.execute("PRAGMA table_info(scans)").fetchall()}
+            pair_cols = {r["name"] for r in conn.execute("PRAGMA table_info(pair_snapshots)").fetchall()}
+            self.assertIn("duplicate_pair_keys", scan_cols)
+            self.assertIn("books_json", pair_cols)
+
+        got = store.get_scan(1)
+        self.assertEqual(got["pair_count"], 1)
+        self.assertIsNone(got["duplicate_pair_keys"])
+        self.assertEqual(got["pairs"], [{"kalshi_ticker": "K1"}])
 
 
 class PairKeyParity(unittest.TestCase):
@@ -157,6 +209,114 @@ class ScanRoundTrip(unittest.TestCase):
                 "SELECT COUNT(*) AS n FROM pair_snapshots WHERE scan_id = ?", (scan_id,)
             ).fetchone()["n"]
         self.assertEqual(remaining, 0)
+
+    def test_duplicate_pair_keys_are_deduped_first_occurrence_kept_and_counted(self):
+        # Two pairs share a pair_key (same kalshi_ticker + poly_token_id) —
+        # without dedup this would violate pair_snapshots' PK(scan_id,
+        # pair_key) and abort the whole insert.
+        pairs = [
+            {"kalshi_ticker": "K1", "poly_token_id": "T1", "exec_profit": 1.0},
+            {"kalshi_ticker": "K2", "poly_token_id": "T2", "exec_profit": 2.0},
+            {"kalshi_ticker": "K1", "poly_token_id": "T1", "exec_profit": 999.0},  # dup of row 0
+            {"kalshi_ticker": "K1", "poly_token_id": "T1", "exec_profit": 999.0},  # dup of row 0 again
+        ]
+        scan_id = store.start_scan("full", {})
+        store.finish_scan(scan_id, pairs, {})
+
+        got = store.get_scan(scan_id)
+        self.assertEqual(got["duplicate_pair_keys"], 2)
+        self.assertEqual(got["pair_count"], 4)  # raw count from discover, unchanged
+        # only the first occurrence (exec_profit 1.0) survives, not the dup's 999.0
+        self.assertEqual(len(got["pairs"]), 2)
+        by_key = {store.pair_key(p): p for p in got["pairs"]}
+        self.assertEqual(by_key["K1|T1"]["exec_profit"], 1.0)
+        self.assertEqual(by_key["K2|T2"]["exec_profit"], 2.0)
+
+    def test_no_duplicates_leaves_duplicate_pair_keys_at_zero(self):
+        scan_id = store.start_scan("full", {})
+        store.finish_scan(scan_id, self._pairs(), {})
+        self.assertEqual(store.get_scan(scan_id)["duplicate_pair_keys"], 0)
+
+
+class BooksJsonSizeControl(unittest.TestCase):
+    """poly_book/kalshi_book (the bulk of a pair's byte size) live in a
+    separate books_json column so old scans can be trimmed independently of
+    every other field; only the BOOKS_KEEP_PER_MODE most recent completed
+    scans per mode keep their ladders."""
+
+    def setUp(self):
+        store.init_db()
+
+    def _pair_with_books(self, ticker, token, profit):
+        return {
+            "kalshi_ticker": ticker, "poly_token_id": token, "exec_profit": profit,
+            "poly_book": {"bids": [[0.4, 100]], "asks": [[0.42, 100]]},
+            "kalshi_book": {"bids": [[0.55, 150]], "asks": [[0.58, 100]]},
+        }
+
+    def test_books_round_trip_on_the_latest_scan(self):
+        pair = self._pair_with_books("K1", "T1", 1.0)
+        scan_id = store.start_scan("full", {})
+        store.finish_scan(scan_id, [pair], {})
+
+        got = store.get_scan(scan_id)
+        self.assertEqual(got["pairs"], [pair])  # byte-identical restore
+
+        with store.connect() as conn:
+            row = conn.execute(
+                "SELECT pair_json, books_json FROM pair_snapshots WHERE scan_id = ?", (scan_id,)
+            ).fetchone()
+        self.assertNotIn("poly_book", row["pair_json"])
+        self.assertNotIn("kalshi_book", row["pair_json"])
+        self.assertIsNotNone(row["books_json"])
+
+    def test_pair_without_books_gets_no_books_json(self):
+        scan_id = store.start_scan("full", {})
+        store.finish_scan(scan_id, [{"kalshi_ticker": "K1", "poly_token_id": "T1"}], {})
+        with store.connect() as conn:
+            row = conn.execute(
+                "SELECT books_json FROM pair_snapshots WHERE scan_id = ?", (scan_id,)
+            ).fetchone()
+        self.assertIsNone(row["books_json"])
+
+    def test_older_scans_of_same_mode_lose_books_json_beyond_keep(self):
+        ids = []
+        for i in range(store.BOOKS_KEEP_PER_MODE + 2):
+            sid = store.start_scan("full", {})
+            store.finish_scan(sid, [self._pair_with_books("K1", "T1", float(i))], {})
+            ids.append(sid)
+
+        with store.connect() as conn:
+            books_json_by_scan = {
+                r["scan_id"]: r["books_json"]
+                for r in conn.execute(
+                    "SELECT scan_id, books_json FROM pair_snapshots WHERE scan_id IN "
+                    f"({','.join('?' * len(ids))})", ids
+                ).fetchall()
+            }
+        kept = ids[-store.BOOKS_KEEP_PER_MODE:]
+        trimmed = ids[:-store.BOOKS_KEEP_PER_MODE]
+        for sid in kept:
+            self.assertIsNotNone(books_json_by_scan[sid], f"scan {sid} should still have books_json")
+        for sid in trimmed:
+            self.assertIsNone(books_json_by_scan[sid], f"scan {sid} should have been trimmed")
+
+        # trimmed scans still restore every other field -- only the ladders are gone
+        oldest = store.get_scan(ids[0])
+        self.assertEqual(oldest["pairs"][0]["exec_profit"], 0.0)
+        self.assertNotIn("poly_book", oldest["pairs"][0])
+
+    def test_trimming_is_scoped_per_mode(self):
+        full_ids = [store.start_scan("full", {}) for _ in range(3)]
+        for sid in full_ids:
+            store.finish_scan(sid, [self._pair_with_books("K1", "T1", 0.0)], {})
+        fast_id = store.start_scan("fast", {})
+        store.finish_scan(fast_id, [self._pair_with_books("K1", "T1", 0.0)], {})
+
+        # the fast-mode scan must keep its books even though several
+        # full-mode scans happened after it started (different mode bucket)
+        got = store.get_scan(fast_id)
+        self.assertIn("poly_book", got["pairs"][0])
 
 
 class Reviews(unittest.TestCase):
