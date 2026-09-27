@@ -378,6 +378,18 @@ def fail_scan(scan_id: int, error: str) -> None:
         )
 
 
+def cancel_scan(scan_id: int) -> None:
+    """Marks a running scan row 'cancelled' (Phase 2c background jobs). Never
+    touches a row that already reached a terminal status, so a cancel racing
+    a just-finished/failed scan can't clobber its real outcome."""
+    with closing(connect()) as conn, conn:
+        conn.execute(
+            """UPDATE scans SET finished_at = ?, status = 'cancelled'
+               WHERE id = ? AND status = 'running'""",
+            (_now(), scan_id),
+        )
+
+
 def _scan_row_to_dict(row: sqlite3.Row) -> dict:
     d = dict(row)
     d["params"] = json.loads(d.pop("params_json")) if d.get("params_json") else None
