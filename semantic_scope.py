@@ -291,3 +291,17 @@ def competition_identity_conflict(a: str, b: str) -> bool:
     ca, cb = competition_identity(a), competition_identity(b)
     return bool(ca and cb and ca != cb
                 and frozenset({ca, cb}) not in _COMPATIBLE_COMPETITIONS)
+
+
+def founded_by_conflict(a: str, b: str) -> bool:
+    """True when one side frames an organization founded by (or belonging
+    to) a person and the other side names that person bare."""
+    fa, fb = founded_by_scope(a), founded_by_scope(b)
+    if fa == fb:
+        return False
+    org_text, person_text = (a, b) if fa else (b, a)
+    person = founded_by_subject(org_text)
+    if not person:
+        return False
+    surname = person.split()[-1]
+    return bool(re.search(rf"\b{re.escape(surname)}\b", person_text, re.I))

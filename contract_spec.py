@@ -42,8 +42,7 @@ from semantic_scope import (
     competition_result_scope,
     election_office_bundle,
     f1_career_scope,
-    founded_by_scope,
-    founded_by_subject,
+    founded_by_conflict,
     government_outcome_scope,
     judicial_selection_stage,
     league_outcome_scope,
@@ -1113,18 +1112,9 @@ def match_spec(
         return _reject("hole-in-one occurrence vs tournament winner")
     if {competition_a, competition_b} == {"participant", "winner"}:
         return _reject("tournament participation vs winner")
-    # A party/company "founded by" or possessively belonging to a person is
-    # that organization, not the person — even when the predicate (e.g.
-    # "win"/"contest") matches on both sides.
-    founded_a, founded_b = founded_by_scope(a.raw), founded_by_scope(b.raw)
-    if founded_a != founded_b:
-        org_text, person_text = (a.raw, b.raw) if founded_a else (b.raw, a.raw)
-        person = founded_by_subject(org_text)
-        if person:
-            surname = person.split()[-1]
-            if re.search(rf"\b{re.escape(surname)}\b", person_text, re.I) \
-                    and not founded_by_scope(person_text):
-                return _reject("organization founded by person vs person")
+    # A party founded by (or belonging to) a person is not that person.
+    if founded_by_conflict(a.raw, b.raw):
+        return _reject("organization founded by person vs person")
     if competition_identity_conflict(a.raw, b.raw):
         return _reject("competition identity mismatch")
     judicial_a = judicial_selection_stage(a.raw)
