@@ -480,85 +480,87 @@ class ScanPersistence(unittest.TestCase):
         self.assertEqual(rows[0]["error"], "boom")
 
 
+def _json(resp):
+    """(status, body) of a JSONResponse returned by a route function."""
+    return resp.status_code, json.loads(resp.body)
+
+
 class ScanApiEndpoints(unittest.TestCase):
     """GET /api/scans/latest, /api/scans, /api/scans/{id} — read paths over
-    the Phase 2a store, exercised through TestClient so routing (including
-    the /api/scans/latest vs /api/scans/{id} ordering) is covered too."""
+    the Phase 2a store. Route functions are called directly (no TestClient:
+    newer Starlette needs an extra httpx package CI doesn't install)."""
 
     def setUp(self):
         import store
         store.init_db()
-        from fastapi.testclient import TestClient
-        self.client = TestClient(server.app)
+
+    def test_latest_route_registered_before_id_route(self):
+        paths = [getattr(r, "path", "") for r in server.app.routes]
+        self.assertLess(paths.index("/api/scans/latest"), paths.index("/api/scans/{scan_id}"))
 
     def test_scans_latest_404_when_no_completed_scan(self):
-        resp = self.client.get("/api/scans/latest")
-        self.assertEqual(resp.status_code, 404)
-        self.assertEqual(resp.json(), {"error": "no completed scan"})
+        status, body = _json(server.api_scans_latest())
+        self.assertEqual(status, 404)
+        self.assertEqual(body, {"error": "no completed scan"})
 
     def test_scan_then_latest_round_trip_with_reviews(self):
         pairs = [{"kalshi_ticker": "K1", "poly_token_id": "T1", "category": "election"}]
         with patch("discover.discover", return_value=pairs):
-            scan_resp = self.client.get("/api/scan")
-        self.assertEqual(scan_resp.status_code, 200)
-        body = scan_resp.json()
+            status, body = _json(server.api_scan())
+        self.assertEqual(status, 200)
         self.assertTrue(body["persisted"])
         scan_id = body["scan_id"]
 
-        post = self.client.post("/api/reviews", json={"pair_key": "K1|T1", "verdict": "match"})
-        self.assertEqual(post.status_code, 200)
+        status, _ = _json(server.api_add_review({"pair_key": "K1|T1", "verdict": "match"}))
+        self.assertEqual(status, 200)
 
-        latest = self.client.get("/api/scans/latest")
-        self.assertEqual(latest.status_code, 200)
-        latest_body = latest.json()
-        self.assertEqual(latest_body["id"], scan_id)
-        self.assertEqual(latest_body["pairs"], pairs)
-        self.assertEqual(latest_body["reviews"]["K1|T1"]["verdict"], "match")
+        status, latest = _json(server.api_scans_latest())
+        self.assertEqual(status, 200)
+        self.assertEqual(latest["id"], scan_id)
+        self.assertEqual(latest["pairs"], pairs)
+        self.assertEqual(latest["reviews"]["K1|T1"]["verdict"], "match")
 
     def test_scans_list_and_get_by_id(self):
         with patch("discover.discover", return_value=[]):
-            scan_resp = self.client.get("/api/scan/fast")
-        scan_id = scan_resp.json()["scan_id"]
+            _, body = _json(server.api_scan_fast())
+        scan_id = body["scan_id"]
 
-        listing = self.client.get("/api/scans?limit=5")
-        self.assertEqual(listing.status_code, 200)
-        self.assertTrue(any(s["id"] == scan_id for s in listing.json()["scans"]))
+        status, listing = _json(server.api_scans(limit=5))
+        self.assertEqual(status, 200)
+        self.assertTrue(any(s["id"] == scan_id for s in listing["scans"]))
 
-        one = self.client.get(f"/api/scans/{scan_id}")
-        self.assertEqual(one.status_code, 200)
-        self.assertEqual(one.json()["id"], scan_id)
+        status, one = _json(server.api_scan_by_id(scan_id))
+        self.assertEqual(status, 200)
+        self.assertEqual(one["id"], scan_id)
 
-        missing = self.client.get("/api/scans/999999")
-        self.assertEqual(missing.status_code, 404)
+        status, _ = _json(server.api_scan_by_id(999999))
+        self.assertEqual(status, 404)
 
 
 class ReviewsApi(unittest.TestCase):
     def setUp(self):
         import store
         store.init_db()
-        from fastapi.testclient import TestClient
-        self.client = TestClient(server.app)
 
     def test_post_review_422_on_bad_verdict(self):
-        resp = self.client.post("/api/reviews", json={"pair_key": "K1|T1", "verdict": "nope"})
-        self.assertEqual(resp.status_code, 422)
+        status, _ = _json(server.api_add_review({"pair_key": "K1|T1", "verdict": "nope"}))
+        self.assertEqual(status, 422)
 
     def test_post_review_422_on_missing_pair_key(self):
-        resp = self.client.post("/api/reviews", json={"verdict": "match"})
-        self.assertEqual(resp.status_code, 422)
+        status, _ = _json(server.api_add_review({"verdict": "match"}))
+        self.assertEqual(status, 422)
 
     def test_post_review_success_then_get_history_and_current(self):
-        resp = self.client.post(
-            "/api/reviews", json={"pair_key": "K1|T1", "verdict": "mismatch", "reason": "wrong sport"}
-        )
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json()["verdict"], "mismatch")
+        status, review = _json(server.api_add_review(
+            {"pair_key": "K1|T1", "verdict": "mismatch", "reason": "wrong sport"}))
+        self.assertEqual(status, 200)
+        self.assertEqual(review["verdict"], "mismatch")
 
-        history = self.client.get("/api/reviews", params={"pair_key": "K1|T1"})
-        self.assertEqual(len(history.json()["reviews"]), 1)
+        _, history = _json(server.api_reviews(pair_key="K1|T1"))
+        self.assertEqual(len(history["reviews"]), 1)
 
-        current = self.client.get("/api/reviews")
-        self.assertEqual(current.json()["K1|T1"]["verdict"], "mismatch")
+        _, current = _json(server.api_reviews())
+        self.assertEqual(current["K1|T1"]["verdict"], "mismatch")
 
 
 if __name__ == "__main__":
