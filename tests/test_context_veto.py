@@ -896,3 +896,79 @@ class Pass11Precision(unittest.TestCase):
         self.assertFalse(_event_titles_agree(
             pm("Taylor Swift", "Spotify most streamed artist"),
             ks("Taylor Swift", "NFL draft first pick")))
+
+
+def pm_q(label, event, question):
+    """Like pm(), but also carries a full_question (as Polymarket does for a
+    ladder outcome, where the short label alone doesn't show the "be <value>"
+    exact-bucket wording)."""
+    return MarketSnapshot("polymarket", "p", "pe", label, "open", None, "",
+                          OrderBook(bids=[], asks=[]),
+                          extra={"event_title": event, "full_question": question})
+
+
+class BucketVsThreshold(unittest.TestCase):
+    """False positive: an exact-value bucket ("0.2%") on a Polymarket ladder
+    is a different contract from a Kalshi open-ended threshold ("Above
+    0.2%"), even though they share a strike."""
+
+    def test_cpi_exact_bucket_vs_above_threshold_rejected(self):
+        p = pm_q("0.2%", "Core CPI MoM - September 2026",
+                  "Will Core CPI MoM be 0.2% in September?")
+        k = ks("Will CPI Core rise more than 0.2% in September? Above 0.2%",
+               "CPI core in September")
+        self.assertEqual(context_veto(p, k), "exact-value bucket vs open-ended threshold")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_threshold_vs_threshold_survives(self):
+        p = pm_q("Above 0.2%", "Core CPI MoM - September 2026",
+                  "Core CPI above 0.2%?")
+        k = ks("Above 0.2%", "CPI core in September")
+        self.assertNotEqual(context_veto(p, k), "exact-value bucket vs open-ended threshold")
+
+    def test_bucket_vs_bucket_survives(self):
+        p = pm_q("0.3%", "Core CPI MoM - September 2026",
+                  "Will Core CPI MoM be 0.3% in September?")
+        k = ks("Will core CPI be exactly 0.3%?", "CPI core in September")
+        self.assertNotEqual(context_veto(p, k), "exact-value bucket vs open-ended threshold")
+
+    def test_measles_ladder_edge_threshold_survives(self):
+        # Polymarket's ladder-edge rung "↑6k" is itself open-ended (a
+        # threshold), not an exact bucket, so it must not be vetoed against
+        # Kalshi's open-ended "Above 6000" threshold.
+        p = pm_q("↑6k", "Measles cases in U.S. in 2026?",
+                  "Will there be at least 6000 measles cases in the U.S. in 2026?")
+        k = ks("Will there be more than 6000 measles cases in 2026? Above 6000",
+               "Measles cases in 2026")
+        self.assertNotEqual(context_veto(p, k), "exact-value bucket vs open-ended threshold")
+
+
+class ElectionOfficeConflict(unittest.TestCase):
+    """False positive: a US House district race is a different office/race
+    level from a presidential nominee market, even when the same person's
+    name appears on both sides."""
+
+    def test_house_district_vs_presidential_nominee_rejected(self):
+        p = pm("Mike Johnson", "Republican Presidential Nominee 2028")
+        k = ks("Will Mike Johnson be the Republican nominee for LA-04?",
+               "LA-04 Republican nominee?")
+        self.assertEqual(context_veto(p, k), "different office/race level")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_same_district_survives(self):
+        p = pm("Mike Johnson", "LA-04 Republican nominee?")
+        k = ks("Will Mike Johnson be the Republican nominee for LA-04?",
+               "LA-04 Republican nominee?")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_presidential_nominee_survives(self):
+        p = pm("Mike Johnson", "Republican Presidential Nominee 2028")
+        k = ks("Will Mike Johnson be the 2028 Republican presidential nominee?",
+               "Republican Presidential Nominee 2028", "Mike Johnson")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_unidentified_office_is_neutral(self):
+        p = pm("Mike Johnson", "Who will win?")
+        k = ks("Will Mike Johnson be the Republican nominee for LA-04?",
+               "LA-04 Republican nominee?")
+        self.assertIsNone(context_veto(p, k))

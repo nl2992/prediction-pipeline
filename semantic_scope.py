@@ -73,11 +73,32 @@ def club_team_scope(text: str) -> frozenset[str]:
     return frozenset(found)
 
 
+_US_STATE_CODES = (
+    "AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO"
+    "|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC"
+)
+# A two-letter USPS state code followed by a district number ("LA-04",
+# "CA-12") names a US House seat. Restricted to real state abbreviations
+# (rather than any two letters) so it doesn't fire on unrelated dashed codes
+# ("AI-2", ticker fragments, etc.).
+_DISTRICT_CODE_RE = rf"\b(?:{_US_STATE_CODES})-\d{{1,2}}\b"
+
 _ELECTION_OFFICES = {
     "governor": re.compile(r"\bgovernor(?:ship)?\b|\bgubernatorial\b", re.I),
     "senate": re.compile(r"\bsenate\b|\bsenator\b", re.I),
-    "house": re.compile(r"\bhouse\b", re.I),
+    # "house" alone names a US House race, but "House of Representatives" is
+    # also the formal name of many foreign/state legislative CHAMBERS (Berlin's
+    # Abgeordnetenhaus, Bosnia's, Australia's) that indirectly elect a mayor or
+    # prime minister — a bare institutional mention, not that race's own
+    # office. Excluding the "of representatives" phrasing avoids reading a
+    # "Governing Mayor of Berlin ... by the Berlin House of Representatives"
+    # market as BOTH a mayoral and a US-House-style combo race.
+    "house": re.compile(
+        rf"\bhouse\b(?!\s+of\s+representatives)|\bcongressional\s+district\b|{_DISTRICT_CODE_RE}",
+        re.I,
+    ),
     "president": re.compile(r"\bpresident(?:ial)?\b", re.I),
+    "mayor": re.compile(r"\bmayor(?:al)?\b", re.I),
 }
 
 
@@ -87,6 +108,15 @@ def election_office_bundle(text: str) -> frozenset[str]:
         office for office, pattern in _ELECTION_OFFICES.items()
         if pattern.search(text)
     )
+
+
+def election_office_conflict(a: str, b: str) -> bool:
+    """True when both texts identify exactly one elected office, and they
+    differ (e.g. a US House district race vs a presidential nominee market).
+    A market naming more than one office (a combo market) is left to the
+    existing single-race-vs-combo check; unidentified offices never veto."""
+    oa, ob = election_office_bundle(a), election_office_bundle(b)
+    return len(oa) == 1 and len(ob) == 1 and oa != ob
 
 
 _PARTY_LIST_ALIASES = {
@@ -291,6 +321,42 @@ def competition_identity_conflict(a: str, b: str) -> bool:
     ca, cb = competition_identity(a), competition_identity(b)
     return bool(ca and cb and ca != cb
                 and frozenset({ca, cb}) not in _COMPATIBLE_COMPETITIONS)
+
+
+
+# An exact-value bucket ("be 0.2%", "exactly 0.3%", "between 0.2% and 0.3%")
+# and an open-ended threshold ("above/more than/at least X%", "or above",
+# a trailing "+", "≥"/"≤"/"↑"/"↓") are disjoint contract shapes even when
+# they share a strike/value: a CPI ladder's bare "0.2%" bucket resolves YES
+# only for that exact reading, while "Above 0.2%" resolves YES for any
+# reading above it. Conservative: fires only when exactly one side carries
+# each signal (a "0.6%+"/"≤0.0%" ladder-edge rung is itself a threshold, not
+# an exact bucket, so it correctly stays out of `_EXACT_BUCKET_RE`).
+_EXACT_BUCKET_RE = re.compile(
+    r"\bbe\s+(?:exactly\s+)?-?\d+(?:\.\d+)?\s*%"
+    r"|\bexactly\s+-?\d+(?:\.\d+)?\s*%"
+    r"|\bbetween\s+-?\d+(?:\.\d+)?\s*%?\s+and\s+-?\d+(?:\.\d+)?\s*%\b",
+    re.I,
+)
+_THRESHOLD_CUE_RE = re.compile(
+    r"\b(?:above|more than|over|at least|greater than|or above"
+    r"|below|under|at most|less than|or below)\b"
+    r"|[≥≤↑↓]"  # ≥ ≤ ↑ ↓
+    r"|\d+(?:\.\d+)?\s*%\s*\+",
+    re.I,
+)
+
+
+def bucket_threshold_conflict(a: str, b: str) -> bool:
+    """True when one side is an exact-value bucket and the other an
+    open-ended threshold, with neither text carrying both signals."""
+    a_bucket, a_thresh = bool(_EXACT_BUCKET_RE.search(a)), bool(_THRESHOLD_CUE_RE.search(a))
+    b_bucket, b_thresh = bool(_EXACT_BUCKET_RE.search(b)), bool(_THRESHOLD_CUE_RE.search(b))
+    if a_bucket and not a_thresh and b_thresh and not b_bucket:
+        return True
+    if b_bucket and not b_thresh and a_thresh and not a_bucket:
+        return True
+    return False
 
 
 def founded_by_conflict(a: str, b: str) -> bool:

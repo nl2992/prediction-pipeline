@@ -1867,5 +1867,107 @@ class SharedSemanticScopeTests(unittest.TestCase):
         self.assertTrue(d.match, d.reasons)
 
 
+def snap_q(title: str, event_title: str, question: str = "",
+           close: str = "2026-12-31T00:00:00Z") -> MarketSnapshot:
+    """snap() but also carrying a full_question in extra, as Polymarket
+    ladder outcomes do (the short outcome label alone doesn't show the
+    "be <value>" exact-bucket wording)."""
+    return MarketSnapshot(
+        source="x", market_id=title[:12], event_id="", title=title, status="open",
+        close_time=close, fetched_at="x",
+        orderbook=OrderBook(bids=[PriceLevel(0.4, 9.0)], asks=[PriceLevel(0.5, 9.0)]),
+        extra={"event_title": event_title, "full_question": question},
+    )
+
+
+def decide_q(p_title, p_event, p_question, k_title, k_event, k_question=""):
+    p = snap_q(p_title, p_event, p_question)
+    k = snap_q(k_title, k_event, k_question)
+    return match_spec(
+        extract_spec(p), extract_spec(k),
+        same_event=bool(p_event and k_event and p_event == k_event),
+        events_agree=_event_titles_agree(p, k),
+    )
+
+
+class BucketVsThresholdTests(unittest.TestCase):
+    """False positive: an exact-value bucket ("0.2%") on a Polymarket ladder
+    is a different contract from a Kalshi open-ended threshold ("Above
+    0.2%"), even though they share a strike."""
+
+    def test_cpi_exact_bucket_vs_above_threshold_rejected(self):
+        d = decide_q(
+            "0.2%", "Core CPI MoM - September 2026",
+            "Will Core CPI MoM be 0.2% in September?",
+            "Will CPI Core rise more than 0.2% in September? Above 0.2%",
+            "CPI core in September",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("exact-value bucket vs open-ended threshold", d.reasons)
+
+    def test_threshold_vs_threshold_survives(self):
+        d = decide_q(
+            "Above 0.2%", "Core CPI MoM - September 2026", "Core CPI above 0.2%?",
+            "Above 0.2%", "CPI core in September",
+        )
+        self.assertNotIn("exact-value bucket vs open-ended threshold", d.reasons)
+
+    def test_bucket_vs_bucket_survives(self):
+        d = decide_q(
+            "0.3%", "Core CPI MoM - September 2026",
+            "Will Core CPI MoM be 0.3% in September?",
+            "Will core CPI be exactly 0.3%?", "CPI core in September",
+        )
+        self.assertNotIn("exact-value bucket vs open-ended threshold", d.reasons)
+
+    def test_measles_ladder_edge_threshold_survives(self):
+        d = decide_q(
+            "↑6k", "Measles cases in U.S. in 2026?",
+            "Will there be at least 6000 measles cases in the U.S. in 2026?",
+            "Will there be more than 6000 measles cases in 2026? Above 6000",
+            "Measles cases in 2026",
+        )
+        self.assertNotIn("exact-value bucket vs open-ended threshold", d.reasons)
+
+
+class ElectionOfficeConflictTests(unittest.TestCase):
+    """False positive: a US House district race is a different office/race
+    level from a presidential nominee market, even when the same person's
+    name appears on both sides."""
+
+    def test_house_district_vs_presidential_nominee_rejected(self):
+        d = decide_full(
+            "Mike Johnson", "Republican Presidential Nominee 2028",
+            "Will Mike Johnson be the Republican nominee for LA-04?",
+            "LA-04 Republican nominee?",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("different office/race level", d.reasons)
+
+    def test_same_district_survives(self):
+        d = decide_full(
+            "Mike Johnson", "LA-04 Republican nominee?",
+            "Will Mike Johnson be the Republican nominee for LA-04?",
+            "LA-04 Republican nominee?",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_presidential_nominee_survives(self):
+        d = decide_full(
+            "Mike Johnson", "Republican Presidential Nominee 2028",
+            "Will Mike Johnson be the 2028 Republican presidential nominee?",
+            "Republican Presidential Nominee 2028",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_unidentified_office_is_neutral(self):
+        d = decide_full(
+            "Mike Johnson", "Who will win?",
+            "Will Mike Johnson be the Republican nominee for LA-04?",
+            "LA-04 Republican nominee?",
+        )
+        self.assertNotIn("different office/race level", d.reasons)
+
+
 if __name__ == "__main__":
     unittest.main()
