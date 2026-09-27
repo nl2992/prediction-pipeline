@@ -103,6 +103,7 @@
     caret-color: var(--orange);
   }
   #cmd-hint { color: var(--dimmer); font-size: 10px; }
+  #cmd-hint.cmd-hint-error { color: var(--red); font-weight: bold; }
 
   /* ── Main layout ───────────────────────────────────────────── */
   #main { display: flex; height: calc(100vh - 72px); }
@@ -199,6 +200,10 @@
   tbody tr:hover { background: var(--bg3); }
   tbody tr.arb-row { background: #001a00; }
   tbody tr.arb-row:hover { background: #002200; }
+  /* Positive quoted edge without executable-depth confirmation — weaker
+     amber treatment, deliberately distinct from arb-row's green. */
+  tbody tr.arb-row-quoted { background: #1a1400; }
+  tbody tr.arb-row-quoted:hover { background: #221b00; }
   tbody tr.selected { background: #1a1000; }
   td { padding: 4px 8px; white-space: nowrap; color: var(--white); vertical-align: middle; }
   td.r { text-align: right; }
@@ -407,6 +412,23 @@
   .tag-ver { background: #1a0000; color: var(--red); border: 1px solid var(--red2); }
   .tag-ok  { background: #001a00; color: var(--green); border: 1px solid var(--green2); }
 
+  /* ── Evidence badges ───────────────────────────────────────────────────
+     Distinct, small labels so matcher acceptance, a live depth check, and a
+     bare quoted-price edge are never visually conflated with one another or
+     with human review (see docs/FRONTEND_REVIEW.md finding 2). */
+  .badge-evidence {
+    display: inline-block; font-size: 8px; font-weight: bold; letter-spacing: 0.5px;
+    padding: 1px 4px; margin-right: 3px; border-radius: 2px; white-space: nowrap;
+  }
+  .badge-matcher  { background: #001a1a; color: var(--cyan);   border: 1px solid var(--cyan2); }
+  .badge-depth    { background: #001a00; color: var(--green);  border: 1px solid var(--green2); }
+  .badge-quoted   { background: #1a1400; color: var(--amber);  border: 1px solid var(--orange2); }
+  /* No review store exists yet (Phase 2 adds one) — this class is defined
+     now so the review UI can be dropped in later without a CSS migration. */
+  .badge-reviewed { background: #0d0d1a; color: var(--magenta); border: 1px solid var(--magenta); }
+
+  .book-scan-trigger.disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+
   #refresh-btn {
     background: transparent;
     border: 1px solid var(--orange2);
@@ -449,7 +471,7 @@
       <span onclick="showView('pairs')">F1 PAIRS</span>
       <span onclick="showView('signals')">F2 SIGNALS</span>
       <span onclick="runScan()">F3 SCAN</span>
-      <span onclick="runBookArb()">F4 BOOK</span>
+      <span class="book-scan-trigger" onclick="runBookArb()">F4 BOOK</span>
       <span onclick="showView('summary')">F5 SUMMARY</span>
       <span onclick="runFastScan()">F8 FAST</span>
     </div>
@@ -506,7 +528,9 @@
       <div class="s-header">GATE (which pairs count)</div>
       <div class="sidebar-item" onclick="setGate('all')"      id="gate-all">ALL PAIRS</div>
       <div class="sidebar-item" onclick="setGate('eligible')" id="gate-eligible">ARB-ELIGIBLE (old col)</div>
-      <div class="sidebar-item active" onclick="setGate('alerter')" id="gate-alerter">ALERTER-GATE</div>
+      <div class="sidebar-item active" onclick="setGate('alerter')" id="gate-alerter">
+        ALERTER-GATE <span class="badge-evidence badge-matcher">MATCHER OK</span>
+      </div>
     </div>
     <div class="sidebar-section">
       <div class="s-header">FILTERS</div>
@@ -522,14 +546,15 @@
       <div class="s-header">ACTIONS</div>
       <div class="sidebar-item" onclick="runScan()">⟳ FULL SCAN</div>
       <div class="sidebar-item" onclick="runFastScan()">⚡ FAST SCAN</div>
-      <div class="sidebar-item" onclick="runBookArb()">▤ BOOK SCAN</div>
+      <div class="sidebar-item book-scan-trigger" onclick="runBookArb()">▤ BOOK SCAN</div>
     </div>
     <div style="flex:1;"></div>
     <div style="padding:8px;color:var(--dimmer);font-size:9px;border-top:1px solid var(--border);">
       PRED-ARB v1.0<br>
       MIN SIM: 0.30<br>
       FEE: KALSHI 0.07·p(1-p), POLY 0%<br>
-      DEFAULT GATE: ALERTER (v2 match, no settlement risk)
+      DEFAULT GATE: ALERTER (matcher-accepted + no settlement-risk flag —
+      MATCHER OK, not human-verified)
     </div>
   </div>
 
@@ -590,7 +615,7 @@
     <!-- Signals view -->
     <div id="signals-view">
       <div class="panel-header">
-        <span class="panel-title">VERIFIED SIGNALS LOG</span>
+        <span class="panel-title">SIGNALS LOG</span>
         <div class="panel-meta">
           <span>LAST <span class="highlight" id="sig-count">—</span> SIGNALS</span>
         </div>
@@ -606,7 +631,7 @@
               <th class="r">GROSS</th>
               <th class="r">NET PROFIT</th>
               <th class="r">NET %</th>
-              <th>VERIFIED</th>
+              <th>CLOB CHECK</th>
               <th>EXECUTED</th>
             </tr>
           </thead>
@@ -657,9 +682,16 @@ let displayedPairs = [];   // sorted/filtered list currently shown in the table
 let currentCat  = 'all';
 let arbOnly     = false;
 let pricedOnly  = false;
-let selected    = null;
+// Selection is stored as a stable key string (pairKey), not a numeric index
+// into displayedPairs — an index goes stale the instant a sort/filter
+// reorders or shrinks that array (see selectedPair() below and the P1 bug
+// this fixes: Book Scan and the detail panel could end up looking at two
+// different pairs after a re-sort).
+let selectedKey = null;
 let currentView = 'pairs';
 let lastSummary = null;   // the `summary` object from the last scan payload (server.build_summary)
+let lastScanAt  = null;   // Date of the last completed scan — used to label Book Scan's
+                           // retained-book age (server doesn't stamp a per-pair book timestamp).
 
 // 'all' = no gate, 'eligible' = discover.py's arb_eligible (the dashboard's
 // historical ARB column — a strict eligibility filter), 'alerter' = v2_match
@@ -695,6 +727,25 @@ function kalshiTakerFee(p) { return 0.07 * p * (1 - p); }
 // completely, which in practice means a stale/dead book or a mismatched
 // pair, not a real opportunity.
 const PLAUSIBLE_EDGE_MAX = 0.10;
+
+// ── Stable pair identity ─────────────────────────────────────────────────
+// kalshi_ticker + poly_token_id (falling back to poly_id when a fast/legacy
+// scan didn't carry a CLOB token id) uniquely identifies a matched pair
+// across re-sorts and re-filters, unlike a positional index into
+// displayedPairs. See discover.py's result dict for these field names.
+function pairKey(p) {
+  if (!p) return null;
+  const polySide = (p.poly_token_id ?? p.poly_id ?? '');
+  return (p.kalshi_ticker ?? '') + '|' + polySide;
+}
+
+// The single source of truth for "which pair is selected right now" — every
+// consumer (row highlight, detail panel, Book Scan) must go through this
+// instead of indexing displayedPairs directly, so they can never disagree.
+function selectedPair() {
+  if (selectedKey == null) return null;
+  return displayedPairs.find(p => pairKey(p) === selectedKey) || null;
+}
 
 // ── Clock ──────────────────────────────────────────────────────────────────
 function updateClock() {
@@ -795,6 +846,7 @@ async function runScan() {
     if (d.error) throw new Error(d.error);
     allPairs = d.pairs || [];
     lastSummary = d.summary || null;
+    lastScanAt = new Date();
     document.getElementById('last-scan').textContent = new Date().toISOString().slice(11,19) + ' UTC';
     document.getElementById('elapsed').textContent = `ELAPSED: ${d.elapsed}s`;
     renderPairs();
@@ -819,6 +871,7 @@ async function runFastScan() {
     if (d.error) throw new Error(d.error);
     allPairs = d.pairs || [];
     lastSummary = d.summary || null;
+    lastScanAt = new Date();
     document.getElementById('last-scan').textContent = new Date().toISOString().slice(11,19) + ' UTC (fast)';
     document.getElementById('elapsed').textContent = `ELAPSED: ${d.elapsed}s`;
     renderPairs();
@@ -911,20 +964,54 @@ function baDirectionBlock(dirKey, d, isBest) {
   </div>`;
 }
 
-function renderBookArb(data, pair) {
+// Human-readable "Nm ago" / "Ns ago" for the book-source age note.
+function humanAge(date) {
+  if (!date) return null;
+  const secs = Math.max(0, Math.round((Date.now() - date.getTime()) / 1000));
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  return `${hours}h ago`;
+}
+
+function renderBookArb(data, pair, sourceNote) {
   const body = document.getElementById('book-arb-body');
   const dirs = Object.keys(BOOK_ARB_DIR_META);
   const order = dirs.slice().sort((a, b) => (a === data.best_direction ? -1 : b === data.best_direction ? 1 : 0));
   body.innerHTML = `
     <div class="detail-row"><span class="detail-key">POLYMARKET</span><span class="detail-val o">${esc(pair.poly_title||'')}</span></div>
     <div class="detail-row"><span class="detail-key">KALSHI</span><span class="detail-val a">${esc(pair.kalshi_title||'')}</span></div>
+    <div class="detail-row"><span class="detail-key">BOOK SOURCE</span><span class="detail-val dim">${esc(sourceNote||'')}</span></div>
     ${order.map(k => baDirectionBlock(k, data.directions[k], k === data.best_direction)).join('')}
   `;
 }
 
+// Book Scan must always act on exactly the pair the detail panel/row
+// highlight show — selectedPair() is the single lookup all three share, so
+// a stale positional index (the P1 bug) can't make this target a different
+// row than what's on screen.
+function bookScanAvailable() {
+  const p = selectedPair();
+  if (!p) return false;
+  const hasBook = b => b && (((b.bids||[]).length) || ((b.asks||[]).length));
+  const useBooks = hasBook(p.poly_book) && hasBook(p.kalshi_book);
+  const canGoLive = !!(p.kalshi_ticker && p.poly_token_id);
+  return useBooks || canGoLive;
+}
+
+// Greys out / enables the BOOK SCAN triggers (topbar + sidebar) to reflect
+// whether there is currently a selected, in-view pair with book data.
+function updateBookScanAvailability() {
+  const enabled = bookScanAvailable();
+  document.querySelectorAll('.book-scan-trigger').forEach(el => {
+    el.classList.toggle('disabled', !enabled);
+  });
+}
+
 async function runBookArb() {
-  const p = (selected != null) ? displayedPairs[selected] : null;
-  if (!p) { showError('BOOK SCAN: select a pair row first.'); return; }
+  const p = selectedPair();
+  if (!p) { showError('BOOK SCAN: select a pair row first (or your selection is hidden by the current filters).'); return; }
 
   const hasBook = b => b && (((b.bids||[]).length) || ((b.asks||[]).length));
   const useBooks = hasBook(p.poly_book) && hasBook(p.kalshi_book);
@@ -936,19 +1023,22 @@ async function runBookArb() {
 
   showLoading('BOOK SCAN — walking order book depth...');
   try {
-    let r;
+    let r, sourceNote;
     if (useBooks) {
       r = await fetch('/api/book-arb', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ poly_book: p.poly_book, kalshi_book: p.kalshi_book }),
       });
+      const age = humanAge(lastScanAt);
+      sourceNote = age ? `retained from scan, books from scan ${age}` : 'retained from scan, age unknown';
     } else {
       r = await fetch(`/api/book-arb/live?kalshi_ticker=${encodeURIComponent(p.kalshi_ticker)}&poly_token_id=${encodeURIComponent(p.poly_token_id)}`);
+      sourceNote = 'live — fetched just now';
     }
     const data = await r.json();
     if (data.error) throw new Error(data.error);
-    renderBookArb(data, p);
+    renderBookArb(data, p, sourceNote);
     document.getElementById('book-arb-modal').classList.add('show');
   } catch(e) {
     showError('BOOK SCAN FAILED: ' + e.message);
@@ -1011,10 +1101,16 @@ function renderPairs() {
   if (pricedOnly) pairs = pairs.filter(p => p.arb_net_accurate != null);
 
   pairs.sort((a, b) => comparePairs(a, b, currentSort.key, currentSort.dir));
-  displayedPairs = pairs;   // keep in sync so selectRow reads the right item
+  displayedPairs = pairs;   // keep in sync so selectRow/selectedPair read the right list
   updateSortIndicators();
 
   const isPositive = p => p.arb_net_accurate != null && p.arb_net_accurate > 0;
+  // Executable depth means the book_arb ladder walk actually ran for this
+  // pair (exec_contracts/exec_profit populated) — a positive net edge without
+  // that is a top-of-book quote only, which is a much weaker signal (see
+  // docs/FRONTEND_REVIEW.md finding 2: the old green-row treatment conflated
+  // the two).
+  const hasDepth = p => p.exec_contracts != null && p.exec_profit != null;
   const arbs = pairs.filter(isPositive).length;
   const gateGlobal = allPairs.filter(passesGate);
   document.getElementById('pair-count').textContent   = allPairs.length;
@@ -1026,6 +1122,7 @@ function renderPairs() {
   const tbody = document.getElementById('pairs-body');
   if (!pairs.length) {
     tbody.innerHTML = '<tr><td colspan="17" class="empty-state">No pairs match current filters — try SCAN, change category, or widen the GATE</td></tr>';
+    reconcileSelection();
     return;
   }
 
@@ -1036,8 +1133,12 @@ function renderPairs() {
     const kmid = (kb != null && ka != null) ? ((+kb + +ka)/2) : kb;
     const dmid = (pmid != null && kmid != null) ? (+pmid - +kmid) : null;
     const hasArb = isPositive(p);
-    const rowCls = hasArb ? 'arb-row' : '';
-    const selCls = selected === i ? 'selected' : '';
+    const depthConfirmed = hasArb && hasDepth(p);
+    // Strong green treatment only for a depth-confirmed edge; a bare quoted
+    // edge (no executable-depth data) gets a weaker amber row so it can't be
+    // mistaken for the same thing.
+    const rowCls = depthConfirmed ? 'arb-row' : (hasArb ? 'arb-row-quoted' : '');
+    const selCls = pairKey(p) === selectedKey ? 'selected' : '';
 
     const fmt = v => v != null ? (+v).toFixed(3) : '<span class="dim">—</span>';
     const fmtD = v => v != null
@@ -1051,7 +1152,7 @@ function renderPairs() {
     const fmtNum = v => v != null ? (+v).toFixed(2) : '<span class="dim">—</span>';
 
     const arbCell = hasArb
-      ? `<span class="arb-badge">+${(+p.arb_net_accurate).toFixed(4)}</span>`
+      ? `<span class="badge-evidence ${depthConfirmed ? 'badge-depth' : 'badge-quoted'}">${depthConfirmed ? 'DEPTH ✓' : 'QUOTED EDGE'}</span><span class="arb-badge">+${(+p.arb_net_accurate).toFixed(4)}</span>`
       : fmtNet(p.arb_net_accurate);
 
     const simPct = Math.round((p.title_sim || 0) * 100);
@@ -1077,14 +1178,36 @@ function renderPairs() {
       <td class="dim r">${(p.kalshi_close||p.poly_close||'').slice(0,10) || '—'}</td>
     </tr>`;
   }).join('');
+
+  reconcileSelection();
+}
+
+// After every render, make sure the detail panel, row highlight, and Book
+// Scan availability all agree on the same pair (or all agree there isn't
+// one) — this is what the P1 selection bug violated. Called both after a
+// fresh table render and after picking a row.
+function reconcileSelection() {
+  if (selectedKey == null) return;
+  const p = selectedPair();
+  if (p) {
+    renderDetail(p);
+  } else {
+    renderDetail(null, 'Your previously selected pair is not shown under the current '
+      + 'category/gate/filter settings. Widen the filters to see it again.');
+  }
+  updateBookScanAvailability();
 }
 
 function selectRow(idx) {
-  selected = idx;
-  document.querySelectorAll('#pairs-body tr').forEach((tr,i) => {
-    tr.classList.toggle('selected', i === idx);
+  const p = displayedPairs[idx];
+  if (!p) return;
+  selectedKey = pairKey(p);
+  document.querySelectorAll('#pairs-body tr[data-idx]').forEach(tr => {
+    const rowP = displayedPairs[+tr.dataset.idx];
+    tr.classList.toggle('selected', !!rowP && pairKey(rowP) === selectedKey);
   });
-  renderDetail(displayedPairs[idx] || null);
+  renderDetail(p);
+  updateBookScanAvailability();
 }
 
 function kalshiSlug(value) {
@@ -1107,11 +1230,13 @@ function kalshiMarketUrl(p) {
   return `https://kalshi.com/markets/${series}/${slug}${ticker ? `?ticker=${ticker}` : ''}`;
 }
 
-function renderDetail(p) {
+function renderDetail(p, hiddenReason) {
   const left  = document.getElementById('detail-left');
   const right = document.getElementById('detail-right');
   if (!p) {
-    left.innerHTML  = '<div class="detail-title">SELECT A ROW TO VIEW DETAIL</div>';
+    left.innerHTML = hiddenReason
+      ? `<div class="detail-title">SELECTION HIDDEN BY FILTERS</div><div style="color:var(--dimmer);font-size:10px;margin-top:4px;">${esc(hiddenReason)}</div>`
+      : '<div class="detail-title">SELECT A ROW TO VIEW DETAIL</div>';
     right.innerHTML = '<div class="detail-title">ARB CALC</div><div style="color:var(--dimmer)">—</div>';
     return;
   }
@@ -1227,8 +1352,12 @@ function renderSignals(signals) {
   tbody.innerHTML = signals.map(s => {
     const ts  = (s.ts||'').slice(0,19).replace('T',' ');
     const dir = s.direction === 'poly_yes__kalshi_no' ? 'POLY-YES / K-NO' : 'K-YES / POLY-NO';
+    // clob_verified means the live CLOB was rechecked at signal time — a
+    // pricing/liquidity recheck, not human settlement verification. Labeled
+    // "CLOB CHECKED" (not "VERIFIED") so it isn't read as a stronger claim
+    // than it is (see docs/FRONTEND_REVIEW.md finding 2).
     const verCls = s.clob_verified ? 'tag tag-ok' : 'tag tag-ver';
-    const verTxt = s.clob_verified ? '✓ VERIFIED' : '✗ UNVERIF';
+    const verTxt = s.clob_verified ? '✓ CLOB CHECKED' : '✗ NOT CHECKED';
     const excTxt = s.executed ? '<span class="tag tag-ok">EXECUTED</span>' : '<span class="dim">—</span>';
     return `<tr>
       <td class="dim">${ts}</td>
@@ -1263,10 +1392,10 @@ document.getElementById('cmd-input').addEventListener('keydown', async e => {
   } else if (val === 'SUMMARY' || val === 'F5') {
     showView('summary');
   } else if (val === 'ARB') {
-    arbOnly = !arbOnly;
+    // Toggle exactly once — toggleArbOnly() already flips arbOnly itself;
+    // flipping it here too was a no-op bug (ARB never visibly changed state).
     toggleArbOnly();
   } else if (val === 'PRICED') {
-    pricedOnly = !pricedOnly;
     togglePricedOnly();
   } else if (val === 'GATE ALL') {
     setGate('all');
@@ -1277,12 +1406,31 @@ document.getElementById('cmd-input').addEventListener('keydown', async e => {
   } else if (val === 'BOOK' || val === 'F4') {
     await runBookArb();
   } else if (val === 'HELP') {
-    document.getElementById('cmd-hint').textContent =
+    showCmdHint(
       'CMDS: SCAN [cat] | FAST | SIGNALS | PAIRS | SUMMARY | ARB (toggle) | PRICED (toggle) | ' +
-      'GATE ALL|ELIGIBLE|ALERTER | BOOK (depth-walked arb on selected row)';
-    setTimeout(() => document.getElementById('cmd-hint').textContent = '', 5000);
+      'GATE ALL|ELIGIBLE|ALERTER | BOOK (depth-walked arb on selected row)');
+  } else if (val) {
+    showCmdError('UNKNOWN COMMAND: ' + val + ' — type HELP for a list of commands.');
   }
 });
+
+// cmd-hint doubles as the command bar's status line: showCmdHint for normal
+// messages (HELP output), showCmdError for a visibly-flagged error (unknown
+// command). Both auto-clear so the hint doesn't linger forever.
+function showCmdHint(msg) {
+  const el = document.getElementById('cmd-hint');
+  el.classList.remove('cmd-hint-error');
+  el.textContent = msg;
+  setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 5000);
+}
+function showCmdError(msg) {
+  const el = document.getElementById('cmd-hint');
+  el.classList.add('cmd-hint-error');
+  el.textContent = msg;
+  setTimeout(() => {
+    if (el.textContent === msg) { el.textContent = ''; el.classList.remove('cmd-hint-error'); }
+  }, 5000);
+}
 
 // ── Loading ────────────────────────────────────────────────────────────────
 function showLoading(msg) {
@@ -1404,11 +1552,11 @@ function jumpToPair(listName, topIdx) {
   currentCat = 'all';
   ['all','election','economic','political','sports','pop'].forEach(c => document.getElementById('cat-'+c).classList.toggle('active', c === 'all'));
   arbOnly = false; pricedOnly = false;
+  selectedKey = pairKey(allPairs[idx]);   // stable key, not a positional index — survives the renderPairs() below
   showView('pairs');
-  renderPairs();
-  const dispIdx = displayedPairs.findIndex(p => p === allPairs[idx]);
+  renderPairs();   // also calls reconcileSelection(), which renders the detail panel for selectedKey
+  const dispIdx = displayedPairs.findIndex(p => pairKey(p) === selectedKey);
   if (dispIdx !== -1) {
-    selectRow(dispIdx);
     const tr = document.querySelector(`#pairs-body tr[data-idx="${dispIdx}"]`);
     if (tr) tr.scrollIntoView({ block: 'center' });
   }
@@ -1510,6 +1658,7 @@ setInterval(checkStatus, 30000);
 setCategory('all');
 updateSortIndicators();
 updateSummaryBadge();
+updateBookScanAvailability();
 </script>
 </body>
 </html>
