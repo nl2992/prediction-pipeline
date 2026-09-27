@@ -220,6 +220,8 @@
   .panel-meta { color: var(--dim); font-size: 11px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
   .panel-meta .highlight { color: var(--amber); }
   .panel-meta .arb-count { color: var(--green); font-weight: bold; }
+  .scan-status { display: flex; gap: 8px; align-items: center; }
+  .scan-status.stale { color: var(--amber); font-weight: bold; }
 
   /* ── Column picker ─────────────────────────────────────────── */
   #columns-btn {
@@ -352,6 +354,26 @@
     letter-spacing: 0.5px;
   }
   .no-arb { color: var(--dimmer); font-size: 11px; }
+
+  /* Review badges */
+  .badge-reviewed {
+    background: var(--green2);
+    color: #000;
+    font-size: 9px;
+    font-weight: bold;
+    padding: 1px 4px;
+    letter-spacing: 0.3px;
+    margin-left: 4px;
+  }
+  .badge-mismatch {
+    background: var(--red);
+    color: #fff;
+    font-size: 9px;
+    font-weight: bold;
+    padding: 1px 4px;
+    letter-spacing: 0.3px;
+    margin-left: 4px;
+  }
 
   /* ── Detail panel ─────────────────────────────────────────────
      ≥1200px: docked below the table, as before. <1200px: becomes a
@@ -794,6 +816,7 @@
       <div class="panel-header">
         <span class="panel-title">CROSS-EXCHANGE MATCHED PAIRS</span>
         <div class="panel-meta">
+          <span id="scan-status-label" class="scan-status">No scan yet</span>
           <span>SHOWING <span class="highlight" id="showing-count">—</span> PAIRS</span>
           <span class="arb-count" id="showing-arb">— ARB</span>
           <div id="columns-wrap">
@@ -930,6 +953,11 @@ let lastSummary = null;   // the `summary` object from the last scan payload (se
 let lastScanAt  = null;   // Date of the last completed scan — used to label Book Scan's
                            // retained-book age (server doesn't stamp a per-pair book timestamp).
 let modalPreviousFocus = null; // Focus to restore when closing book-arb modal
+let reviewsByKey = {};    // Latest review verdict for each pair_key
+let isRestoredScan = false;  // True if current data came from restore, false if from live scan
+let lastScanMode = null;  // 'full' or 'fast' to show in the status label
+let lastScanError = null; // Error message from last failed scan, or null if successful
+let hasScan = false;      // True if a scan has been loaded (restored or completed); used to distinguish "never" from "empty"
 
 // 'all' = no gate, 'eligible' = discover.py's arb_eligible (the dashboard's
 // historical ARB column — a strict eligibility filter), 'alerter' = v2_match
@@ -1197,11 +1225,7 @@ function setCategory(cat) {
 
 function toggleArbOnly() {
   arbOnly = !arbOnly;
-  document.getElementById('arb-only-ind').textContent = arbOnly ? '●' : '○';
-  document.getElementById('arb-only-ind').style.color = arbOnly ? 'var(--green)' : 'var(--dimmer)';
-  const btn = document.getElementById('filter-arb');
-  btn.classList.toggle('active', arbOnly);
-  btn.setAttribute('aria-checked', arbOnly ? 'true' : 'false');
+  syncFilterButtons();
   renderPairs();
 }
 
@@ -1211,33 +1235,172 @@ function toggleArbOnly() {
 // what made the dashboard's old ARB count look near-zero.
 function togglePricedOnly() {
   pricedOnly = !pricedOnly;
-  document.getElementById('priced-only-ind').textContent = pricedOnly ? '●' : '○';
-  document.getElementById('priced-only-ind').style.color = pricedOnly ? 'var(--green)' : 'var(--dimmer)';
-  const btn = document.getElementById('filter-priced');
-  btn.classList.toggle('active', pricedOnly);
-  btn.setAttribute('aria-checked', pricedOnly ? 'true' : 'false');
+  syncFilterButtons();
   renderPairs();
 }
 
 // ── Scan ───────────────────────────────────────────────────────────────────
+// Shared scan result handler used by runScan, runFastScan, and restore
+function applyScanResult(data, options = {}) {
+  const { restored = false } = options;
+  allPairs = data.pairs || [];
+  lastSummary = data.summary || null;
+  // Parse finished_at robustly: if no timezone (e.g. SQLite format), treat as UTC
+  let finishedAt = data.finished_at;
+  if (finishedAt && !finishedAt.includes('Z') && !finishedAt.includes('+') && !finishedAt.includes('-00')) {
+    finishedAt = finishedAt.replace(' ', 'T') + 'Z';
+  }
+  lastScanAt = new Date(finishedAt);
+  lastScanMode = data.mode || 'full';
+  isRestoredScan = restored;
+  reviewsByKey = data.reviews || {};
+  lastScanError = null;  // Clear error on successful scan
+  hasScan = true;  // Mark that a scan has been loaded
+  document.getElementById('last-scan').textContent =
+    restored ? `${lastScanAt.toISOString().slice(11,19)} UTC (restored)` : lastScanAt.toISOString().slice(11,19) + ' UTC';
+  if (!restored && data.elapsed) {
+    document.getElementById('elapsed').textContent = `ELAPSED: ${data.elapsed}s`;
+  }
+  updateScanStatusLabel();
+  renderPairs();
+  if (currentView === 'summary') renderSummary();
+  updateSummaryBadge();
+}
+
+// Update the "Scan · age · mode" label in the panel header
+function updateScanStatusLabel() {
+  const label = document.getElementById('scan-status-label');
+
+  // Show failed state if applicable (only when previous pairs exist)
+  if (lastScanError && allPairs.length) {
+    label.textContent = `Scan failed: ${lastScanError}. Showing previous results.`;
+    label.classList.add('stale');
+    label.style.color = 'var(--red)';
+    return;
+  }
+
+  // Show "No scan yet" if never scanned
+  if (!lastScanAt) {
+    label.textContent = 'No scan yet';
+    label.classList.remove('stale');
+    label.style.color = '';
+    return;
+  }
+
+  const now = new Date();
+  const ageMs = now - lastScanAt;
+  const ageMins = Math.floor(ageMs / 60000);
+  const ageHours = Math.floor(ageMs / 3600000);
+
+  let ageStr = '';
+  if (ageMs < 60000) ageStr = 'just now';
+  else if (ageMins < 60) ageStr = ageMins + 'm ago';
+  else if (ageHours < 24) ageStr = ageHours + 'h ago';
+  else ageStr = Math.floor(ageHours / 24) + 'd ago';
+
+  const isStale = isRestoredScan && ageHours >= 1;
+  const modeStr = lastScanMode === 'fast' ? 'fast' : 'full';
+  const statusText = isRestoredScan
+    ? `Restored scan · ${ageStr} · ${modeStr}${isStale ? ' (stale)' : ''}`
+    : `Scan · ${ageStr}`;
+
+  label.textContent = statusText;
+  label.classList.toggle('stale', isStale);
+  label.style.color = '';
+}
+
+// Render table state (loading, never scanned, empty, filtered, failed)
+function renderTableState(kind, detail) {
+  const tbody = document.getElementById('pairs-body');
+  const messages = {
+    loading: 'Loading last scan…',
+    never: 'No scan yet. Run FULL SCAN (F3) or FAST SCAN (F8).',
+    empty: 'Last scan found no matched pairs.',
+    filtered: `${detail} pairs hidden by current filters. <button onclick="resetFilters()" style="background:transparent;border:none;color:var(--cyan);cursor:pointer;text-decoration:underline;padding:0;font:inherit;">Reset filters</button>`,
+    failed: detail ? `Scan failed: ${detail}. Showing previous results.` : 'Scan failed. Showing previous results.',
+  };
+  const msg = messages[kind] || 'Unknown state';
+  tbody.innerHTML = `<tr><td colspan="17" class="empty-state">${msg}</td></tr>`;
+}
+
+// Sync filter UI buttons after state changes
+function syncFilterButtons() {
+  // ARB ONLY button
+  document.getElementById('arb-only-ind').textContent = arbOnly ? '●' : '○';
+  document.getElementById('arb-only-ind').style.color = arbOnly ? 'var(--green)' : 'var(--dimmer)';
+  const arbBtn = document.getElementById('filter-arb');
+  arbBtn.classList.toggle('active', arbOnly);
+  arbBtn.setAttribute('aria-checked', arbOnly ? 'true' : 'false');
+
+  // PRICED ONLY button
+  document.getElementById('priced-only-ind').textContent = pricedOnly ? '●' : '○';
+  document.getElementById('priced-only-ind').style.color = pricedOnly ? 'var(--green)' : 'var(--dimmer)';
+  const pricedBtn = document.getElementById('filter-priced');
+  pricedBtn.classList.toggle('active', pricedOnly);
+  pricedBtn.setAttribute('aria-checked', pricedOnly ? 'true' : 'false');
+}
+
+// Helper to reset filters
+function resetFilters() {
+  currentCat = 'all';
+  currentGate = 'all';
+  arbOnly = false;
+  pricedOnly = false;
+
+  setCategory('all');
+  setGate('all');
+  syncFilterButtons();
+  renderPairs();
+}
+
+// Restore the last completed scan from the server on page load
+async function restoreScan() {
+  renderTableState('loading');
+  try {
+    const r = await fetch('/api/scans/latest');
+    if (r.status === 404) {
+      renderTableState('never');
+      return;
+    }
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    applyScanResult(data, { restored: true });
+  } catch (e) {
+    console.error('restore failed', e);
+    renderTableState('failed', e.message);
+  }
+}
+
 async function runScan() {
   showLoading('FULL SCAN — fetching live orderbooks...');
   const btn = document.getElementById('refresh-btn');
   btn.disabled = true;
   btn.textContent = '⟳ SCANNING...';
-  const t0 = Date.now();
   try {
     const r = await fetch(`/api/scan?category=${currentCat}&min_sim=0.30`);
     const d = await r.json();
-    if (d.error) throw new Error(d.error);
-    allPairs = d.pairs || [];
-    lastSummary = d.summary || null;
-    lastScanAt = new Date();
-    document.getElementById('last-scan').textContent = new Date().toISOString().slice(11,19) + ' UTC';
-    document.getElementById('elapsed').textContent = `ELAPSED: ${d.elapsed}s`;
-    renderPairs();
-    if (currentView === 'summary') renderSummary();
-    updateSummaryBadge();
+    if (d.error) {
+      lastScanError = d.error;
+      if (allPairs.length) {
+        // Previous pairs exist; keep them visible with error in header
+        updateScanStatusLabel();
+      } else {
+        // No previous pairs; show error in tbody
+        renderTableState('failed', d.error);
+      }
+      throw new Error(d.error);
+    }
+    // Successful scan: refresh review badges from /api/reviews
+    try {
+      const rr = await fetch('/api/reviews');
+      const reviews = await rr.json();
+      if (reviews && !reviews.error) {
+        d.reviews = reviews;
+      }
+    } catch (e) {
+      // If review fetch fails, keep the old reviewsByKey
+    }
+    applyScanResult(d, { restored: false });
   } catch(e) {
     showError('SCAN FAILED: ' + e.message);
   } finally {
@@ -1254,15 +1417,28 @@ async function runFastScan() {
   try {
     const r = await fetch(`/api/scan/fast?category=${currentCat}`);
     const d = await r.json();
-    if (d.error) throw new Error(d.error);
-    allPairs = d.pairs || [];
-    lastSummary = d.summary || null;
-    lastScanAt = new Date();
-    document.getElementById('last-scan').textContent = new Date().toISOString().slice(11,19) + ' UTC (fast)';
-    document.getElementById('elapsed').textContent = `ELAPSED: ${d.elapsed}s`;
-    renderPairs();
-    if (currentView === 'summary') renderSummary();
-    updateSummaryBadge();
+    if (d.error) {
+      lastScanError = d.error;
+      if (allPairs.length) {
+        // Previous pairs exist; keep them visible with error in header
+        updateScanStatusLabel();
+      } else {
+        // No previous pairs; show error in tbody
+        renderTableState('failed', d.error);
+      }
+      throw new Error(d.error);
+    }
+    // Successful scan: refresh review badges from /api/reviews
+    try {
+      const rr = await fetch('/api/reviews');
+      const reviews = await rr.json();
+      if (reviews && !reviews.error) {
+        d.reviews = reviews;
+      }
+    } catch (e) {
+      // If review fetch fails, keep the old reviewsByKey
+    }
+    applyScanResult(d, { restored: false });
   } catch(e) {
     showError('SCAN FAILED: ' + e.message);
   } finally {
@@ -1523,7 +1699,16 @@ function renderPairs() {
 
   const tbody = document.getElementById('pairs-body');
   if (!pairs.length) {
-    tbody.innerHTML = '<tr><td colspan="17" class="empty-state">No pairs match current filters — try SCAN, change category, or widen the GATE</td></tr>';
+    // Determine which empty state to show
+    if (!hasScan) {
+      renderTableState('never');
+    } else if (!allPairs.length) {
+      // Scan loaded but found no pairs
+      renderTableState('empty');
+    } else {
+      // Pairs exist, but current filters hide them all
+      renderTableState('filtered', allPairs.length);
+    }
     reconcileSelection();
     return;
   }
@@ -1557,6 +1742,14 @@ function renderPairs() {
       ? `<span class="badge-evidence ${depthConfirmed ? 'badge-depth' : 'badge-quoted'}">${depthConfirmed ? 'DEPTH ✓' : 'QUOTED EDGE'}</span><span class="arb-badge">+${(+p.arb_net_accurate).toFixed(4)}</span>`
       : fmtNet(p.arb_net_accurate);
 
+    // Review badge if a review exists for this pair
+    const key = pairKey(p);
+    const review = reviewsByKey[key];
+    const reviewBadge = review ?
+      (review.verdict === 'match' ? '<span class="badge-reviewed">REVIEWED ✓</span>' :
+       review.verdict === 'mismatch' ? '<span class="badge-reviewed badge-mismatch">MISMATCH</span>' :
+       '<span class="badge-reviewed">UNSURE</span>') : '';
+
     const simPct = Math.round((p.title_sim || 0) * 100);
     const barW   = Math.round((p.title_sim || 0) * 40);
 
@@ -1571,7 +1764,7 @@ function renderPairs() {
       <td class="price-cell r" data-col="kbid">${fmt(kb)}</td>
       <td class="price-cell r" data-col="kask">${fmt(ka)}</td>
       <td class="r" data-col="dmid">${fmtD(dmid)}</td>
-      <td class="r" data-col="net">${arbCell}</td>
+      <td class="r" data-col="net">${arbCell}${reviewBadge}</td>
       <td class="r" data-col="netf7">${fmtNet(p.arb_net_flat7)}</td>
       <td class="r dim" data-col="execprofit">${fmtNum(p.exec_profit)}</td>
       <td class="r dim" data-col="execcontracts">${fmtNum(p.exec_contracts)}</td>
@@ -1883,8 +2076,8 @@ document.addEventListener('keydown', e => {
 // ── Summary view ───────────────────────────────────────────────────────────
 function updateSummaryBadge() {
   const el = document.getElementById('sb-summary');
-  if (!lastSummary) { el.textContent = '—'; return; }
-  el.textContent = lastSummary.funnel.alerter_gate.positive_accurate;
+  const gate = lastSummary?.funnel?.alerter_gate;
+  el.textContent = gate ? gate.positive_accurate : '—';
 }
 
 function fmtPct(part, whole) {
@@ -2141,6 +2334,9 @@ updateSortIndicators();
 updateSummaryBadge();
 applyColumnVisibility();
 updateBookScanAvailability();
+
+// Restore last scan on page load, if available
+restoreScan();
 </script>
 </body>
 </html>

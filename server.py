@@ -525,6 +525,13 @@ def api_scan_fast(
                                   max_events=max_events, days=days))
 
 
+def _ensure_summary(scan: dict) -> None:
+    """A stored scan without a usable summary (older rows, failed summary
+    build) gets one rebuilt from its pairs, so the dashboard can always render."""
+    if not (scan.get("summary") or {}).get("funnel"):
+        scan["summary"] = build_summary(scan["pairs"])
+
+
 @app.get("/api/scans/latest")
 def api_scans_latest(mode: str | None = None):
     """Latest completed scan, with pairs and a reviews map keyed by pair_key
@@ -532,6 +539,7 @@ def api_scans_latest(mode: str | None = None):
     scan = store.latest_scan(mode=mode)
     if scan is None:
         return JSONResponse({"error": "no completed scan"}, status_code=404)
+    _ensure_summary(scan)
     keys = [store.pair_key(p) for p in scan["pairs"]]
     scan["reviews"] = store.current_reviews(keys)
     return JSONResponse(scan)
@@ -548,6 +556,7 @@ def api_scan_by_id(scan_id: int):
     scan = store.get_scan(scan_id)
     if scan is None:
         return JSONResponse({"error": "scan not found"}, status_code=404)
+    _ensure_summary(scan)
     return JSONResponse(scan)
 
 
