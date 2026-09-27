@@ -36,3 +36,6 @@ alerter_cron.log
 
 # Catalog cache (runtime, never commit)
 .cache/
+
+# Dashboard persistence (runtime, never commit)
+data/
