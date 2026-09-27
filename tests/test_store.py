@@ -20,7 +20,7 @@ class SchemaInit(unittest.TestCase):
                     "SELECT name FROM sqlite_master WHERE type='table'"
                 ).fetchall()
             }
-        for t in ("scans", "pair_snapshots", "market_evidence", "reviews", "schema_version"):
+        for t in ("scans", "pair_snapshots", "pair_books", "market_evidence", "reviews", "schema_version"):
             self.assertIn(t, tables)
 
     def test_connect_enables_wal_and_foreign_keys(self):
@@ -78,8 +78,14 @@ class SchemaInit(unittest.TestCase):
             self.assertEqual(version, store.SCHEMA_VERSION)
             scan_cols = {r["name"] for r in conn.execute("PRAGMA table_info(scans)").fetchall()}
             pair_cols = {r["name"] for r in conn.execute("PRAGMA table_info(pair_snapshots)").fetchall()}
+            tables = {
+                r["name"] for r in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            }
             self.assertIn("duplicate_pair_keys", scan_cols)
-            self.assertIn("books_json", pair_cols)
+            self.assertIn("books_json", pair_cols)  # v2 column, left in place unused
+            self.assertIn("pair_books", tables)      # v3 table, created fresh
 
         got = store.get_scan(1)
         self.assertEqual(got["pair_count"], 1)
@@ -239,10 +245,10 @@ class ScanRoundTrip(unittest.TestCase):
 
 
 class BooksJsonSizeControl(unittest.TestCase):
-    """poly_book/kalshi_book (the bulk of a pair's byte size) live in a
-    separate books_json column so old scans can be trimmed independently of
-    every other field; only the BOOKS_KEEP_PER_MODE most recent completed
-    scans per mode keep their ladders."""
+    """poly_book/kalshi_book (the bulk of a pair's byte size) live in their
+    own pair_books table so trimming old scans' books is a whole-row DELETE
+    (reclaimable via incremental_vacuum); only the BOOKS_KEEP_PER_MODE most
+    recent completed scans per mode keep their ladders."""
 
     def setUp(self):
         store.init_db()
@@ -254,6 +260,12 @@ class BooksJsonSizeControl(unittest.TestCase):
             "kalshi_book": {"bids": [[0.55, 150]], "asks": [[0.58, 100]]},
         }
 
+    def _pair_books_row(self, scan_id):
+        with store.connect() as conn:
+            return conn.execute(
+                "SELECT books_json FROM pair_books WHERE scan_id = ?", (scan_id,)
+            ).fetchone()
+
     def test_books_round_trip_on_the_latest_scan(self):
         pair = self._pair_with_books("K1", "T1", 1.0)
         scan_id = store.start_scan("full", {})
@@ -263,48 +275,54 @@ class BooksJsonSizeControl(unittest.TestCase):
         self.assertEqual(got["pairs"], [pair])  # byte-identical restore
 
         with store.connect() as conn:
-            row = conn.execute(
-                "SELECT pair_json, books_json FROM pair_snapshots WHERE scan_id = ?", (scan_id,)
+            snap = conn.execute(
+                "SELECT pair_json FROM pair_snapshots WHERE scan_id = ?", (scan_id,)
             ).fetchone()
-        self.assertNotIn("poly_book", row["pair_json"])
-        self.assertNotIn("kalshi_book", row["pair_json"])
-        self.assertIsNotNone(row["books_json"])
+        self.assertNotIn("poly_book", snap["pair_json"])
+        self.assertNotIn("kalshi_book", snap["pair_json"])
+        self.assertIsNotNone(self._pair_books_row(scan_id))
 
-    def test_pair_without_books_gets_no_books_json(self):
+    def test_pair_without_books_gets_no_pair_books_row(self):
         scan_id = store.start_scan("full", {})
         store.finish_scan(scan_id, [{"kalshi_ticker": "K1", "poly_token_id": "T1"}], {})
-        with store.connect() as conn:
-            row = conn.execute(
-                "SELECT books_json FROM pair_snapshots WHERE scan_id = ?", (scan_id,)
-            ).fetchone()
-        self.assertIsNone(row["books_json"])
+        self.assertIsNone(self._pair_books_row(scan_id))
 
-    def test_older_scans_of_same_mode_lose_books_json_beyond_keep(self):
+    def test_older_scans_of_same_mode_lose_pair_books_row_beyond_keep(self):
         ids = []
         for i in range(store.BOOKS_KEEP_PER_MODE + 2):
             sid = store.start_scan("full", {})
             store.finish_scan(sid, [self._pair_with_books("K1", "T1", float(i))], {})
             ids.append(sid)
 
-        with store.connect() as conn:
-            books_json_by_scan = {
-                r["scan_id"]: r["books_json"]
-                for r in conn.execute(
-                    "SELECT scan_id, books_json FROM pair_snapshots WHERE scan_id IN "
-                    f"({','.join('?' * len(ids))})", ids
-                ).fetchall()
-            }
         kept = ids[-store.BOOKS_KEEP_PER_MODE:]
         trimmed = ids[:-store.BOOKS_KEEP_PER_MODE]
         for sid in kept:
-            self.assertIsNotNone(books_json_by_scan[sid], f"scan {sid} should still have books_json")
+            self.assertIsNotNone(self._pair_books_row(sid), f"scan {sid} should still have a pair_books row")
         for sid in trimmed:
-            self.assertIsNone(books_json_by_scan[sid], f"scan {sid} should have been trimmed")
+            self.assertIsNone(self._pair_books_row(sid), f"scan {sid} should have been trimmed")
 
         # trimmed scans still restore every other field -- only the ladders are gone
         oldest = store.get_scan(ids[0])
         self.assertEqual(oldest["pairs"][0]["exec_profit"], 0.0)
         self.assertNotIn("poly_book", oldest["pairs"][0])
+
+    def test_trimming_deletes_whole_rows_not_just_nulling(self):
+        # A regression guard for the v3 fix: trimming must remove rows from
+        # pair_books entirely (so incremental_vacuum can reclaim their
+        # pages), not merely null a column while the row stays resident.
+        with store.connect() as conn:
+            before_count = conn.execute("SELECT COUNT(*) AS n FROM pair_books").fetchone()["n"]
+        self.assertEqual(before_count, 0)
+
+        ids = []
+        for i in range(store.BOOKS_KEEP_PER_MODE + 3):
+            sid = store.start_scan("full", {})
+            store.finish_scan(sid, [self._pair_with_books("K1", "T1", float(i))], {})
+            ids.append(sid)
+
+        with store.connect() as conn:
+            after_count = conn.execute("SELECT COUNT(*) AS n FROM pair_books").fetchone()["n"]
+        self.assertEqual(after_count, store.BOOKS_KEEP_PER_MODE)
 
     def test_trimming_is_scoped_per_mode(self):
         full_ids = [store.start_scan("full", {}) for _ in range(3)]

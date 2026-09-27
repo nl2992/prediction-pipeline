@@ -40,7 +40,7 @@ SIGNALS_FILE = Path(__file__).parent / "signals.jsonl"
 STATIC_DIR   = Path(__file__).parent / "static"
 STATIC_DIR.mkdir(exist_ok=True)
 
-_PRUNE_KEEP_SCANS = 20
+_PRUNE_KEEP_SCANS = 10
 
 
 @app.on_event("startup")

@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _VALID_SCAN_STATUS = {"running", "completed", "failed", "cancelled"}
 _VALID_SCAN_MODE = {"full", "fast"}
@@ -30,12 +30,29 @@ _VALID_VERDICT = {"match", "mismatch", "uncertain"}
 
 # A full scan carries ~12-14k pairs, each with poly_book/kalshi_book (top 30
 # levels/side) — leaving those inline in pair_json makes a single scan's
-# snapshot ~50-100MB, and keep=50 would put the DB in the GB range. Only the
-# BOOKS_KEEP most recent completed scans per mode retain books_json; older
-# scans keep every other field (rank, prices, edges, matcher reasons, ...)
-# but their order-book ladders are NULLed out after the newer scan lands.
+# snapshot ~50-100MB, and keep=50 would put the DB in the GB range. Books
+# live in their own pair_books table (v3) so trimming old scans' books is a
+# whole-row DELETE (frees whole pages for reuse) rather than an UPDATE ...
+# SET NULL on pair_snapshots (which only shrinks rows in place, sharing
+# pages with data we want to keep, and so never actually reclaims space).
+# Only the BOOKS_KEEP_PER_MODE most recent completed scans per mode retain
+# a pair_books row; older scans keep every other field on pair_snapshots
+# (rank, prices, edges, matcher reasons, ...) indefinitely.
+#
+# v1 -> v2 added a books_json column directly on pair_snapshots; v2 -> v3
+# stopped using it (superseded by pair_books) without a data migration —
+# the column is left in place, always NULL from v3 onward, and simply never
+# read or written again.
 BOOKS_KEEP_PER_MODE = 2
 _BOOK_FIELDS = ("poly_book", "kalshi_book")
+_JSON_SEPARATORS = (",", ":")  # compact encoding for the large pair/books blobs
+
+
+def _dumps(obj: Any) -> str:
+    """Compact JSON (no whitespace after ',' or ':') for the large per-pair
+    blobs (pair_json, books_json) — at ~12-14k pairs/scan the default
+    separators' extra space-per-token adds up to real MBs."""
+    return json.dumps(obj, separators=_JSON_SEPARATORS)
 
 
 def _default_db_path() -> Path:
@@ -58,7 +75,7 @@ def connect() -> sqlite3.Connection:
     table-less database, and (empirically) that window closes as soon as WAL
     mode is turned on, even with no tables yet. Getting this order wrong
     silently leaves auto_vacuum at its default (NONE), so freed pages (e.g.
-    from ``_trim_books_json``) are never returned to the OS — see init_db().
+    from ``_trim_pair_books``) are never returned to the OS — see init_db().
     """
     path = db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -91,7 +108,7 @@ def init_db() -> None:
 
     A brand-new DB file gets ``auto_vacuum=INCREMENTAL`` from connect() (see
     its docstring) so that ``PRAGMA incremental_vacuum`` after trimming
-    books_json (see ``_trim_books_json``) actually shrinks the file on disk
+    pair_books (see ``_trim_pair_books``) actually shrinks the file on disk
     instead of leaving freed pages sitting in sqlite's internal freelist.
     """
     with closing(connect()) as conn, conn:
@@ -144,12 +161,32 @@ def init_db() -> None:
             )
         """)
         # v1 -> v2 migration: poly_book/kalshi_book move out of pair_json into
-        # this nullable column (see BOOKS_KEEP_PER_MODE above); old rows just
-        # keep their books inline in pair_json and read back unchanged.
+        # this column. Superseded by pair_books in v3 (see below) -- the
+        # column is kept (harmless, always NULL going forward) rather than
+        # dropped, since sqlite's DROP COLUMN support is version-dependent
+        # and there is no data to migrate out of it.
         _add_column_if_missing(conn, "pair_snapshots", "books_json", "TEXT")
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_pair_snapshots_scan_rank
                 ON pair_snapshots(scan_id, rank)
+        """)
+
+        # v2 -> v3 migration: books move again, this time into their own
+        # table, so trimming old scans' books is a whole-row DELETE (frees
+        # whole pages) instead of an UPDATE ... SET NULL on pair_snapshots
+        # (which only shrinks rows sharing pages with data we keep, and
+        # never actually reclaims disk space without a full VACUUM).
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pair_books (
+                scan_id    INTEGER NOT NULL REFERENCES scans(id) ON DELETE CASCADE,
+                pair_key   TEXT NOT NULL,
+                books_json TEXT NOT NULL,
+                PRIMARY KEY (scan_id, pair_key)
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_pair_books_scan
+                ON pair_books(scan_id)
         """)
 
         conn.execute("""
@@ -229,9 +266,10 @@ def _reattach_books(pair: dict, books_json: str | None) -> dict:
 
 
 def finish_scan(scan_id: int, pairs: list[dict], summary: dict | None, coverage: dict | None = None) -> None:
-    """Bulk-inserts pair_snapshots and marks the scan completed, in one
-    transaction. ``pairs`` order is preserved as ``rank`` (0-based index into
-    the original list — a dropped duplicate leaves a gap, never a renumbering).
+    """Bulk-inserts pair_snapshots (+ pair_books, for pairs carrying order
+    books) and marks the scan completed, in one transaction. ``pairs`` order
+    is preserved as ``rank`` (0-based index into the original list — a
+    dropped duplicate leaves a gap, never a renumbering).
 
     Pairs sharing the same pair_key() would collide on pair_snapshots' PRIMARY
     KEY(scan_id, pair_key) and abort the whole insert; instead the first
@@ -242,7 +280,8 @@ def finish_scan(scan_id: int, pairs: list[dict], summary: dict | None, coverage:
     arb_count = sum(1 for p in pairs if (p.get("arb_net_profit") or 0) > 0)
 
     seen: set[str] = set()
-    rows = []
+    snapshot_rows = []
+    book_rows = []
     duplicate_count = 0
     for rank, pair in enumerate(pairs):
         key = pair_key(pair)
@@ -251,7 +290,7 @@ def finish_scan(scan_id: int, pairs: list[dict], summary: dict | None, coverage:
             continue
         seen.add(key)
         slim, books = _split_books(pair)
-        rows.append((
+        snapshot_rows.append((
             scan_id,
             key,
             rank,
@@ -263,9 +302,10 @@ def finish_scan(scan_id: int, pairs: list[dict], summary: dict | None, coverage:
             pair.get("exec_profit"),
             pair.get("exec_contracts"),
             pair.get("kalshi_close") or pair.get("close_time") or pair.get("poly_close"),
-            json.dumps(slim),
-            json.dumps(books) if books is not None else None,
+            _dumps(slim),
         ))
+        if books is not None:
+            book_rows.append((scan_id, key, _dumps(books)))
 
     with closing(connect()) as conn, conn:
         conn.execute(
@@ -283,42 +323,49 @@ def finish_scan(scan_id: int, pairs: list[dict], summary: dict | None, coverage:
         conn.executemany(
             """INSERT INTO pair_snapshots
                    (scan_id, pair_key, rank, kalshi_ticker, poly_token_id, poly_id,
-                    category, net, exec_profit, exec_contracts, close_time,
-                    pair_json, books_json)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            rows,
+                    category, net, exec_profit, exec_contracts, close_time, pair_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            snapshot_rows,
         )
+        conn.execute("DELETE FROM pair_books WHERE scan_id = ?", (scan_id,))
+        if book_rows:
+            conn.executemany(
+                "INSERT INTO pair_books (scan_id, pair_key, books_json) VALUES (?, ?, ?)",
+                book_rows,
+            )
         mode_row = conn.execute("SELECT mode FROM scans WHERE id = ?", (scan_id,)).fetchone()
         if mode_row is not None:
-            _trim_books_json(conn, mode_row["mode"], keep=BOOKS_KEEP_PER_MODE)
+            _trim_pair_books(conn, mode_row["mode"], keep=BOOKS_KEEP_PER_MODE)
 
-        # Reclaim the pages just freed by trimming/deleting -- a no-op unless
+        # Reclaim the pages just freed by the DELETE above -- a no-op unless
         # the DB is in auto_vacuum=INCREMENTAL mode (set on creation by
-        # init_db()); without this, NULLing books_json leaves freed pages in
-        # sqlite's freelist for reuse but never shrinks the file on disk.
+        # init_db()), but now that trimming is a whole-row DELETE on its own
+        # table (not an UPDATE sharing pages with data we keep), this
+        # actually returns freed pages to the OS.
         try:
             conn.execute("PRAGMA incremental_vacuum")
         except sqlite3.OperationalError:
             pass
 
 
-def _trim_books_json(conn: sqlite3.Connection, mode: str, keep: int) -> None:
-    """NULLs out books_json for pair_snapshots belonging to all but the
-    ``keep`` most recent completed scans of ``mode`` — the order-book ladders
-    are the bulk of a snapshot's size and are only useful for restoring the
-    UI's most recent view; every other field (rank, prices, edges, matcher
-    reasons, ...) is retained indefinitely."""
+def _trim_pair_books(conn: sqlite3.Connection, mode: str, keep: int) -> None:
+    """Deletes pair_books rows for all but the ``keep`` most recent completed
+    scans of ``mode`` — a whole-row DELETE (unlike the old UPDATE ... SET
+    NULL on pair_snapshots) so the freed pages are fully reclaimable by
+    ``PRAGMA incremental_vacuum``. Every other field on pair_snapshots (rank,
+    prices, edges, matcher reasons, ...) is retained indefinitely; only the
+    order-book ladders are dropped for older scans."""
     rows = conn.execute(
         "SELECT id FROM scans WHERE status = 'completed' AND mode = ? ORDER BY id DESC",
         (mode,),
     ).fetchall()
-    stale_ids = [r["id"] for r in rows[keep:]]
-    if not stale_ids:
-        return
-    placeholders = ",".join("?" * len(stale_ids))
+    keep_ids = [r["id"] for r in rows[:keep]]
+    placeholders = ",".join("?" * len(keep_ids)) if keep_ids else "NULL"
     conn.execute(
-        f"UPDATE pair_snapshots SET books_json = NULL WHERE scan_id IN ({placeholders})",
-        stale_ids,
+        f"""DELETE FROM pair_books
+            WHERE scan_id IN (SELECT id FROM scans WHERE mode = ?)
+              AND scan_id NOT IN ({placeholders})""",
+        [mode, *keep_ids],
     )
 
 
@@ -341,7 +388,12 @@ def _scan_row_to_dict(row: sqlite3.Row) -> dict:
 
 def _load_pairs(conn: sqlite3.Connection, scan_id: int) -> list[dict]:
     rows = conn.execute(
-        "SELECT pair_json, books_json FROM pair_snapshots WHERE scan_id = ? ORDER BY rank ASC",
+        """SELECT ps.pair_json, pb.books_json
+           FROM pair_snapshots ps
+           LEFT JOIN pair_books pb
+               ON pb.scan_id = ps.scan_id AND pb.pair_key = ps.pair_key
+           WHERE ps.scan_id = ?
+           ORDER BY ps.rank ASC""",
         (scan_id,),
     ).fetchall()
     return [_reattach_books(json.loads(r["pair_json"]), r["books_json"]) for r in rows]
@@ -381,7 +433,7 @@ def get_scan(scan_id: int) -> dict | None:
         return result
 
 
-def prune_scans(keep: int = 20) -> int:
+def prune_scans(keep: int = 10) -> int:
     """Deletes the oldest completed/failed scans beyond ``keep`` (by id,
     newest first). Running/cancelled scans are never pruned by this. Returns
     the number of scans deleted."""
