@@ -55,15 +55,17 @@
     letter-spacing: 0.5px;
   }
   #topbar .logo { font-size: 13px; letter-spacing: 2px; }
-  #topbar .fkeys span {
+  #topbar .fkeys button {
     margin-left: 10px;
     background: #000;
     color: var(--orange);
     padding: 1px 5px;
     cursor: pointer;
     font-size: 10px;
+    border: none;
+    font-family: inherit;
   }
-  #topbar .fkeys span:hover { background: var(--orange2); color: #000; }
+  #topbar .fkeys button:hover { background: var(--orange2); color: #000; }
   #topbar .clock { font-size: 11px; letter-spacing: 1px; }
 
   /* ── Status bar ────────────────────────────────────────────── */
@@ -137,6 +139,12 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    background: none;
+    border: none;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+    font-size: 11px;
   }
   .sidebar-item:hover { background: var(--bg3); color: var(--white); }
   .sidebar-item.active { background: var(--bg3); color: var(--orange); }
@@ -375,6 +383,8 @@
     color: var(--orange);
     padding: 1px 7px;
     font-size: 11px;
+    border: none;
+    font-family: inherit;
   }
   #book-arb-box .ba-close:hover { background: var(--orange2); color: #000; }
   #book-arb-body { padding: 10px 14px 16px; }
@@ -459,6 +469,15 @@
   }
   .cat-btn:hover { border-color: var(--orange2); color: var(--orange); }
   .cat-btn.active { background: var(--orange2); color: #000; border-color: var(--orange); }
+
+  /* ── Focus (accessibility) ─────────────────────────────────────────────── */
+  button:focus-visible,
+  th[tabindex]:focus-visible,
+  tr[tabindex]:focus-visible,
+  #cmd-input:focus-visible {
+    outline: 2px solid var(--amber);
+    outline-offset: 1px;
+  }
 </style>
 </head>
 <body>
@@ -468,12 +487,12 @@
   <div style="display:flex;align-items:center;gap:16px;">
     <span class="logo">PRED-ARB</span>
     <div class="fkeys">
-      <span onclick="showView('pairs')">F1 PAIRS</span>
-      <span onclick="showView('signals')">F2 SIGNALS</span>
-      <span onclick="runScan()">F3 SCAN</span>
-      <span class="book-scan-trigger" onclick="runBookArb()">F4 BOOK</span>
-      <span onclick="showView('summary')">F5 SUMMARY</span>
-      <span onclick="runFastScan()">F8 FAST</span>
+      <button type="button" onclick="showView('pairs')">F1 PAIRS</button>
+      <button type="button" onclick="showView('signals')">F2 SIGNALS</button>
+      <button type="button" onclick="runScan()">F3 SCAN</button>
+      <button type="button" class="book-scan-trigger" onclick="runBookArb()">F4 BOOK</button>
+      <button type="button" onclick="showView('summary')">F5 SUMMARY</button>
+      <button type="button" onclick="runFastScan()">F8 FAST</button>
     </div>
   </div>
   <div class="clock" id="clock"></div>
@@ -494,7 +513,7 @@
 <!-- ── Command line ──────────────────────────────────────────────── -->
 <div id="cmdline">
   <span class="prompt">▶</span>
-  <input id="cmd-input" type="text" placeholder="SCAN [category] | SIGNALS | HELP" autocomplete="off" spellcheck="false">
+  <input id="cmd-input" type="text" placeholder="SCAN [category] | SIGNALS | HELP" autocomplete="off" spellcheck="false" aria-label="Command">
   <span id="cmd-hint" class="dim"></span>
 </div>
 
@@ -505,48 +524,48 @@
   <div id="sidebar">
     <div class="sidebar-section">
       <div class="s-header">VIEWS</div>
-      <div class="sidebar-item active" onclick="showView('pairs')" id="nav-pairs">
+      <button type="button" class="sidebar-item active" onclick="showView('pairs')" id="nav-pairs" aria-pressed="true">
         <span>LIVE PAIRS</span><span class="badge" id="sb-pairs">—</span>
-      </div>
-      <div class="sidebar-item" onclick="showView('signals')" id="nav-signals">
+      </button>
+      <button type="button" class="sidebar-item" onclick="showView('signals')" id="nav-signals" aria-pressed="false">
         <span>SIGNALS LOG</span><span class="badge" id="sb-signals">—</span>
-      </div>
-      <div class="sidebar-item" onclick="showView('summary')" id="nav-summary">
+      </button>
+      <button type="button" class="sidebar-item" onclick="showView('summary')" id="nav-summary" aria-pressed="false">
         <span>SUMMARY</span><span class="badge arb" id="sb-summary">—</span>
-      </div>
+      </button>
     </div>
     <div class="sidebar-section">
       <div class="s-header">CATEGORY</div>
-      <div class="sidebar-item" onclick="setCategory('all')"   id="cat-all">ALL</div>
-      <div class="sidebar-item" onclick="setCategory('election')" id="cat-election">ELECTION</div>
-      <div class="sidebar-item" onclick="setCategory('economic')" id="cat-economic">ECONOMIC</div>
-      <div class="sidebar-item" onclick="setCategory('political')" id="cat-political">POLITICAL</div>
-      <div class="sidebar-item" onclick="setCategory('sports')"   id="cat-sports">SPORTS</div>
-      <div class="sidebar-item" onclick="setCategory('pop')"      id="cat-pop">POP</div>
+      <button type="button" class="sidebar-item" onclick="setCategory('all')"   id="cat-all" aria-pressed="false">ALL</button>
+      <button type="button" class="sidebar-item" onclick="setCategory('election')" id="cat-election" aria-pressed="false">ELECTION</button>
+      <button type="button" class="sidebar-item" onclick="setCategory('economic')" id="cat-economic" aria-pressed="false">ECONOMIC</button>
+      <button type="button" class="sidebar-item" onclick="setCategory('political')" id="cat-political" aria-pressed="false">POLITICAL</button>
+      <button type="button" class="sidebar-item" onclick="setCategory('sports')"   id="cat-sports" aria-pressed="false">SPORTS</button>
+      <button type="button" class="sidebar-item" onclick="setCategory('pop')"      id="cat-pop" aria-pressed="false">POP</button>
     </div>
     <div class="sidebar-section">
       <div class="s-header">GATE (which pairs count)</div>
-      <div class="sidebar-item" onclick="setGate('all')"      id="gate-all">ALL PAIRS</div>
-      <div class="sidebar-item" onclick="setGate('eligible')" id="gate-eligible">ARB-ELIGIBLE (old col)</div>
-      <div class="sidebar-item active" onclick="setGate('alerter')" id="gate-alerter">
+      <button type="button" class="sidebar-item" onclick="setGate('all')"      id="gate-all" aria-pressed="false">ALL PAIRS</button>
+      <button type="button" class="sidebar-item" onclick="setGate('eligible')" id="gate-eligible" aria-pressed="false">ARB-ELIGIBLE (old col)</button>
+      <button type="button" class="sidebar-item active" onclick="setGate('alerter')" id="gate-alerter" aria-pressed="true">
         ALERTER-GATE <span class="badge-evidence badge-matcher">MATCHER OK</span>
-      </div>
+      </button>
     </div>
     <div class="sidebar-section">
       <div class="s-header">FILTERS</div>
-      <div class="sidebar-item" onclick="toggleArbOnly()" id="filter-arb">
+      <button type="button" class="sidebar-item" onclick="toggleArbOnly()" id="filter-arb" role="switch" aria-checked="false">
         <span>ARB ONLY</span><span id="arb-only-ind" style="color:var(--dimmer)">○</span>
-      </div>
-      <div class="sidebar-item" onclick="togglePricedOnly()" id="filter-priced">
+      </button>
+      <button type="button" class="sidebar-item" onclick="togglePricedOnly()" id="filter-priced" role="switch" aria-checked="false">
         <span>PRICED ONLY</span><span id="priced-only-ind" style="color:var(--dimmer)">○</span>
-      </div>
-      <div class="sidebar-item" id="sort-btn">SORT: NET ▼ (click a column header)</div>
+      </button>
+      <button type="button" class="sidebar-item" id="sort-btn">SORT: NET ▼ (click a column header)</button>
     </div>
     <div class="sidebar-section">
       <div class="s-header">ACTIONS</div>
-      <div class="sidebar-item" onclick="runScan()">⟳ FULL SCAN</div>
-      <div class="sidebar-item" onclick="runFastScan()">⚡ FAST SCAN</div>
-      <div class="sidebar-item book-scan-trigger" onclick="runBookArb()">▤ BOOK SCAN</div>
+      <button type="button" class="sidebar-item" onclick="runScan()">⟳ FULL SCAN</button>
+      <button type="button" class="sidebar-item" onclick="runFastScan()">⚡ FAST SCAN</button>
+      <button type="button" class="sidebar-item book-scan-trigger" onclick="runBookArb()">▤ BOOK SCAN</button>
     </div>
     <div style="flex:1;"></div>
     <div style="padding:8px;color:var(--dimmer);font-size:9px;border-top:1px solid var(--border);">
@@ -577,7 +596,7 @@
             <tr>
               <th style="width:28px;">#</th>
               <th style="width:48px;">CAT</th>
-              <th class="sortable r" data-sort="sim" style="width:52px;">SIM<span class="sort-ind"></span></th>
+              <th class="sortable r" data-sort="sim" style="width:52px;" aria-sort="none" tabindex="0">SIM<span class="sort-ind"></span></th>
               <th>POLYMARKET</th>
               <th>KALSHI</th>
               <th class="r" style="width:52px;">P-BID</th>
@@ -585,13 +604,13 @@
               <th class="r" style="width:52px;">K-BID</th>
               <th class="r" style="width:52px;">K-ASK</th>
               <th class="r" style="width:52px;">Δ-MID</th>
-              <th class="sortable r" data-sort="net_accurate" style="width:76px;">NET<span class="sort-ind"></span></th>
-              <th class="sortable r" data-sort="net_flat7" style="width:76px;">NET-F7<span class="sort-ind"></span></th>
-              <th class="sortable r" data-sort="exec_profit" style="width:64px;">EXEC $<span class="sort-ind"></span></th>
-              <th class="sortable r" data-sort="exec_contracts" style="width:64px;">EXEC CTS<span class="sort-ind"></span></th>
-              <th class="sortable r" data-sort="catalog_edge" style="width:64px;">CAT-EDGE<span class="sort-ind"></span></th>
-              <th class="sortable r" data-sort="conf" style="width:56px;">CONF<span class="sort-ind"></span></th>
-              <th class="sortable r" data-sort="close" style="width:64px;">CLOSE<span class="sort-ind"></span></th>
+              <th class="sortable r" data-sort="net_accurate" style="width:76px;" aria-sort="descending" tabindex="0">NET<span class="sort-ind"></span></th>
+              <th class="sortable r" data-sort="net_flat7" style="width:76px;" aria-sort="none" tabindex="0">NET-F7<span class="sort-ind"></span></th>
+              <th class="sortable r" data-sort="exec_profit" style="width:64px;" aria-sort="none" tabindex="0">EXEC $<span class="sort-ind"></span></th>
+              <th class="sortable r" data-sort="exec_contracts" style="width:64px;" aria-sort="none" tabindex="0">EXEC CTS<span class="sort-ind"></span></th>
+              <th class="sortable r" data-sort="catalog_edge" style="width:64px;" aria-sort="none" tabindex="0">CAT-EDGE<span class="sort-ind"></span></th>
+              <th class="sortable r" data-sort="conf" style="width:56px;" aria-sort="none" tabindex="0">CONF<span class="sort-ind"></span></th>
+              <th class="sortable r" data-sort="close" style="width:64px;" aria-sort="none" tabindex="0">CLOSE<span class="sort-ind"></span></th>
             </tr>
           </thead>
           <tbody id="pairs-body">
@@ -659,17 +678,17 @@
 </div>
 
 <!-- Loading overlay -->
-<div id="loading">
+<div id="loading" role="status" aria-live="polite">
   <div class="spinner" style="font-size:18px;">◉ SCANNING MARKETS...</div>
   <div style="color:var(--dim);font-size:11px;" id="loading-msg">Fetching Kalshi event catalog</div>
 </div>
 
 <!-- Book-arb (depth-walked executable arb) modal -->
-<div id="book-arb-modal" onclick="if(event.target===this) closeBookArb()">
+<div id="book-arb-modal" onclick="if(event.target===this) closeBookArb()" role="dialog" aria-modal="true" aria-labelledby="ba-title">
   <div id="book-arb-box">
     <div class="ba-header">
-      <span>▤ BOOK SCAN — DEPTH-WALKED EXECUTABLE ARB</span>
-      <span class="ba-close" onclick="closeBookArb()">✕ CLOSE (ESC)</span>
+      <span id="ba-title">▤ BOOK SCAN — DEPTH-WALKED EXECUTABLE ARB</span>
+      <button type="button" class="ba-close" onclick="closeBookArb()">✕ CLOSE (ESC)</button>
     </div>
     <div id="book-arb-body">—</div>
   </div>
@@ -782,9 +801,12 @@ function showView(v) {
   document.getElementById('pairs-view').style.display   = v === 'pairs'   ? 'flex' : 'none';
   document.getElementById('signals-view').style.display = v === 'signals' ? 'flex' : 'none';
   document.getElementById('summary-view').style.display = v === 'summary' ? 'flex' : 'none';
-  document.getElementById('nav-pairs').classList.toggle('active',   v === 'pairs');
-  document.getElementById('nav-signals').classList.toggle('active', v === 'signals');
-  document.getElementById('nav-summary').classList.toggle('active', v === 'summary');
+  ['pairs', 'signals', 'summary'].forEach(view => {
+    const btn = document.getElementById(`nav-${view}`);
+    const isActive = v === view;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  });
   if (v === 'signals') loadSignals();
   if (v === 'summary') renderSummary();
 }
@@ -793,7 +815,10 @@ function showView(v) {
 function setGate(gate) {
   currentGate = gate;
   ['all', 'eligible', 'alerter'].forEach(g => {
-    document.getElementById('gate-' + g).classList.toggle('active', g === gate);
+    const btn = document.getElementById('gate-' + g);
+    const isActive = g === gate;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
   });
   renderPairs();
 }
@@ -808,7 +833,10 @@ function passesGate(p) {
 function setCategory(cat) {
   currentCat = cat;
   ['all','election','economic','political','sports','pop'].forEach(c => {
-    document.getElementById('cat-'+c).classList.toggle('active', c === cat);
+    const btn = document.getElementById('cat-'+c);
+    const isActive = c === cat;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
   });
   renderPairs();
 }
@@ -817,7 +845,9 @@ function toggleArbOnly() {
   arbOnly = !arbOnly;
   document.getElementById('arb-only-ind').textContent = arbOnly ? '●' : '○';
   document.getElementById('arb-only-ind').style.color = arbOnly ? 'var(--green)' : 'var(--dimmer)';
-  document.getElementById('filter-arb').classList.toggle('active', arbOnly);
+  const btn = document.getElementById('filter-arb');
+  btn.classList.toggle('active', arbOnly);
+  btn.setAttribute('aria-checked', arbOnly ? 'true' : 'false');
   renderPairs();
 }
 
@@ -829,7 +859,9 @@ function togglePricedOnly() {
   pricedOnly = !pricedOnly;
   document.getElementById('priced-only-ind').textContent = pricedOnly ? '●' : '○';
   document.getElementById('priced-only-ind').style.color = pricedOnly ? 'var(--green)' : 'var(--dimmer)';
-  document.getElementById('filter-priced').classList.toggle('active', pricedOnly);
+  const btn = document.getElementById('filter-priced');
+  btn.classList.toggle('active', pricedOnly);
+  btn.setAttribute('aria-checked', pricedOnly ? 'true' : 'false');
   renderPairs();
 }
 
@@ -1071,6 +1103,12 @@ function updateSortIndicators() {
     const key = th.dataset.sort;
     const ind = th.querySelector('.sort-ind');
     ind.textContent = key === currentSort.key ? (currentSort.dir === 'desc' ? '▼' : '▲') : '';
+    // Update aria-sort for accessibility
+    if (key === currentSort.key) {
+      th.setAttribute('aria-sort', currentSort.dir === 'desc' ? 'descending' : 'ascending');
+    } else {
+      th.setAttribute('aria-sort', 'none');
+    }
   });
   const col = SORT_COLUMNS[currentSort.key];
   document.getElementById('sort-btn').textContent =
@@ -1158,7 +1196,7 @@ function renderPairs() {
     const simPct = Math.round((p.title_sim || 0) * 100);
     const barW   = Math.round((p.title_sim || 0) * 40);
 
-    return `<tr class="${rowCls} ${selCls}" onclick="selectRow(${i})" data-idx="${i}">
+    return `<tr class="${rowCls} ${selCls}" onclick="selectRow(${i})" data-idx="${i}" tabindex="0" aria-selected="${pairKey(p) === selectedKey ? 'true' : 'false'}">
       <td class="dim">${i+1}</td>
       <td class="cat">${(p.category||'?').toUpperCase().slice(0,5)}</td>
       <td><span class="sim-bar" style="width:${barW}px"></span><span class="dim">${simPct}%</span></td>
@@ -1204,7 +1242,9 @@ function selectRow(idx) {
   selectedKey = pairKey(p);
   document.querySelectorAll('#pairs-body tr[data-idx]').forEach(tr => {
     const rowP = displayedPairs[+tr.dataset.idx];
-    tr.classList.toggle('selected', !!rowP && pairKey(rowP) === selectedKey);
+    const isSelected = !!rowP && pairKey(rowP) === selectedKey;
+    tr.classList.toggle('selected', isSelected);
+    tr.setAttribute('aria-selected', isSelected ? 'true' : 'false');
   });
   renderDetail(p);
   updateBookScanAvailability();
@@ -1650,9 +1690,97 @@ function renderSummary() {
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
+// Sortable headers: click and keyboard (Enter/Space)
 document.querySelectorAll('#pairs-table th.sortable').forEach(th => {
   th.addEventListener('click', () => sortBy(th.dataset.sort));
+  th.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      sortBy(th.dataset.sort);
+    }
+  });
 });
+
+// Table rows: keyboard navigation (ArrowUp/ArrowDown to navigate, Enter/Space to select)
+document.getElementById('pairs-body').addEventListener('keydown', e => {
+  if (!e.target.closest('tr[data-idx]')) return;
+  const tr = e.target.closest('tr[data-idx]');
+  const idx = +tr.dataset.idx;
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (idx < displayedPairs.length - 1) {
+      const nextRow = document.querySelector(`#pairs-body tr[data-idx="${idx + 1}"]`);
+      if (nextRow) {
+        selectRow(idx + 1);
+        nextRow.focus();
+      }
+    }
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (idx > 0) {
+      const prevRow = document.querySelector(`#pairs-body tr[data-idx="${idx - 1}"]`);
+      if (prevRow) {
+        selectRow(idx - 1);
+        prevRow.focus();
+      }
+    }
+  } else if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    selectRow(idx);
+  }
+});
+
+// Modal focus management
+let modalPreviousFocus = null;
+const bookArbModal = document.getElementById('book-arb-modal');
+const closeModalBtn = document.querySelector('#book-arb-box .ba-close');
+
+// Store previous focus when opening modal
+const origCloseBookArb = window.closeBookArb;
+window.closeBookArb = function() {
+  origCloseBookArb();
+  if (modalPreviousFocus) {
+    modalPreviousFocus.focus();
+    modalPreviousFocus = null;
+  }
+};
+
+// Intercept runBookArb to set modal focus
+const origRunBookArb = window.runBookArb;
+window.runBookArb = async function() {
+  modalPreviousFocus = document.activeElement;
+  await origRunBookArb.call(this);
+  // After modal opens, focus the close button
+  setTimeout(() => {
+    if (bookArbModal.classList.contains('show')) {
+      closeModalBtn.focus();
+    }
+  }, 0);
+};
+
+// Trap focus in modal (Tab/Shift+Tab cycle within modal)
+bookArbModal.addEventListener('keydown', e => {
+  if (e.key !== 'Tab') return;
+  const focusableElements = Array.from(
+    bookArbModal.querySelectorAll('button, [href], input, textarea, select, [tabindex]:not([tabindex="-1"])')
+  ).filter(el => !el.hasAttribute('disabled') && el.offsetParent !== null);
+
+  if (focusableElements.length === 0) return;
+
+  const currentIndex = focusableElements.indexOf(document.activeElement);
+  let nextIndex;
+
+  if (e.shiftKey) {
+    nextIndex = currentIndex <= 0 ? focusableElements.length - 1 : currentIndex - 1;
+  } else {
+    nextIndex = currentIndex >= focusableElements.length - 1 ? 0 : currentIndex + 1;
+  }
+
+  e.preventDefault();
+  focusableElements[nextIndex].focus();
+});
+
 checkStatus();
 setInterval(checkStatus, 30000);
 setCategory('all');
