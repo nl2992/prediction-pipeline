@@ -173,3 +173,66 @@ def judicial_selection_stage(text: str) -> str | None:
     if nomination == seated:
         return None
     return "nomination" if nomination else "seated"
+
+
+# Distinct named competitions/events that can share a school or place name
+# (e.g. Notre Dame fields a football team and a steel-bridge team). Each
+# pattern is conservative: matched only on phrasing unlikely to appear
+# inside an unrelated sentence. Order matters only in that more specific
+# patterns (e.g. explicit women's basketball) are checked before generic
+# ones so a generic phrase doesn't shadow a specific one.
+_COMPETITION_IDENTITY_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\bsteel\s+bridge\b", re.I), "steel_bridge"),
+    (re.compile(r"\bconcrete\s+canoe\b", re.I), "concrete_canoe"),
+    (re.compile(r"\bsolar\s+decathlon\b", re.I), "solar_decathlon"),
+    (re.compile(r"\bmoot\s+court\b", re.I), "moot_court"),
+    (re.compile(r"\bquiz\s+bowl\b", re.I), "quiz_bowl"),
+    (re.compile(r"\b(?:robotics\s+competition|robotics\s+championship)\b", re.I), "robotics"),
+    (re.compile(r"\b(?:the\s+boat\s+race|boat\s+race\b.{0,20}\browing)\b", re.I), "rowing"),
+    (
+        re.compile(r"\b(?:ncaa\s+football|college\s+football\s+playoff|cfp|college\s+football)\b", re.I),
+        "ncaa_football",
+    ),
+    (
+        re.compile(r"\b(?:frozen\s+four|ncaa\s+(?:men'?s\s+|women'?s\s+)?hockey)\b", re.I),
+        "ncaa_hockey",
+    ),
+    (
+        re.compile(r"\b(?:college\s+world\s+series|ncaa\s+baseball)\b", re.I),
+        "ncaa_baseball",
+    ),
+    (
+        re.compile(r"\b(?:women'?s\s+march\s+madness|ncaa\s+women'?s\s+basketball)\b", re.I),
+        "ncaa_basketball_women",
+    ),
+    (
+        re.compile(r"\b(?:march\s+madness|ncaa\s+basketball|ncaa\s+tournament)\b", re.I),
+        "ncaa_basketball",
+    ),
+)
+
+
+def competition_identity(text: str) -> str | None:
+    """Return a canonical key for an explicitly named competition/event.
+
+    Conservative and small: only patterns unlikely to occur inside an
+    unrelated phrase are matched. Returns None when no identifiable
+    competition is named, which keeps this guard silent (no veto) rather
+    than risk suppressing a true match.
+    """
+    for pattern, key in _COMPETITION_IDENTITY_PATTERNS:
+        if pattern.search(text):
+            return key
+    return None
+
+
+# A generic NCAA basketball reference doesn't imply men's, so it stays
+# compatible with an explicit women's-basketball reference.
+_COMPATIBLE_COMPETITIONS = {frozenset({"ncaa_basketball", "ncaa_basketball_women"})}
+
+
+def competition_identity_conflict(a: str, b: str) -> bool:
+    """True when both texts name identifiable, different competitions."""
+    ca, cb = competition_identity(a), competition_identity(b)
+    return bool(ca and cb and ca != cb
+                and frozenset({ca, cb}) not in _COMPATIBLE_COMPETITIONS)

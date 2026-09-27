@@ -582,6 +582,32 @@ class LiveTopTenRemediation(unittest.TestCase):
                "Golfers to compete in the Presidents Cup this year", "J.J. Spaun")
         self.assertIsNone(context_veto(p, k))
 
+    def test_steel_bridge_vs_ncaa_football_rejected(self):
+        p = pm("Notre Dame", "Steel Bridge National Championship Winner")
+        k = ks("Will Notre Dame Fighting Irish win the 2027 National Champion?",
+               "NCAA Football: 2027 National Champion", "Notre Dame Fighting Irish")
+        self.assertEqual(context_veto(p, k), "competition identity mismatch")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_same_competition_identity_survives(self):
+        p = pm("Notre Dame", "College Football Playoff National Champion: Notre Dame")
+        k = ks("Will Notre Dame win the NCAA Football national championship?",
+               "College Football Playoff National Champion", "Notre Dame")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_competition_identity_neutral_when_one_side_unidentified(self):
+        p = pm("Notre Dame", "Who will win the championship?")
+        k = ks("Will Notre Dame Fighting Irish win the 2027 National Champion?",
+               "NCAA Football: 2027 National Champion", "Notre Dame Fighting Irish")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_frozen_four_vs_college_world_series_rejected(self):
+        p = pm("Texas", "Frozen Four Champion")
+        k = ks("Will Texas win the College World Series?",
+               "College World Series Champion", "Texas")
+        self.assertEqual(context_veto(p, k), "competition identity mismatch")
+        self.assertFalse(is_compatible_match(p, k))
+
     def test_inter_milan_vs_milan_rejected(self):
         p = pm("Inter Milan", "Serie A Top 4 Finishers (2026-27)")
         k = ks("Will Milan finish in the top 4 in the Serie A season?",

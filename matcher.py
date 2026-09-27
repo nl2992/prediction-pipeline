@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 
 from semantic_scope import (
     club_team_scope,
+    competition_identity_conflict,
     competition_result_scope,
     election_office_bundle,
     f1_career_scope,
@@ -2436,6 +2437,8 @@ def context_veto(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> str | None
         return "hole-in-one occurrence vs tournament winner"
     if {pcomp, kcomp} == {"participant", "winner"}:
         return "tournament participation vs winner"
+    if competition_identity_conflict(pt, kt):
+        return "competition identity mismatch"
     pj, kj = judicial_selection_stage(pt), judicial_selection_stage(kt)
     if {pj, kj} == {"nomination", "seated"}:
         return "judicial nomination vs becoming justice"

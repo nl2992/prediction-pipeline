@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING
 
 from semantic_scope import (
     club_team_scope,
+    competition_identity_conflict,
     competition_result_scope,
     election_office_bundle,
     f1_career_scope,
@@ -1110,6 +1111,8 @@ def match_spec(
         return _reject("hole-in-one occurrence vs tournament winner")
     if {competition_a, competition_b} == {"participant", "winner"}:
         return _reject("tournament participation vs winner")
+    if competition_identity_conflict(a.raw, b.raw):
+        return _reject("competition identity mismatch")
     judicial_a = judicial_selection_stage(a.raw)
     judicial_b = judicial_selection_stage(b.raw)
     if {judicial_a, judicial_b} == {"nomination", "seated"}:

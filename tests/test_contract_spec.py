@@ -1615,6 +1615,40 @@ class LiveTopTenSemanticGuards(unittest.TestCase):
         )
         self.assertTrue(d.match, d.reasons)
 
+    def test_steel_bridge_vs_ncaa_football_rejected(self):
+        d = decide_full(
+            "Notre Dame", "Steel Bridge National Championship Winner",
+            "Will Notre Dame Fighting Irish win the 2027 National Champion?",
+            "NCAA Football: 2027 National Champion",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("competition identity mismatch", d.reasons)
+
+    def test_same_competition_identity_remains_matchable(self):
+        d = decide_full(
+            "Notre Dame", "College Football Playoff National Champion: Notre Dame",
+            "Will Notre Dame win the NCAA Football national championship?",
+            "College Football Playoff National Champion",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_competition_identity_neutral_when_one_side_unidentified(self):
+        d = decide_full(
+            "Notre Dame", "Who will win the championship?",
+            "Will Notre Dame Fighting Irish win the 2027 National Champion?",
+            "NCAA Football: 2027 National Champion",
+        )
+        self.assertNotIn("competition identity mismatch", d.reasons)
+
+    def test_frozen_four_vs_college_world_series_rejected(self):
+        d = decide_full(
+            "Texas", "Frozen Four Champion",
+            "Will Texas win the College World Series?",
+            "College World Series Champion",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("competition identity mismatch", d.reasons)
+
     def test_inter_milan_vs_milan_rejected(self):
         d = decide_full(
             "Inter Milan", "Serie A Top 4 Finishers (2026-27)",
