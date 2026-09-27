@@ -1,53 +1,48 @@
 # Recall expansion proposal — more matched pairs, more arb surface
 
-Measured live on 2026-09-14 against both full open catalogs. Scripts used for the
-numbers below were one-off probes (not committed); every number is reproducible by
-re-running the ingest described in §1.
+> **Status (2026-09-25).** This document began as a 2026-09-14 proposal. The
+> dated baseline and progress log are retained for traceability; the current
+> implementation status below supersedes the original recommendations.
 
 ## TL;DR
 
-The matcher is not the main bottleneck — **ingestion and matching strategy are**.
-Production sees ~13% of Kalshi events and ~10% of Polymarket events, and its
-text-similarity core structurally cannot pair the two largest overlap categories
-(sports games and House races), whose titles share almost no tokens.
+The original bottlenecks were catalog ingestion and matching strategy. Both venues
+are now ingested at whole-open-catalog coverage, scans are uncapped by default,
+and structured sports matching handles games whose titles do not overlap.
+Remaining reach gaps are genuine unmatched counterparts, league/team-code
+reconciliation, and the depth, settlement-review, and fill-safety work required
+before review-only multi-leg synthesis could ever be considered for execution.
 
-| | Production today | Measured opportunity |
+| Area | Current implementation status |
 |---|---|---|
-| Kalshi events scanned | 1,503 (cap) of 11,718 | all 11,718 (107,790 markets) in **5 s** |
-| Polymarket events scanned | first ~2,100 (silent 422 past offset 2100), keyword-filtered → 1,212 | all 20,782 (225,818 markets) in **19 s** |
-| Matched pairs (baseline pools) | 50, of which 23 v2-endorsed | — |
-| Sports game events joined | 0 | **287** by (teams, date) key alone |
-| House districts joined | 0 | **350 / 350** by district code |
+| Ingestion | Whole open catalogs on both venues; no default event cap or keyword filter. |
+| Sports | Moneyline, spread, total, and sibling-event line matching are implemented. Live counts are slate-dependent; dated scorecards appear below. |
+| House races | No dedicated key join was added: text matching reached 635/660 in the dated 2026-09-18 oracle with no wrong counterparts. |
+| Ladder markets | Settlement-safe N-leg candidate synthesis is implemented as a review-only report. It is not routed to alerts or execution. |
+| Precision | Contract-context vetoes and v2 field rules are implemented and regression-tested; the current pass is recorded below. |
 
-## 1. Ingestion fixes (small, high-leverage — do first)
+## 1. Ingestion — completed
 
-**1a. Polymarket: silent truncation bug.** Gamma `/events` now returns
-`422 offset too large, use /events/keyset` past offset ~2100. `search_events`
-treats the error as end-of-catalog, so every scan has been missing ~90% of
-Polymarket. Fix: paginate `/events/keyset?limit=500&closed=false` with
-`after_cursor=<next_cursor>`. Full catalog in ~19 s, no keyword filter needed.
-Also filter stale events (`endDate` in the past but `closed=false` still occurs).
+**1a. Polymarket keyset pagination.** Gamma's keyset pagination and stale-ended
+market filtering are implemented in `polymarket/client.py`. The optional
+`max_events_to_search` CLI filter remains available, but default discovery is
+uncapped and unfiltered.
 
-**1b. Kalshi: one call per page, not one call per event.**
-`/events?status=open&with_nested_markets=true&limit=200` returns events with
-markets embedded: the whole catalog in ~60 requests / 5 s, versus 1,500
-per-event requests that hit 429 backoff (observed ~50 events/min live). This
-removes the need for `max_events_to_search`, `_ALWAYS_INCLUDE_SERIES`, and the
-alerter's `CAP_LADDER`.
+**1b. Kalshi nested-event catalog.** The nested-market event pagination and
+orphan sweep are implemented in `kalshi/client.py` and `discover.py`, avoiding
+the old per-event request pattern.
 
-**1c. Snapshot the catalogs once per cycle, re-price only candidates.** Catalog
-prices (Kalshi `yes_bid/ask_dollars`, Gamma `bestBid/bestAsk`) are good enough to
-*screen*; fetch CLOB books only for pairs whose catalog edge is within a few
-cents of positive.
+**1c. Catalog screening and live repricing.** Catalog quotes screen candidates;
+the regular two-leg arb path fetches live order books to price and validate v2
+endorsed pairs.
 
-## 2. Structured matchers ahead of the text matcher
+## 2. Structured matchers and synthesis
 
-The Jaccard matcher does not scale to full catalogs (95k × 166k markets runs for
-many minutes in pure Python) and cannot match differently-worded equivalents.
-Add deterministic *key joins* that run first; the text matcher handles the long
-tail of what's left.
+Prefix-filtered matching now completes full-catalog scans in the dated
+2026-09-18 measurement. Structured joins run before text matching where their
+contract semantics are known; text matching covers the long tail.
 
-**2a. Sports games (largest surface).**
+**2a. Sports games — implemented and extended.**
 Kalshi `KXNFLGAME-26SEP14DENKC-DEN` ↔ Polymarket slug `nfl-den-kc-2026-09-15`
 (moneyline outcomes `["Broncos","Chiefs"]`). Key = (league, team-code set, start
 time). Titles ("Denver wins" vs "Broncos vs. Chiefs") share zero tokens today.
@@ -65,23 +60,25 @@ Measured 287 joined events with an exact-code join; MLB 35/40, NFL 15/17, plus
   handling; keep `ai_verify` enforce on this class until proven.
 - Team-code alias table per league for the ~75% of Kalshi game events that miss
   an exact join (e.g. NCAAF 14/239, CS2 7/43).
-- Extend beyond moneyline later: PM `spreads`/`totals` ↔ Kalshi `*SPREAD`/`*TOTAL`
-  series join on the same game key + line value.
+- Spreads and totals now join on the game key plus line value; sibling Polymarket
+  events are included where their suffix is matchable. Player props and remaining
+  uncommon league/code mismatches remain measured recall work.
 
-**2b. US House races.** Kalshi `KXHOUSERACE` "WY-AL House winner?" ↔ PM
-"CA-22 House Election Winner"; key = district code, outcome = party *and*
-candidate surname (15 of 675 outcomes had the same party but a different name —
-must be rejected). All 350 districts join; ~53 small (≈1c) catalog edges
-settling 2026-11-03.
+**2b. US House races.** A separate structured key join was not necessary: the
+text matcher reached 635/660 on the dated 2026-09-18 reference set, with no
+wrong counterparts. The unresolved misses remain open rather than being claimed
+as complete coverage.
 
-**2c. Ladder/bucket synthesis (phase 3).** Kalshi threshold ladders ("Republicans
-26+ pts", "At least 62%") vs PM range buckets ("Republican 30–35%"): P(≥X) on
-Polymarket = sum of buckets ≥ X. This is a multi-leg arb (buy the bucket set vs
-the Kalshi NO) and needs `book_arb` support for N legs. Currently excluded by
-`_STATS_ONLY_RE` ("margin of victory", "vote share") on the stale assumption that
-Polymarket has no equivalent — it now lists 563 Midterm-MOV events.
+**2c. Ladder/bucket synthesis — implemented, review-only.** `ladder_match.py`
+and `python -m tools.ladder_report` synthesize settlement-safe baskets from
+Kalshi cumulative rungs and Polymarket range buckets. They correctly distinguish
+aligned and straddling thresholds and keep insufficient tail coverage out of the
+result. The report is deliberately review-only: catalog marks do not provide
+depth, settlement definitions need explicit reconciliation, and `book_arb` plus
+the executor are two-leg components. No ladder candidate enters alerts or order
+placement.
 
-## 3. Accuracy fixes found while auditing current pairs
+## 3. Accuracy fixes — implemented and maintained
 
 Of the 50 baseline pairs, 27 were v1 false positives (caught by v2 shadow, but
 they still consume the 1-to-1 slot a correct pair could have taken):
@@ -89,31 +86,45 @@ they still consume the 1-to-1 slot a correct pair could have taken):
   season leader] ↔ "Juan Soto: 1+ RBIs?" [tonight's game]; "Kenya" [Ebola case] ↔
   "Kenya wins" [cricket]). Fallback should score `event_title + outcome`, not the
   label alone.
-- **v2 false positive:** PM "OpenAI **$1t+** IPO before 2027?" ↔ Kalshi "Who will
-  IPO before 2027? OpenAI" was endorsed; a valuation-conditional IPO is a
-  strictly narrower contract. Add a monetary-qualifier check to `contract_spec`.
-- Event-group matching is 1-to-1 per event; allow one Kalshi event to match
-  several PM events (e.g. Kalshi "Which companies will IPO" ↔ PM "IPOs before
-  2027?" *and* standalone "Ripple IPO?" events), deduping at market level.
-- Promote v2 from shadow to gate (the alerter already requires `v2_match`); the
-  fallback false positives above are exactly what it rejects.
+- Monetary qualifiers, event fan-out/market-level assignment, and v2 alert
+  gating are implemented. The current precision pass also covers candidacy,
+  sub-jurisdiction, rank/bare-label, best-of-set, round, occurrence-window, and
+  event-title agreement classes with regression tests.
 
-## Suggested order
+## Remaining follow-up work
 
-1. 1a + 1b (hours; biggest single jump, removes caps and the 429 storms).
-2. 3 (fallback context + $-qualifier) so the larger pools don't add noise.
-3. 2a sports join for top leagues (MLB/NFL/NBA/NHL/EPL/MLS) with the safeguards,
-   behind `ai_verify` enforce; then 2b House.
-4. 2c ladder synthesis once N-leg execution math exists.
-
-Caveat: all edges above are from **catalog** prices, not executable books; they
-indicate where arb surface exists, not confirmed profit.
+1. Investigate documented sports recall gaps where a counterpart is known to
+   exist, especially league/team-code normalization.
+2. Before considering ladder alerts, add live depth, common-size basket pricing,
+   fee/risk accounting, and a documented settlement-equivalence review to the
+   review report.
+3. Treat live N-leg execution as a separate project requiring fill-safe order
+   policy, partial-fill recovery, exposure limits, and dedicated tests. The
+   sequential two-leg executor is not a safe basis for multi-leg order placement.
 
 ---
 
 ## Progress log
 
 Status key: ✅ done · 🟡 partial · ⬜ open. Newest first.
+
+### 2026-09-25 (pass 19) — proposal reconciliation and precision completion
+
+**Completed.** The proposal's current-status sections now distinguish completed
+catalog ingestion, sports matching, House text coverage, and review-only ladder
+synthesis from their original 2026-09-14 recommendations. Historical scorecards
+remain dated snapshots rather than claims about a fixed production count.
+
+**Precision pass.** The active matcher and v2 contract-spec work adds field-level
+protection for candidacy and sub-jurisdiction mismatches and context vetoes for
+bare-label/rank collisions, best-of-set, explicit round scope, occurrence
+windows, and event-title agreement. The regressions include both rejection cases
+and positive controls for equivalent candidacy and same-county contracts.
+
+**Validation.** `pytest -q` completed with **1016 passed, 1 skipped**. The
+multi-leg ladder report remains review-only: it has no executor or alerter path,
+and live N-leg execution is explicitly deferred pending depth, settlement, and
+fill-safety design.
 
 ### 2026-09-21 (pass 15) — the coverage ledger: what happens to every ingested market
 
@@ -155,13 +166,14 @@ the other simply does not have.
    totals and soccer halves (13.5k + 5.0k markets) have Kalshi equivalents for
    NFL/WNBA only. Matched the moment Kalshi lists soccer versions; the class
    table already handles them.
-3. **A genuine, sizeable gap: `KXMIDTERMMOV` (4,552 markets).** Polymarket DOES
+3. **A genuine, sizeable gap at pass 15: `KXMIDTERMMOV` (4,552 markets).** Polymarket DOES
    list midterm margin-of-victory markets. They do not pair 1-to-1 because
    Kalshi is cumulative ("Republicans 26+ pts") and Polymarket is bucketed
    ("Republican 25-30%"). Pairing them needs multi-leg synthesis — P(≥26) is the
-   SUM of the buckets above 26 — which means N-leg support in `book_arb` and the
-   alerter, not a matcher rule. This is the §2c item from pass 1, still the
-   largest matchable class left.
+   SUM of the buckets above 26. This was the §2c item from pass 1; pass 16
+   subsequently implemented settlement-safe review-only synthesis. It still is
+   not a `book_arb` or alerter input because N-leg live execution is out of
+   scope.
 
 **Also visible:** recall gaps inside classes that do match are concentrated in
 college football (`KXNCAAFSPREAD` 22/1,651, `KXNCAAFGAME` 1/468) — Polymarket
@@ -732,9 +744,9 @@ cross-product, (iii) a path for markets whose titles never overlap (sports games
 | M1 | Exact **prefix-filter** blocking (`PrefixIndex`) for event-group and individual matching — lossless for Jaccard ≥ gate; threshold-led path keeps full-token candidates | `matcher.py`, `discover.py` | ✅ |
 | M2 | Memoised pure text extractors (per-title, results frozen) | `matcher.py` | ✅ |
 | M3 | Deterministic tie-break in greedy 1-1 assignment (results no longer depend on candidate iteration order) | `matcher.py`, `discover.py` | ✅ |
-| 2a | Structured **sports-game join** (teams + `gameStartTime`; doubleheader, league-namespace, tie-shape guards; name fallback) | `sports_match.py` | 🟡 moneylines only; ~96% recall (pass 3) |
+| 2a | Structured **sports-game join** (teams + `gameStartTime`; doubleheader, league-namespace, tie-shape guards; name fallback) | `sports_match.py` | 🟡 moneylines only at pass 3; later extended through passes 10, 11, 17, and 18 |
 | 2b | House structured join | — | not needed: text matcher now finds 635/660 on full pools |
-| 2c | Ladder/bucket synthesis (Kalshi thresholds vs PM ranges) | — | ⬜ |
+| 2c | Ladder/bucket synthesis (Kalshi thresholds vs PM ranges) | — | ⬜ at this snapshot; implemented as review-only synthesis in pass 16 |
 | 3 | Precision fixes for high-edge false-positive classes (below) | `matcher.py` | 🟡 see pass 2 |
 
 **Performance** (same machine, pure Python):
@@ -767,8 +779,10 @@ The target is 100% of the pairs that really exist, and the gaps are known:
   KXETTANGAME (0/16) — either no PM counterpart or codes/names the join can't
   reconcile yet; needs per-series inspection.
 - **NCAAF 111/237** — mostly code/name mismatches for small schools.
-- **Non-moneyline sports** (spreads, totals, props) not joined yet.
-- **Ladder/bucket markets** (§2c) need multi-leg synthesis.
+- **Non-moneyline sports** (spreads, totals, props) were not joined at this
+  snapshot; later passes added the supported line classes and sibling events.
+- **Ladder/bucket markets** (§2c) needed multi-leg synthesis at this snapshot;
+  pass 16 added review-only synthesis.
 
 ### High-edge false-positive classes (adverse selection)
 
@@ -788,9 +802,10 @@ signals, 46 above 3c), the top of the list is dominated by:
 5. **"by end of" vs "during"** — PM "US recession by end of 2027?" ↔ Kalshi
    "Will there be a recession in 2027?".
 
-These pass both v1 and v2 today. The alerter's AI settlement check is the
-last line of defence, but the matcher should reject them itself. **Next pass:**
-add each class as a v2 field-level rule, with a regression test per class.
+**Historical state (2026-09-18).** These passed both v1 and v2 at the time, so
+the alerter's AI settlement check was the final defence. Subsequent precision
+passes added matcher and v2 contract-spec protection for these classes, with
+field-level regressions and matching positive controls; see pass 19 above.
 
 ---
 

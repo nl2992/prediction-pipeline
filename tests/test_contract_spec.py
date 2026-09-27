@@ -10,6 +10,7 @@ import json
 import os
 import unittest
 
+from audit_fixture import _unique_json_object, load_json_fixture
 from contract_spec import (
     explain, extract_spec, match_spec,
     _bet_type, _num_range, _first_name_collision, _polarity,
@@ -22,7 +23,7 @@ from contract_spec import (
     settlement_source, _settle_src_conflict, _is_first_endorsement_market,
     _is_cumulative_bucket, _week_bucket, _fiscal_period,
 )
-from matcher import _ascii_lower
+from matcher import _ascii_lower, _event_titles_agree
 from pipeline import MarketSnapshot, OrderBook, PriceLevel
 
 # Default to the in-repo slimmed fixture so parity ALWAYS runs (never silently
@@ -64,7 +65,7 @@ KNOWN_RECALL_EXCEPTIONS: set[tuple[str, str]] = set()
 # unchanged (98.46% / 100.0%) since the fix targeted recall, not this
 # fixture's remaining 5 documented false positives.
 AUDIT_EXPECTATIONS = {
-    "signal_subset": {"same": 319, "different": 20, "min_precision": 0.98},
+    "signal_subset": {"same": 316, "different": 23, "min_precision": 0.98},
     "stratified_subset": {"same": 145, "different": 4, "min_precision": 0.99},
 }
 
@@ -83,7 +84,7 @@ AUDIT_EXPECTATIONS = {
 # boilerplate token overlap — too narrow/domain-specific a single case to
 # generalise safely without broader regression risk.
 AUDIT_EXPECTATIONS_ITER4 = {
-    "signal_subset": {"same": 45, "different": 3, "min_precision": 1.0},
+    "signal_subset": {"same": 44, "different": 4, "min_precision": 1.0},
     "stratified_subset": {"same": 196, "different": 4, "min_precision": 0.99},
 }
 
@@ -104,9 +105,12 @@ def decide(pm: str, k: str, c1: str = "2026-12-31T00:00:00Z", c2: str = "2026-12
 def decide_full(p_title, p_event, k_title, k_event, p_close="2026-12-31", k_close="2026-12-31"):
     """decide() but with event titles too — most of the audit FP classes only
     show up once title+event text is combined the way discover() builds it."""
+    p = snap(p_title, p_close, p_event)
+    k = snap(k_title, k_close, k_event)
     return match_spec(
-        extract_spec(snap(p_title, p_close, p_event)),
-        extract_spec(snap(k_title, k_close, k_event)),
+        extract_spec(p), extract_spec(k),
+        same_event=bool(p_event and k_event and p_event == k_event),
+        events_agree=_event_titles_agree(p, k),
     )
 
 
@@ -495,6 +499,117 @@ class RankNumber(unittest.TestCase):
         self.assertTrue(d.match)
 
 
+class Pass11ContractSpec(unittest.TestCase):
+    """The v2 decision path mirrors pass-11 precision gates and event scope."""
+
+    def test_bare_name_one_sided_rank_rejected(self):
+        d = decide_full(
+            "Taylor Swift", "Spotify #2 most streamed artist 2025",
+            "Will Taylor Swift be the 1st overall pick in the 2025 NFL draft?",
+            "2025 NFL Draft: 1st overall pick",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("rank contract matched on a bare name", d.reasons)
+
+    def test_same_rank_bare_name_pair_is_kept(self):
+        d = decide_full(
+            "Taylor Swift", "Spotify #2 most streamed artist 2025",
+            "Will Taylor Swift rank #2 among Spotify artists in 2025?",
+            "Spotify #2 most streamed artists 2025",
+        )
+        self.assertTrue(d.match)
+
+    def test_best_of_set_vs_plain_win_rejected(self):
+        d = decide_full(
+            "Texas", "Democrats best tossup Senate race",
+            "Will Democrats win Texas?", "Democratic Senate election winner",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("superlative (best-of-set) vs plain win", d.reasons)
+
+    def test_award_best_category_remains_eligible(self):
+        d = decide_full(
+            "A game", "The Game Awards: Best Audio Design",
+            "Will A game win Best Audio Design?", "The Game Awards: Best Audio Design",
+        )
+        self.assertTrue(d.match)
+
+    def test_differing_explicit_rounds_rejected(self):
+        d = decide_full(
+            "Candidate A", "Brazil election first round participants",
+            "Second round participants: Candidate A", "Brazil election second round",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("round scope mismatch", d.reasons)
+
+    def test_same_round_true_pair_survives(self):
+        d = decide_full(
+            "Renan Santos", "Brazil election first round winner",
+            "Will Renan Santos win the first round?", "Brazil election 1st round winner",
+        )
+        self.assertTrue(d.match)
+
+    def test_deadline_vs_occurrence_window_rejected(self):
+        d = decide_full(
+            "Yes", "US recession by end of 2027",
+            "Will there be a recession in 2027?", "US recession in 2027",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("deadline window vs within-year occurrence", d.reasons)
+
+    def test_declaration_year_true_pair_survives(self):
+        d = decide_full(
+            "Yes", "NBER recession declared by end of 2026",
+            "Will NBER declare a recession in 2026?", "NBER recession declared in 2026",
+        )
+        self.assertTrue(d.match)
+
+    def test_identical_label_shortcut_requires_agreeing_events(self):
+        p = snap("Taylor Swift", "2026-12-31", "Spotify most streamed artist")
+        k = snap("Taylor Swift", "2026-12-31", "NFL draft first pick")
+        self.assertFalse(explain(p, k).match)
+
+    def test_identical_label_shortcut_keeps_agreeing_events(self):
+        p = snap("SELF DRIVE Act", "2026-12-31", "Which bills become law in 2026?")
+        k = snap("A lengthy federal autonomous vehicle bill becomes law before 2027? SELF DRIVE Act",
+                 "2026-12-31", "Which bills become law in 2026?")
+        self.assertTrue(explain(p, k).match)
+
+    def test_candidacy_vs_nominee_selection_rejected(self):
+        d = decide_full(
+            "Phil Murphy", "Democratic Presidential Nominee 2028",
+            "Who will run for the Democratic presidential nomination in 2028? Phil Murphy",
+            "Democratic presidential nomination 2028",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("candidacy (run for) vs winning", d.reasons)
+
+    def test_equivalent_candidacy_contracts_match(self):
+        d = decide_full(
+            "Who will run for the Democratic presidential nomination in 2028? Phil Murphy",
+            "Democratic Presidential Nomination 2028",
+            "Phil Murphy to run for the Democratic presidential nomination in 2028?",
+            "Democratic Presidential Nomination 2028",
+        )
+        self.assertTrue(d.match)
+
+    def test_county_vs_statewide_contract_rejected(self):
+        d = decide_full(
+            "Abdul El-Sayed (D)", "Michigan Senate Election Winner",
+            "Will Abdul El-Sayed win Kent County?",
+            "Michigan Senate: which counties will Abdul El-Sayed win?",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("sub-jurisdiction mismatch", d.reasons)
+
+    def test_equivalent_same_county_contracts_match(self):
+        d = decide_full(
+            "Will Abdul El-Sayed win Kent County?", "Michigan Senate Election: County Winners",
+            "Abdul El-Sayed to win Kent County?", "Michigan Senate Election: County Winners",
+        )
+        self.assertTrue(d.match)
+
+
 class GroupBucket(unittest.TestCase):
     """An aggregate GROUP market ('a team from Texas wins') settles on ANY
     member of the group — a different, broader contract than one naming a
@@ -785,7 +900,12 @@ class EndorsedAuditRegression(unittest.TestCase):
     def _verdict(self, item):
         p = snap(item["poly_title"], item["poly_close"] or "2026-12-31", item["poly_event_title"])
         k = snap(item["kalshi_title"], item["kalshi_close"] or "2026-12-31", item["kalshi_event_title"])
-        return match_spec(extract_spec(p), extract_spec(k))
+        return match_spec(
+            extract_spec(p), extract_spec(k),
+            same_event=bool(item["poly_event_title"] and item["kalshi_event_title"]
+                            and item["poly_event_title"] == item["kalshi_event_title"]),
+            events_agree=_event_titles_agree(p, k),
+        )
 
     def _check_subset(self, name, expectations=None):
         items = self.fixture[name]
@@ -819,12 +939,34 @@ class EndorsedAuditRegression(unittest.TestCase):
             precision, expect["min_precision"],
             f"{name}: precision {precision:.4f} fell below floor {expect['min_precision']}",
         )
-
     def test_signal_subset_precision_and_recall(self):
         self._check_subset("signal_subset")
 
+    def test_historical_truth_social_window_pair_is_labelled_and_rejected(self):
+        item = next(
+            row for row in load_json_fixture(AUDIT_FIXTURE)["signal_subset"]
+            if row.get("kalshi_ticker") == "KXTRUTHSOCIAL-26SEP19-B129"
+        )
+        self.assertEqual(item["label"], "different")
+        self.assertFalse(self._verdict(item).match)
+
     def test_stratified_subset_precision_and_recall(self):
         self._check_subset("stratified_subset")
+
+
+
+class AuditFixtureJsonKeys(unittest.TestCase):
+    """Audit fixture loading must reject duplicate keys instead of hiding them."""
+
+    def test_duplicate_object_keys_are_rejected_in_modified_audit_fixtures(self):
+        with self.assertRaisesRegex(ValueError, "duplicate JSON object key: label"):
+            json.loads('{"label":"same","label":"different"}',
+                       object_pairs_hook=_unique_json_object)
+
+        fixtures = (AUDIT_FIXTURE, AUDIT_FIXTURE_ITER4, AUDIT_FIXTURE_DEPTH_RESCUED)
+        for fixture_path in fixtures:
+            with self.subTest(fixture=fixture_path):
+                load_json_fixture(fixture_path)
 
 
 class EndorsedAuditRegressionIter4(EndorsedAuditRegression):
@@ -880,8 +1022,8 @@ class DepthRescuedAuditRegression(unittest.TestCase):
         items = self.fixture
         same = [i for i in items if i["label"] == "same"]
         different = [i for i in items if i["label"] == "different"]
-        self.assertEqual(len(same), 80, "fixture edited? unexpected same-count")
-        self.assertEqual(len(different), 5, "fixture edited? unexpected different-count")
+        self.assertEqual(len(same), 79, "fixture edited? unexpected same-count")
+        self.assertEqual(len(different), 6, "fixture edited? unexpected different-count")
 
         tp = fp = 0
         for it in same:
@@ -894,8 +1036,8 @@ class DepthRescuedAuditRegression(unittest.TestCase):
             k = snap(it["kalshi_title"], it["kalshi_close"] or "2026-12-31", it["kalshi_event_title"])
             if match_spec(extract_spec(p), extract_spec(k)).match:
                 fp += 1
-        # All 80 labelled-same pairs must still be endorsed (no recall loss).
-        self.assertEqual(tp, 80)
+        # The corrected Game Awards category label is one distinct contract.
+        self.assertEqual(tp, 79)
         precision = tp / (tp + fp)
         # Iteration 6 fixed all 5 documented false positives on this subset
         # (bucket-vs-cumulative-threshold x2, bucket-granularity, adjacent-
@@ -1350,6 +1492,306 @@ class OutcomeLabelOverride(unittest.TestCase):
                     self._k("Who will be Fantasy Football: 2026-27 Season Top QB? Patrick Mahomes",
                             "Fantasy Football: 2026-27 Season Top QB", "Patrick Mahomes"))
         self.assertFalse(d.match)
+
+
+class LiveTopTenSemanticGuards(unittest.TestCase):
+    """v2 mirrors the live-audit semantic guards, including shared labels."""
+
+    def test_game_awards_categories_rejected_even_with_same_outcome(self):
+        d = decide_full("Hades II", "The Game Awards: Game of the Year",
+                        "Hades II", "The Game Awards: Best Audio Design")
+        self.assertFalse(d.match)
+        self.assertIn("different award category", d.reasons)
+
+    def test_same_award_category_remains_matchable(self):
+        d = decide_full("Hades II", "The Game Awards: Best Audio Design",
+                        "Hades II", "The Game Awards: Best Audio Design")
+        self.assertTrue(d.match, d.reasons)
+
+    def test_hurricane_exact_vs_at_least_rejected_even_with_same_label(self):
+        d = decide_full("Yes", "Category 2 hurricane landfall",
+                        "Yes", "Category 2 or above hurricane landfall")
+        self.assertFalse(d.match)
+        self.assertIn("hurricane category scope mismatch", d.reasons)
+
+    def test_same_hurricane_category_semantics_remain_matchable(self):
+        d = decide_full("Yes", "Category 3 hurricane landfall",
+                        "Yes", "Cat 3 hurricane landfall")
+        self.assertTrue(d.match, d.reasons)
+
+    def test_rent_freeze_vs_congestion_pricing_rejected(self):
+        d = decide_full("Yes", "NYC rent freeze",
+                        "Yes", "NYC congestion pricing")
+        self.assertFalse(d.match)
+        self.assertIn("different policy topic", d.reasons)
+
+    def test_rent_freeze_vs_free_buses_rejected(self):
+        d = decide_full("Yes", "Will Mamdani freeze NYC rents before 2027?",
+                        "Yes", "Will NYC offer free buses before 2027?")
+        self.assertFalse(d.match)
+        self.assertIn("different policy topic", d.reasons)
+
+    def test_same_policy_topic_free_transit_remains_matchable(self):
+        d = decide_full("Yes", "Will NYC offer free buses before 2027?",
+                        "Yes", "Will NYC make buses fare-free before 2027?")
+        self.assertTrue(d.match, d.reasons)
+
+    def test_featured_artist_on_different_work_rejected(self):
+        for artist in ("Don Toliver", "Kodak Black", "Sexyy Red"):
+            with self.subTest(artist=artist):
+                d = decide_full(
+                    artist, "Who will be featured on GTA VI: The Album?",
+                    f"Will {artist} be featured on Qr\u00f6melife?",
+                    "Who will be featured on Qr\u00f6melife?",
+                )
+                self.assertFalse(d.match)
+                self.assertIn("different featured work", d.reasons)
+
+    def test_same_featured_work_variants_remain_matchable(self):
+        d = decide_full(
+            "Don Toliver", "Who will be featured on GTA VI: The Album?",
+            "Will Don Toliver be featured on GTA VI album?",
+            "Who will be featured on GTA VI album?",
+        )
+        self.assertTrue(d.match, d.reasons)
+        d = decide_full(
+            "Don Toliver", "Who will be featured on Qr\u00f6melife?",
+            "Will Don Toliver be featured on Qromelife?",
+            "Who will be featured on Qromelife?",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_generic_featured_work_side_is_neutral(self):
+        d = decide_full(
+            "Don Toliver", "Who will be featured on GTA VI: The Album?",
+            "Will Don Toliver be featured on an album?",
+            "Who will be featured on an album?",
+        )
+        self.assertNotIn("different featured work", d.reasons)
+
+    def test_hole_in_one_vs_tournament_winner_rejected(self):
+        d = decide_full(
+            "Presidents Cup 2026 Winner", "Presidents Cup 2026 Winner",
+            "Will there be 1+ holes-in-one at the 2026 Presidents Cup?",
+            "Presidents Cup: Hole-in-One",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("hole-in-one occurrence vs tournament winner", d.reasons)
+
+    def test_same_competition_result_scopes_remain_matchable(self):
+        d = decide_full(
+            "Yes", "Will there be 1+ holes-in-one at the Presidents Cup?",
+            "Presidents Cup hole-in-one?", "Presidents Cup: Hole-in-One",
+        )
+        self.assertTrue(d.match, d.reasons)
+        d = decide_full(
+            "Presidents Cup 2026 Winner", "Presidents Cup 2026 Winner",
+            "Who will win the Presidents Cup?", "Presidents Cup winner",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_compound_hole_in_one_winner_text_is_neutral(self):
+        d = decide_full(
+            "Yes", "Will the Presidents Cup winner record a hole-in-one?",
+            "Will the Presidents Cup winner record a hole-in-one?",
+            "Presidents Cup winner hole-in-one",
+        )
+        self.assertNotIn("hole-in-one occurrence vs tournament winner", d.reasons)
+
+    def test_tournament_participation_vs_winner_rejected(self):
+        d = decide_full(
+            "Presidents Cup 2026 Winner", "Presidents Cup 2026 Winner",
+            "J.J. Spaun to compete in the Presidents Cup in 2026?",
+            "Golfers to compete in the Presidents Cup this year",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("tournament participation vs winner", d.reasons)
+
+    def test_same_tournament_participation_scope_remains_matchable(self):
+        d = decide_full(
+            "J.J. Spaun", "Golfers to compete in the Presidents Cup this year",
+            "J.J. Spaun to compete in the Presidents Cup in 2026?",
+            "Golfers to compete in the Presidents Cup this year",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_inter_milan_vs_milan_rejected(self):
+        d = decide_full(
+            "Inter Milan", "Serie A Top 4 Finishers (2026-27)",
+            "Will Milan finish in the top 4 in the Serie A season?",
+            "Serie A Top 4 Finishers",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("different club/team", d.reasons)
+
+    def test_ac_milan_alias_remains_matchable(self):
+        d = decide_full(
+            "AC Milan", "Serie A Top 4 Finishers (2026-27)",
+            "Will Milan finish in the top 4 in the Serie A season?",
+            "Serie A Top 4 Finishers",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_single_race_vs_combo_market_rejected(self):
+        d = decide_full(
+            "Cindy Holscher (D)", "Kansas Governor Election Winner",
+            "Will Kansas Governor winner be Democratic party and Kansas Senate winner be Democratic party? Cindy Holscher and Adam Hamilton win",
+            "Kansas Governor-Senate combo",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("single race vs combo market", d.reasons)
+
+    def test_same_combo_market_remains_matchable(self):
+        d = decide_full(
+            "Democratic/Democratic", "Kansas Governor-Senate combo",
+            "Will Kansas Governor winner be Democratic party and Kansas Senate winner be Democratic party?",
+            "Kansas Governor-Senate combo",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_party_alliance_vs_member_party_rejected(self):
+        d = decide_full(
+            "RZP-Zehut", "Which parties will be in the next Israeli government?",
+            "Will Zehut be a part of the next government in Israel?",
+            "Who will be a part of the next government of Israel?",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("party alliance vs member party", d.reasons)
+
+    def test_same_party_list_scope_remains_matchable(self):
+        d = decide_full(
+            "RZP-Zehut", "Which parties will be in the next Israeli government?",
+            "Will RZP-Zehut be a part of the next government in Israel?",
+            "Who will be a part of the next government of Israel?",
+        )
+        self.assertTrue(d.match, d.reasons)
+        d = decide_full(
+            "Zehut", "Which parties will be in the next Israeli government?",
+            "Will Zehut be a part of the next government in Israel?",
+            "Who will be a part of the next government of Israel?",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_f1_retirement_vs_next_team_rejected(self):
+        d = decide_full(
+            "Will Max Verstappen retire from F1 in 2026?",
+            "Will Max Verstappen retire from F1 in 2026?",
+            "What will be Max Verstappen's next F1 team? Alpine",
+            "Max Verstappen's Next F1 Team",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("F1 retirement vs next team", d.reasons)
+
+    def test_same_f1_next_team_scope_remains_matchable(self):
+        d = decide_full(
+            "Alpine", "Max Verstappen's Next F1 Team",
+            "What will be Max Verstappen's next F1 team? Alpine",
+            "Max Verstappen's Next F1 Team",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_judicial_nomination_vs_becoming_justice_rejected(self):
+        d = decide_full(
+            "Aileen Cannon", "Who will the Trump admin next nominate as SCOTUS Justice?",
+            "Will Aileen Cannon become the next Justice on the Supreme Court?",
+            "Who will be the next Supreme Court justice?",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("judicial nomination vs becoming justice", d.reasons)
+
+    def test_same_judicial_nomination_stage_remains_matchable(self):
+        d = decide_full(
+            "Aileen Cannon", "Who will the Trump admin next nominate as SCOTUS Justice?",
+            "Will Trump nominate Aileen Cannon as Supreme Court justice?",
+            "Who will Trump next nominate to the Supreme Court?",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_same_next_justice_stage_remains_matchable(self):
+        d = decide_full(
+            "Aileen Cannon", "Will Aileen Cannon become the next Justice on the Supreme Court?",
+            "Will Aileen Cannon be the next Supreme Court justice?",
+            "Who will be the next Supreme Court justice?",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_non_supreme_court_nomination_context_is_neutral(self):
+        d = decide_full(
+            "Yes", "Will Alice be the justice nominee?",
+            "Yes", "Will Alice become the next justice?",
+        )
+        self.assertNotIn("judicial nomination vs becoming justice", d.reasons)
+
+    def test_mixed_judicial_stage_text_is_neutral(self):
+        d = decide_full(
+            "Aileen Cannon", "Will Aileen Cannon be nominated and become the next Supreme Court justice?",
+            "Will Aileen Cannon become the next Justice on the Supreme Court?",
+            "Who will be the next Supreme Court justice?",
+        )
+        self.assertNotIn("judicial nomination vs becoming justice", d.reasons)
+
+    def test_truth_social_different_explicit_post_windows_rejected(self):
+        d = decide_full(
+            "120-139", "Donald Trump Truth Social posts September 11 - September 18, 2026?",
+            "120-139", "Will Donald Trump make 120-139 Truth Social posts Sep 13-19, 2026?",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("different Truth Social post-count window", d.reasons)
+
+    def test_truth_social_same_explicit_post_window_remains_matchable(self):
+        d = decide_full(
+            "120-139", "Donald Trump Truth Social posts September 11 - September 18, 2026?",
+            "120-139", "Will Donald Trump make 120-139 Truth Social posts 9/11-9/18, 2026?",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_fewest_points_allowed_vs_postseason_rejected(self):
+        d = decide_full("Kansas City Chiefs", "NFL: Fewest Points Allowed in 2026",
+                        "Kansas City Chiefs", "NFL: Team to Make Postseason")
+        self.assertFalse(d.match)
+        self.assertIn("superlative stat vs advancement/win", d.reasons)
+
+    def test_expanded_rate_phrases_match_same_direction_and_reject_opposite(self):
+        same = decide("Bank of Canada raises its benchmark interest rates in October",
+                      "Bank of Canada rate hike in October")
+        self.assertTrue(same.match, same.reasons)
+        opposite = decide("Bank of Canada raises rates in October",
+                          "Bank of Canada cuts rates in October")
+        self.assertFalse(opposite.match)
+
+
+class SharedSemanticScopeTests(unittest.TestCase):
+    """The v2 comparator mirrors explicit outcome-scope gates from v1."""
+
+    def test_relegation_vs_champion_rejected(self):
+        d = decide_full(
+            "Relegation", "Chinese Super League 2026 outcomes",
+            "Champion", "Chinese Super League 2026 outcomes",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("relegation vs champion outcome", d.reasons)
+
+    def test_same_relegation_outcome_scope_survives(self):
+        d = decide_full(
+            "Relegation", "Chinese Super League: Relegation",
+            "Relegation", "Chinese Super League: Relegation",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_coalition_composition_vs_party_membership_rejected(self):
+        d = decide_full(
+            "Which coalition will form after the 2026 election?",
+            "2026 election government outcomes",
+            "Will Labour be part of the next government?",
+            "2026 election government outcomes",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("coalition composition vs party membership", d.reasons)
+
+    def test_same_party_membership_scope_survives(self):
+        text = "Will Labour be part of the next government?"
+        d = decide_full(text, text, text, text)
+        self.assertTrue(d.match, d.reasons)
 
 
 if __name__ == "__main__":

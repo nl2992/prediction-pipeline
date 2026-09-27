@@ -1852,8 +1852,8 @@
    "v2_reasons_baseline": [
     "token similarity 0.33 >= 0.3"
    ],
-   "label": "same",
-   "reason_class": "ok"
+   "label": "different",
+   "reason_class": "award_category_vs_annual_release"
   },
   {
    "poly_title": "Carmela Conroy (D)",
@@ -4249,8 +4249,8 @@
    "v2_reasons_baseline": [
     "token similarity 0.55 >= 0.3"
    ],
-   "label": "same",
-   "reason_class": "ok"
+   "label": "different",
+   "reason_class": "different_award_category"
   },
   {
    "poly_title": "FC Dallas",
@@ -5679,8 +5679,8 @@
    "v2_reasons_baseline": [
     "token similarity 0.42 >= 0.3"
    ],
-   "label": "same",
-   "reason_class": "ok"
+   "label": "different",
+   "reason_class": "different_measurement_window"
   },
   {
    "poly_title": "Week 1",
