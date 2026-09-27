@@ -563,5 +563,83 @@ class ReviewsApi(unittest.TestCase):
         self.assertEqual(current["K1|T1"]["verdict"], "mismatch")
 
 
+def _review_queue_pair(poly_id, kalshi_ticker, poly_ask, kalshi_bid, size=100, **extra):
+    base = {
+        "poly_bid": poly_ask - 0.02, "poly_ask": poly_ask,
+        "kalshi_bid": kalshi_bid, "kalshi_ask": kalshi_bid + 0.03,
+        "poly_title": "PM market?", "kalshi_title": "Kalshi market?",
+        "poly_id": poly_id, "poly_token_id": f"TOK-{poly_id}",
+        "kalshi_ticker": kalshi_ticker, "poly_slug": "pm-market",
+        "kalshi_event_title": "Kalshi market?", "confidence": 0.9, "v2_match": True,
+        "poly_book": {"bids": [[poly_ask - 0.02, size]], "asks": [[poly_ask, size]]},
+        "kalshi_book": {"bids": [[kalshi_bid, size]], "asks": [[kalshi_bid + 0.03, size]]},
+    }
+    base.update(extra)
+    return base
+
+
+class ReviewQueueApi(unittest.TestCase):
+    """GET /api/review-queue — Phase 2e (docs/IMPLEMENTATION_PLAN.md Phase 2's
+    "Review Queue tab" / "Yield columns" tasks)."""
+
+    def setUp(self):
+        import store
+        store.init_db()
+
+    def test_404_when_no_completed_scan(self):
+        status, body = _json(server.api_review_queue())
+        self.assertEqual(status, 404)
+        self.assertEqual(body, {"error": "no completed scan"})
+
+    def test_422_on_non_positive_params(self):
+        status, _ = _json(server.api_review_queue(top_n=0))
+        self.assertEqual(status, 422)
+        status, _ = _json(server.api_review_queue(min_size=0))
+        self.assertEqual(status, 422)
+
+    def test_ranking_review_attach_and_staleness(self):
+        pairs = [
+            _review_queue_pair("low", "KLOW", poly_ask=0.46, kalshi_bid=0.50),
+            _review_queue_pair("high", "KHIGH", poly_ask=0.11, kalshi_bid=0.85),
+            _review_queue_pair("mid", "KMID", poly_ask=0.31, kalshi_bid=0.65),
+        ]
+        with patch("discover.discover", return_value=pairs):
+            status, scan_body = _json(server.api_scan())
+        self.assertEqual(status, 200)
+        self.assertTrue(scan_body["persisted"])
+
+        status, _ = _json(server.api_add_review(
+            {"pair_key": "KHIGH|TOK-high", "verdict": "match"}))
+        self.assertEqual(status, 200)
+
+        status, body = _json(server.api_review_queue(top_n=25, min_size=20))
+        self.assertEqual(status, 200)
+        self.assertEqual(body["scan_id"], scan_body["scan_id"])
+        self.assertIn("scan_finished_at", body)
+        self.assertEqual(body["parameters"]["top_n"], 25)
+        rows = body["rows"]
+        self.assertEqual(len(rows), 3)
+
+        # Ranking matches the audit tool's sort key: exec_net desc.
+        exec_nets = [r["exec_net"] for r in rows]
+        self.assertEqual(exec_nets, sorted(exec_nets, reverse=True))
+        self.assertEqual(rows[0]["pair_key"], "KHIGH|TOK-high")
+        self.assertEqual([r["rank"] for r in rows], [1, 2, 3])
+
+        # Review attached to the reviewed pair, null for the others.
+        self.assertEqual(rows[0]["review"]["verdict"], "match")
+        self.assertFalse(rows[0]["review_stale"])
+        for row in rows[1:]:
+            self.assertIsNone(row["review"])
+            self.assertFalse(row["review_stale"])
+
+    def test_mode_defaults_to_full(self):
+        with patch("discover.discover", return_value=[]):
+            _json(server.api_scan_fast())  # a 'fast' scan only
+        status, body = _json(server.api_review_queue())
+        self.assertEqual(status, 404)
+        self.assertEqual(body, {"error": "no completed scan"})
+
+
 if __name__ == "__main__":
     unittest.main()

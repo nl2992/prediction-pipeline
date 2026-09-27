@@ -21,7 +21,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
 import book_arb
+<<<<<<< HEAD
 import evidence
+=======
+import review_queue
+>>>>>>> 4cfd29f (Add Phase 2e review queue with honest yield columns)
 import scan_jobs
 import store
 from arb import kalshi_taker_fee
@@ -692,6 +696,42 @@ def api_reviews(pair_key: str | None = None):
         return JSONResponse({"reviews": history})
     current = {k: _with_stale(r) for k, r in store.current_reviews().items()}
     return JSONResponse(current)
+
+
+@app.get("/api/review-queue")
+def api_review_queue(top_n: int = 25, min_size: float = 20.0, mode: str | None = "full"):
+    """Ranks the latest completed scan's pairs with the same economics and
+    sort key as ``tools.audit_ranked_signals.run()`` (Phase 2e, see
+    docs/IMPLEMENTATION_PLAN.md's "Review Queue tab" / "Yield columns"
+    tasks). No network calls -- this is a pure re-rank of pairs the scan
+    already fetched and priced. 404 if no completed scan of ``mode`` exists;
+    422 for a non-positive ``top_n``/``min_size``.
+    """
+    if top_n <= 0 or min_size <= 0:
+        return JSONResponse(
+            {"error": "top_n and min_size must both be positive"}, status_code=422,
+        )
+    scan = store.latest_scan(mode=mode)
+    if scan is None:
+        return JSONResponse({"error": "no completed scan"}, status_code=404)
+
+    rows = review_queue.build_review_queue_rows(
+        scan["pairs"], top_n=top_n, min_size=min_size,
+    )
+    reviews = store.current_reviews([row["pair_key"] for row in rows])
+    full_index = review_queue._full_pair_index(scan["pairs"])
+    for row in rows:
+        review = reviews.get(row["pair_key"])
+        row["review"] = review
+        pair = full_index.get(f"{row.get('poly_id')}|{row.get('kalshi_ticker')}")
+        row["review_stale"] = review_queue.review_is_stale(review, pair)
+
+    return JSONResponse({
+        "scan_id": scan["id"],
+        "scan_finished_at": scan.get("finished_at"),
+        "parameters": {"top_n": top_n, "min_size": min_size, "mode": mode},
+        "rows": rows,
+    })
 
 
 @app.get("/api/signals")
