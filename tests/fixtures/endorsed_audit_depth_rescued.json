@@ -89,8 +89,8 @@
       "exec_net": 0.01069,
       "top_of_book_net": 0.0211,
       "v2_match_baseline": true,
-      "label": "same",
-      "reason_class": "ok"
+      "label": "different",
+      "reason_class": "different_award_category"
     },
     {
       "poly_title": "Pete Crow-Armstrong",

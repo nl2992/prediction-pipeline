@@ -976,6 +976,7 @@ def _match_outcomes_within_group(
     """
     from matcher import (
         _jaccard,
+        _length_compatible,
         MatchedPair,
         _close_delta_hours,
         is_close_time_compatible,
@@ -984,6 +985,15 @@ def _match_outcomes_within_group(
     )
 
     scored = []
+    p_pre = [
+        (
+            p,
+            _normalise_tokens(p.title),
+            _squash(re.sub(r"\(.*?\)", "", p.title or "")),
+            any(ch.isdigit() for ch in p.title),
+        )
+        for p in p_outcomes
+    ]
     for k in k_outcomes:
         k_toks = _normalise_tokens(k.title)
         # Kalshi's yes_sub_title IS the outcome label ("Dividend", "Denver");
@@ -992,15 +1002,16 @@ def _match_outcomes_within_group(
         # 0.15 floor below (Costco earnings words, NFL best/worst record).
         k_sub = (k.extra or {}).get("yes_sub_title") or ""
         k_sub_toks = _normalise_tokens(k_sub) if k_sub else frozenset()
+        k_sub_has_digit = any(ch.isdigit() for ch in k_sub)
         # Squash-compare the bare label: hyphen/spacing variants ("Junghwan
         # Lee" / "Jung-Hwan Lee") and party-suffixed labels ("Kelly Ayotte" /
         # "Kelly Ayotte (R)") are one outcome. Adjacent ladder rungs never
         # squash equal, so numeric markets are unaffected (pass 10).
         k_squash = _squash(re.sub(r"\(.*?\)", "", k_sub)) if k_sub else ""
         k_mid = k.orderbook.mid or k.orderbook.best_bid
-        for p in p_outcomes:
-            p_toks = _normalise_tokens(p.title)
-            title_sim = _jaccard(k_toks, p_toks)
+        for p, p_toks, p_squash, p_has_digit in p_pre:
+            base_can_reach_floor = _length_compatible(len(k_toks), len(p_toks), 0.15)
+            title_sim = _jaccard(k_toks, p_toks) if base_can_reach_floor else 0.0
             # Label-to-label only for NAMED outcomes: on numeric ladders ("Below
             # 5.21%", "25 bps increase") a lifted label score lets the price-led
             # mode below pick an adjacent rung ("below 5.22%"). EXCEPT when the
@@ -1008,11 +1019,11 @@ def _match_outcomes_within_group(
             # never confuse rungs, and esports handles always contain digits
             # (pass 10).
             exact_label = bool(k_sub) and p.title.strip() == k_sub.strip()
-            squash_label = bool(k_sub) and len(k_squash) >= 5 \
-                and k_squash == _squash(re.sub(r"\(.*?\)", "", p.title or ""))
+            squash_label = bool(k_sub) and len(k_squash) >= 5 and k_squash == p_squash
             if k_sub_toks and (exact_label or squash_label
-                               or not any(ch.isdigit() for ch in p.title + k_sub)):
-                title_sim = max(title_sim, _jaccard(k_sub_toks, p_toks))
+                               or not (p_has_digit or k_sub_has_digit)):
+                if _length_compatible(len(k_sub_toks), len(p_toks), 0.15):
+                    title_sim = max(title_sim, _jaccard(k_sub_toks, p_toks))
             if squash_label:
                 title_sim = 1.0
             # Price proximity is useful only after the two outcomes share some
@@ -1023,23 +1034,28 @@ def _match_outcomes_within_group(
             # (Checked before the compatibility vetoes: same outcome, far cheaper.)
             if title_sim < 0.15:
                 continue
-            if not is_compatible_match(p, k):
-                continue
-            if not is_close_time_compatible(p, k):
-                continue
             p_mid = p.orderbook.mid or p.orderbook.best_bid
 
             if k_mid is not None and p_mid is not None and k_mid > 0 and p_mid > 0:
                 # Within a matched event, a small price difference is a very
-                # strong signal.  Scale so 0.15 difference → 0 score.
+                # strong signal.  Scale so 0.15 difference -> 0 score.
                 price_sim = max(0.0, 1.0 - abs(k_mid - p_mid) / 0.15)
             else:
                 price_sim = 0.0
 
-            # Two scoring modes: title-led or price-led (take the higher)
+            # Two scoring modes: title-led or price-led (take the higher).
+            # This is the same score used below; candidates below the later
+            # 0.35 acceptance floor cannot affect greedy assignment, so skip
+            # expensive semantic vetoes for them.
             title_led = 0.70 * title_sim + 0.30 * group_sim
             price_led = 0.50 * price_sim + 0.30 * group_sim + 0.20 * title_sim
             combined = max(title_led, price_led)
+            if combined < 0.35:
+                continue
+            if not is_close_time_compatible(p, k):
+                continue
+            if not is_compatible_match(p, k):
+                continue
 
             scored.append((combined, p, k, title_sim))
 

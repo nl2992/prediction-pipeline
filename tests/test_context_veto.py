@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import unittest
 
-from matcher import context_veto, is_compatible_match
+from matcher import _event_titles_agree, _tokens, context_veto, is_compatible_match
 from pipeline import MarketSnapshot, OrderBook
 
 
@@ -442,6 +442,271 @@ class TopOfBookKeeps(unittest.TestCase):
                "Who will run for the 2028 Republican presidential nomination?", "Greg Abbott")))
 
 
+class LiveTopTenRemediation(unittest.TestCase):
+    """Focused guards and keep cases for the live top-yield false positives."""
+
+    def test_game_awards_category_mismatch(self):
+        p = pm("Hades II", "The Game Awards: Game of the Year")
+        k = ks("Will Hades II win Best Audio Design?", "The Game Awards: Best Audio Design", "Hades II")
+        self.assertEqual(context_veto(p, k), "different award category")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_same_game_awards_category_survives(self):
+        p = pm("Hades II", "The Game Awards: Best Audio Design")
+        k = ks("Will Hades II win Best Audio Design?", "The Game Awards: Best Audio Design", "Hades II")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_hurricane_exact_vs_at_least_category(self):
+        p = pm("Yes", "Will a Category 2 hurricane make landfall?")
+        k = ks("Category 2 or above hurricane landfall?", "Will a Category 2 or above hurricane make landfall?", "Yes")
+        self.assertEqual(context_veto(p, k), "hurricane category scope mismatch")
+
+    def test_hurricane_weaker_vs_stronger_category(self):
+        p = pm("Yes", "Category 1 hurricane or weaker landfall")
+        k = ks("Category 1 or above hurricane landfall?", "Category 1 or above hurricane landfall", "Yes")
+        self.assertEqual(context_veto(p, k), "hurricane category scope mismatch")
+
+    def test_same_hurricane_category_semantics_survive(self):
+        p = pm("Yes", "Category 3 hurricane landfall")
+        k = ks("Cat 3 hurricane landfall?", "Will a Category 3 hurricane make landfall?", "Yes")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_relegation_vs_champion_rejected(self):
+        p = pm("Shenzhen Peng City", "Chinese Super League: Relegation")
+        k = ks("Will Shenzhen Peng City win the Chinese Super League?",
+               "Chinese Super League Champion", "Shenzhen Peng City")
+        self.assertEqual(context_veto(p, k), "relegation vs champion outcome")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_same_league_outcome_scope_survives(self):
+        self.assertIsNone(context_veto(
+            pm("Shenzhen Peng City", "Chinese Super League: Relegation"),
+            ks("Will Shenzhen Peng City be relegated from the Chinese Super League?",
+               "Chinese Super League Relegation", "Shenzhen Peng City")))
+
+    def test_coalition_composition_vs_party_membership_rejected(self):
+        p = pm("Labour–Liberal coalition", "Which coalition will form after the 2026 election?")
+        k = ks("Will Labour be part of the next government?",
+               "Who will be part of the next government?", "Labour")
+        self.assertEqual(context_veto(p, k), "coalition composition vs party membership")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_same_government_membership_scope_survives(self):
+        self.assertIsNone(context_veto(
+            pm("Labour", "Which parties will be part of the next government?"),
+            ks("Will Labour be part of the next government?",
+               "Which parties will be part of the next government?", "Labour")))
+
+    def test_rent_freeze_vs_congestion_pricing(self):
+        p = pm("Yes", "Will NYC freeze rents? NYC rent freeze")
+        k = ks("Will congestion pricing end?", "NYC congestion pricing", "Yes")
+        self.assertEqual(context_veto(p, k), "different policy topic")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_same_policy_topic_survives(self):
+        p = pm("Yes", "Will NYC freeze rents? NYC rent freeze")
+        k = ks("Will NYC freeze rents?", "NYC rent freeze policy", "Yes")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_rent_freeze_vs_free_buses(self):
+        p = pm("Yes", "Will Mamdani freeze NYC rents before 2027?")
+        k = ks("Will NYC offer free buses before 2027?", "NYC free buses", "Yes")
+        self.assertEqual(context_veto(p, k), "different policy topic")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_same_fare_free_transit_topic_survives(self):
+        p = pm("Yes", "Will NYC offer free buses before 2027?")
+        k = ks("Will NYC make buses fare-free before 2027?", "NYC fare-free transit", "Yes")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_featured_artist_on_different_work_rejected(self):
+        cases = [
+            ("Don Toliver", "Will Don Toliver be featured on Qr\u00f6melife?"),
+            ("Kodak Black", "Will Kodak Black be featured on Qr\u00f6melife?"),
+            ("Sexyy Red", "Will Sexyy Red be featured on Qr\u00f6melife?"),
+        ]
+        for artist, kalshi_title in cases:
+            with self.subTest(artist=artist):
+                p = pm(artist, "Who will be featured on GTA VI: The Album?")
+                k = ks(kalshi_title, "Who will be featured on Qr\u00f6melife?", artist)
+                self.assertEqual(context_veto(p, k), "different featured work")
+                self.assertFalse(is_compatible_match(p, k))
+
+    def test_same_featured_work_variants_survive(self):
+        p = pm("Don Toliver", "Who will be featured on GTA VI: The Album?")
+        k = ks("Will Don Toliver be featured on GTA VI album?",
+               "Who will be featured on GTA VI album?", "Don Toliver")
+        self.assertIsNone(context_veto(p, k))
+        p = pm("Don Toliver", "Who will be featured on Qr\u00f6melife?")
+        k = ks("Will Don Toliver be featured on Qromelife?",
+               "Who will be featured on Qromelife?", "Don Toliver")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_generic_featured_work_side_is_neutral(self):
+        p = pm("Don Toliver", "Who will be featured on GTA VI: The Album?")
+        k = ks("Will Don Toliver be featured on an album?",
+               "Who will be featured on an album?", "Don Toliver")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_hole_in_one_vs_tournament_winner_rejected(self):
+        p = pm("Presidents Cup 2026 Winner", "Presidents Cup 2026 Winner")
+        k = ks("Will there be 1+ holes-in-one at the 2026 Presidents Cup?",
+               "Presidents Cup: Hole-in-One")
+        self.assertEqual(context_veto(p, k), "hole-in-one occurrence vs tournament winner")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_same_competition_result_scopes_survive(self):
+        self.assertIsNone(context_veto(
+            pm("Yes", "Will there be 1+ holes-in-one at the Presidents Cup?"),
+            ks("Presidents Cup hole-in-one?", "Presidents Cup: Hole-in-One", "Yes")))
+        self.assertIsNone(context_veto(
+            pm("Presidents Cup 2026 Winner", "Presidents Cup 2026 Winner"),
+            ks("Who will win the Presidents Cup?", "Presidents Cup winner")))
+
+    def test_compound_hole_in_one_winner_text_is_neutral(self):
+        p = pm("Yes", "Will the Presidents Cup winner record a hole-in-one?")
+        k = ks("Will the Presidents Cup winner record a hole-in-one?",
+               "Presidents Cup winner hole-in-one", "Yes")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_tournament_participation_vs_winner_rejected(self):
+        p = pm("Presidents Cup 2026 Winner", "Presidents Cup 2026 Winner")
+        k = ks("J.J. Spaun to compete in the Presidents Cup in 2026?",
+               "Golfers to compete in the Presidents Cup this year", "J.J. Spaun")
+        self.assertEqual(context_veto(p, k), "tournament participation vs winner")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_same_tournament_participation_scope_survives(self):
+        p = pm("J.J. Spaun", "Golfers to compete in the Presidents Cup this year")
+        k = ks("J.J. Spaun to compete in the Presidents Cup in 2026?",
+               "Golfers to compete in the Presidents Cup this year", "J.J. Spaun")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_inter_milan_vs_milan_rejected(self):
+        p = pm("Inter Milan", "Serie A Top 4 Finishers (2026-27)")
+        k = ks("Will Milan finish in the top 4 in the Serie A season?",
+               "Serie A Top 4 Finishers", "Milan")
+        self.assertEqual(context_veto(p, k), "different club/team")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_ac_milan_alias_survives(self):
+        p = pm("AC Milan", "Serie A Top 4 Finishers (2026-27)")
+        k = ks("Will Milan finish in the top 4 in the Serie A season?",
+               "Serie A Top 4 Finishers", "Milan")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_single_race_vs_combo_market_rejected(self):
+        p = pm("Cindy Holscher (D)", "Kansas Governor Election Winner")
+        k = ks("Will Kansas Governor winner be Democratic party and Kansas Senate winner be Democratic party? Cindy Holscher and Adam Hamilton win",
+               "Kansas Governor-Senate combo", "Democratic/Democratic")
+        self.assertEqual(context_veto(p, k), "single race vs combo market")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_same_combo_market_survives(self):
+        p = pm("Democratic/Democratic", "Kansas Governor-Senate combo")
+        k = ks("Will Kansas Governor winner be Democratic party and Kansas Senate winner be Democratic party?",
+               "Kansas Governor-Senate combo", "Democratic/Democratic")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_party_alliance_vs_member_party_rejected(self):
+        p = pm("RZP-Zehut", "Which parties will be in the next Israeli government?")
+        k = ks("Will Zehut be a part of the next government in Israel?",
+               "Who will be a part of the next government of Israel?", "Zehut")
+        self.assertEqual(context_veto(p, k), "party alliance vs member party")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_same_party_list_scope_survives(self):
+        self.assertIsNone(context_veto(
+            pm("RZP-Zehut", "Which parties will be in the next Israeli government?"),
+            ks("Will RZP-Zehut be a part of the next government in Israel?",
+               "Who will be a part of the next government of Israel?", "RZP-Zehut")))
+        self.assertIsNone(context_veto(
+            pm("Zehut", "Which parties will be in the next Israeli government?"),
+            ks("Will Zehut be a part of the next government in Israel?",
+               "Who will be a part of the next government of Israel?", "Zehut")))
+
+    def test_f1_retirement_vs_next_team_rejected(self):
+        p = pm("Will Max Verstappen retire from F1 in 2026?",
+               "Will Max Verstappen retire from F1 in 2026?")
+        k = ks("What will be Max Verstappen's next F1 team? Alpine",
+               "Max Verstappen's Next F1 Team", "Alpine")
+        self.assertEqual(context_veto(p, k), "F1 retirement vs next team")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_same_f1_next_team_scope_survives(self):
+        p = pm("Alpine", "Max Verstappen's Next F1 Team")
+        k = ks("What will be Max Verstappen's next F1 team? Alpine",
+               "Max Verstappen's Next F1 Team", "Alpine")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_judicial_nomination_vs_becoming_justice_rejected(self):
+        p = pm("Aileen Cannon", "Who will the Trump admin next nominate as SCOTUS Justice?")
+        k = ks("Will Aileen Cannon become the next Justice on the Supreme Court?",
+               "Who will be the next Supreme Court justice?", "Aileen Cannon")
+        self.assertEqual(context_veto(p, k), "judicial nomination vs becoming justice")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_same_judicial_nomination_stage_survives(self):
+        p = pm("Aileen Cannon", "Who will the Trump admin next nominate as SCOTUS Justice?")
+        k = ks("Will Trump nominate Aileen Cannon as Supreme Court justice?",
+               "Who will Trump next nominate to the Supreme Court?", "Aileen Cannon")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_same_next_justice_stage_survives(self):
+        p = pm("Aileen Cannon", "Will Aileen Cannon become the next Justice on the Supreme Court?")
+        k = ks("Will Aileen Cannon be the next Supreme Court justice?",
+               "Who will be the next Supreme Court justice?", "Aileen Cannon")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_non_supreme_court_nomination_context_is_neutral(self):
+        p = pm("Yes", "Will Alice be the justice nominee?")
+        k = ks("Will Alice become the next justice?", "Next justice", "Yes")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_mixed_judicial_stage_text_is_neutral(self):
+        p = pm("Aileen Cannon", "Will Aileen Cannon be nominated and become the next Supreme Court justice?")
+        k = ks("Will Aileen Cannon become the next Justice on the Supreme Court?",
+               "Who will be the next Supreme Court justice?", "Aileen Cannon")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_truth_social_different_explicit_post_windows(self):
+        p = pm("120-139", "Donald Trump Truth Social posts September 11 - September 18, 2026?")
+        k = ks("Will Donald Trump make 120-139 Truth Social posts Sep 13-19, 2026?",
+               "Trump Truth Social posts Sep 13-19, 2026", "120-139")
+        self.assertEqual(context_veto(p, k), "different Truth Social post-count window")
+
+    def test_truth_social_same_explicit_post_window_survives(self):
+        p = pm("120-139", "Donald Trump Truth Social posts September 11 - September 18, 2026?")
+        k = ks("Will Donald Trump make 120-139 Truth Social posts 9/11-9/18, 2026?",
+               "Trump Truth Social posts 9/11-9/18, 2026", "120-139")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_fewest_points_allowed_vs_postseason(self):
+        p = pm("Kansas City Chiefs", "NFL: Fewest Points Allowed in 2026")
+        k = ks("Will the Kansas City Chiefs make the postseason?", "NFL: Team to Make Postseason", "Kansas City Chiefs")
+        self.assertEqual(context_veto(p, k), "superlative stat vs advancement/win")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_two_fewest_points_allowed_wordings_survive(self):
+        self.assertIsNone(context_veto(
+            pm("Kansas City Chiefs", "NFL: Fewest Points Allowed in 2026"),
+            ks("Will the Kansas City Chiefs allow the fewest points?", "NFL: Least Points Allowed in 2026", "Kansas City Chiefs")))
+
+    def test_expanded_rate_vocabulary_normalizes_both_directions(self):
+        self.assertEqual(
+            _tokens("Bank of Canada raises its benchmark interest rates in October"),
+            _tokens("Bank of Canada rate hike in October"),
+        )
+        self.assertEqual(
+            _tokens("Bank of Canada cuts its federal funds rate in October"),
+            _tokens("Bank of Canada rate cut in October"),
+        )
+        self.assertNotEqual(
+            _tokens("Bank of Canada raises rates in October"),
+            _tokens("Bank of Canada cuts rates in October"),
+        )
+
+
 class TopOfBookMismatchesRound2(unittest.TestCase):
     """Second batch, from the top of the live list after round 1."""
 
@@ -507,3 +772,62 @@ class ThreeToFiveCentBand(unittest.TestCase):
         self.check(pm("Lucas Ocampos", "Liga MX: 2026-27 Apertura Most Assists"),
                    ks("Will Lucas Ocampos lead Liga MX in goals for the Apertura?",
                       "Liga MX Apertura Golden Boot", "Lucas Ocampos"), "stat category")
+
+
+class Pass11Precision(unittest.TestCase):
+    """Focused regressions for the latest high-edge precision classes."""
+
+    def test_bare_name_with_one_sided_rank_is_rejected(self):
+        p = pm("Taylor Swift", "Spotify: #2 most streamed artist in 2025")
+        k = ks("Will Taylor Swift be the 1st overall pick in the 2025 NFL draft?",
+               "2025 NFL Draft: 1st overall pick", "Taylor Swift")
+        self.assertEqual(context_veto(p, k), "rank contract matched on a bare name")
+
+    def test_same_rank_bare_name_pair_is_kept(self):
+        p = pm("Taylor Swift", "Spotify: #2 most streamed artist in 2025")
+        k = ks("Will Taylor Swift rank #2 among Spotify artists in 2025?",
+               "Spotify: #2 most streamed artists in 2025", "Taylor Swift")
+        self.assertNotEqual(context_veto(p, k), "rank contract matched on a bare name")
+
+    def test_best_of_set_vs_plain_win_is_rejected(self):
+        p = pm("Texas", "Which state is the Democrats' best tossup Senate race?")
+        k = ks("Will Democrats win Texas?", "Democratic Senate election winner", "Texas")
+        self.assertEqual(context_veto(p, k), "superlative (best-of-set) vs plain win")
+
+    def test_award_category_best_is_not_treated_as_superlative(self):
+        p = pm("A game", "The Game Awards: Best Audio Design")
+        k = ks("Will A game win Best Audio Design?", "The Game Awards: Best Audio Design", "A game")
+        self.assertNotEqual(context_veto(p, k), "superlative (best-of-set) vs plain win")
+
+    def test_different_explicit_rounds_rejected_even_without_win_wording(self):
+        p = pm("Candidate A", "Brazil election: first round participants")
+        k = ks("Second round participants: Candidate A", "Brazil election: second round")
+        self.assertEqual(context_veto(p, k), "round scope mismatch")
+
+    def test_same_explicit_round_is_kept(self):
+        p = pm("Renan Santos", "Brazil election: first round winner")
+        k = ks("Will Renan Santos win the first round?", "Brazil election: 1st round winner", "Renan Santos")
+        self.assertNotEqual(context_veto(p, k), "round scope mismatch")
+
+    def test_deadline_vs_within_year_occurrence_is_rejected(self):
+        p = pm("Yes", "US recession by end of 2027?")
+        k = ks("Will there be a recession in 2027?", "US recession in 2027", "Yes")
+        self.assertEqual(context_veto(p, k), "deadline window vs within-year occurrence")
+
+    def test_declaration_year_true_pair_survives_occurrence_gate(self):
+        p = pm("Yes", "NBER recession declared by end of 2026?")
+        k = ks("Will NBER declare a recession in 2026?", "NBER recession declared in 2026", "Yes")
+        self.assertNotEqual(context_veto(p, k), "deadline window vs within-year occurrence")
+
+    def test_event_titles_agree_with_champion_winner_synonym(self):
+        self.assertTrue(_event_titles_agree(
+            pm("Ecuador", "Ecuador LigaPro Champion 2026"),
+            ks("Ecuador wins", "Ecuador LigaPro Serie A: 2026 Winner")))
+
+    def test_missing_event_title_is_neutral(self):
+        self.assertTrue(_event_titles_agree(pm("Taylor Swift", ""), ks("Taylor Swift", "Draft")))
+
+    def test_unrelated_event_titles_disagree(self):
+        self.assertFalse(_event_titles_agree(
+            pm("Taylor Swift", "Spotify most streamed artist"),
+            ks("Taylor Swift", "NFL draft first pick")))

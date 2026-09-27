@@ -9,6 +9,13 @@ proximity.  No external dependencies beyond the standard library.
 from __future__ import annotations
 
 import functools
+
+from semantic_identity import (
+    brazilian_governor_region,
+    championship_winner_scope,
+    featured_work_identity,
+    relative_standings_scope,
+)
 import math
 import re
 import types
@@ -17,6 +24,17 @@ import weakref
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
+
+from semantic_scope import (
+    club_team_scope,
+    competition_result_scope,
+    election_office_bundle,
+    f1_career_scope,
+    government_outcome_scope,
+    judicial_selection_stage,
+    league_outcome_scope,
+    party_list_scope,
+)
 
 if TYPE_CHECKING:
     from pipeline import MarketSnapshot
@@ -124,10 +142,10 @@ _TOKEN_SYNONYMS: dict[str, tuple[str, ...]] = {
 _PHRASE_NORMALISERS: tuple[tuple[str, str], ...] = (
     (r"\bfederal\s+reserve\b", "fed"),
     (r"\binterest\s+(rates?)\b", r"\1"),
-    (r"\b(?:raise|raises|raising|hike|hikes|hiking|increase|increases|increasing)\s+rates?\b", "rate hike"),
-    (r"\brates?\s+(?:hike|increase)\b", "rate hike"),
-    (r"\b(?:cut|cuts|cutting|lower|lowers|lowering|reduce|reduces|reducing|decrease|decreases|decreasing)\s+rates?\b", "rate cut"),
-    (r"\brates?\s+(?:cut|reduction|decrease)\b", "rate cut"),
+    (r"\b(?:raise|raises|raised|raising|hike|hikes|hiked|hiking|increase|increases|increased|increasing)\s+(?:(?:the|its|benchmark|federal funds|policy|target|key)\s+){0,2}rates?\b", "rate hike"),
+    (r"\brates?\s+(?:hike|hikes|hiked|hiking|increase|increases|increased|rise|rises|rose|raised)\b", "rate hike"),
+    (r"\b(?:cut|cuts|cutting|lower|lowers|lowered|lowering|reduce|reduces|reduced|reducing|decrease|decreases|decreased|decreasing)\s+(?:(?:the|its|benchmark|federal funds|policy|target|key)\s+){0,2}rates?\b", "rate cut"),
+    (r"\brates?\s+(?:cut|cuts|cutting|reduction|reductions|decrease|decreases|decreased|fall|falls|fell|lowering)\b", "rate cut"),
     # Keep one-sided comparators attached to their number: ">25bps" must stay
     # distinct from "25bps" after punctuation stripping, or sibling rate buckets
     # ("Cut by 25bps" vs "Cut by >25bps") collapse to identical token sets and
@@ -926,9 +944,9 @@ def _monetary_direction(text: str) -> set[str]:
     """
     low = _ascii_lower(text)
     dirs: set[str] = set()
-    if re.search(r"\b(hike|hikes|raise|raises|raising|increase|increases|increasing)\b", low):
+    if re.search(r"\b(hike|hikes|hiked|hiking|raise|raises|raised|raising|increase|increases|increased|increasing|rise|rises|rose)\b", low):
         dirs.add("up")
-    if re.search(r"\b(cut|cuts|cutting|lower|lowers|lowering|reduce|reduces|reducing)\b", low):
+    if re.search(r"\b(cut|cuts|cutting|lower|lowers|lowered|lowering|reduce|reduces|reduced|reducing|decrease|decreases|decreased|decreasing|fall|falls|fell)\b", low):
         dirs.add("down")
     return frozenset(dirs)  # cached: immutable so callers can't corrupt it
 
@@ -1424,7 +1442,7 @@ def _contract_actions(text: str) -> set[str]:
         actions.add("rank")
     if re.search(r"\brevenue\b", low):
         actions.add("revenue")
-    if re.search(r"\b(chatbot arena|elo|benchmark|ai model)\b", low):
+    if re.search(r"\b(chatbot arena|elo|benchmark(?!\s+(?:interest\s+)?rates?\b)|ai model)\b", low):
         actions.add("ai_benchmark")
     if re.search(r"\b(rotten tomatoes|metacritic|review score|critic score|audience score)\b", low):
         actions.add("review_score")
@@ -1440,7 +1458,8 @@ def _contract_actions(text: str) -> set[str]:
         actions.add("labor_stats")
     if re.search(r"\binflation\b|\bcpi\b", low):
         actions.add("inflation")
-    if re.search(r"\b(rate hike|rate cut|interest rate|bps|fomc|ecb|bank of england|bank of japan|fed)\b", low):
+    if re.search(r"\b(rate hike|rate cut|interest rate|bps|fomc|ecb|bank of england|bank of japan|fed)\b", low) \
+            or re.search(r"\b(?:raise|raises|raised|raising|hike|hikes|hiked|increase|increases|increased|cut|cuts|cutting|lower|lowers|lowered|reduce|reduces|reduced|decrease|decreases|decreased)\b.{0,35}\brates?\b|\brates?\b.{0,35}\b(?:hike|hikes|increase|increases|cut|cuts|reduction|decrease|decreases)\b", low):
         actions.add("monetary_policy")
     if re.search(r"\b(points?|pts|rebounds?|rbs?|assists?|asts?|hits?|strikeouts?|blocks?|steals?|stls?|threes?|three[-\s]?pointers?|3[-\s]?pointers?|runs?|goals?)\b", low):
         actions.add("stat_prop")
@@ -1758,13 +1777,27 @@ _AWARD_CATEGORIES = (
     ("entertainer", r"\bentertainer of the year\b"),
     ("female_vocalist", r"\bfemale vocalist\b"),
     ("male_vocalist", r"(?<!fe)\bmale vocalist\b"),
+    # The Game Awards categories are named contracts too: Game of the Year
+    # cannot be matched to Best Audio Design merely because both mention a
+    # game and the same title.
+    ("game_of_the_year", r"\bgame of the year\b|\bgoty\b"),
+    ("game_audio", r"\bbest audio design\b|\bbest audio\b"),
+    ("game_art", r"\bbest art direction\b"),
+    ("game_narrative", r"\bbest narrative\b"),
+    ("game_direction", r"\bbest game direction\b"),
+    ("game_score", r"\bbest score and music\b|\bbest music\b"),
+    ("game_multiplayer", r"\bbest multiplayer\b"),
+    ("game_performance", r"\bbest performance\b"),
+    ("game_independent", r"\bbest independent game\b|\bbest indie game\b"),
+    ("game_debut_indie", r"\bbest debut indie game\b"),
 )
 
 
 def _award_category(text: str) -> frozenset[str]:
     """Which award — "Comeback Player" and "Offensive Player" are separate
     contracts on the same athlete, as are Best Actor and Best Actress."""
-    return frozenset(name for name, pat in _AWARD_CATEGORIES if re.search(pat, text))
+    low = _ascii_lower(text)
+    return frozenset(name for name, pat in _AWARD_CATEGORIES if re.search(pat, low))
 
 
 def _model_domain(text: str) -> frozenset[str]:
@@ -1800,8 +1833,95 @@ def _womens_competition(text: str) -> bool:
 
 
 def _superlative_stat(text: str) -> bool:
-    """"highest scoring team" is a season stat crown, not a playoff run."""
-    return bool(re.search(r"\b(?:highest|lowest)[- ]scoring\b|\bmost points\b", text))
+    """A season stat crown (including fewest points allowed) is not a playoff run."""
+    low = _ascii_lower(text)
+    return bool(re.search(
+        r"\b(?:highest|lowest)[- ]scoring\b|\bmost points\b|"
+        r"\b(?:fewest|least|lowest) points (?:allowed|conceded)\b|"
+        r"\ballow(?:s|ed)?\s+(?:the\s+)?(?:fewest|least|lowest)\s+points\b",
+        low,
+    ))
+
+
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
+def _hurricane_category(text: str) -> tuple[int, str] | None:
+    """Interpret a hurricane category contract as (category, relation).
+
+    An unqualified category number means exactly that category. Explicit
+    ``or above`` and ``or weaker`` wording creates one-sided ranges.
+    """
+    low = _ascii_lower(text)
+    m = re.search(r"\b(?:category|cat\.?|cat)\s*([1-5])\b", low)
+    if not m or not re.search(r"\bhurrican(?:e|es)\b", low):
+        return None
+    tail = low[m.end():m.end() + 48]
+    if re.search(r"\bor\s+(?:above|higher|greater|stronger)\b|\bat least\b", tail):
+        relation = "at_least"
+    elif re.search(r"\bor\s+(?:below|lower|less|weaker)\b|\bat most\b", tail):
+        relation = "at_most"
+    else:
+        relation = "exact"
+    return int(m.group(1)), relation
+
+
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
+def _policy_topic(text: str) -> str | None:
+    """Small closed set for unrelated NYC policy subjects in the live audit."""
+    low = _ascii_lower(text)
+    if re.search(r"\b(?:rent freeze|freeze (?:the |nyc )?rents?|rent stabilization|rent control)\b", low):
+        return "rent_policy"
+    if re.search(r"\b(?:congestion pricing|congestion charge|congestion toll|traffic toll)\b", low):
+        return "congestion_pricing"
+    if re.search(r"\b(?:fare[- ]free|free (?:public )?transit|free (?:nyc )?buses?|(?:nyc )?buses? (?:become )?free|no[- ]fare transit|eliminat(?:e|ing) (?:bus )?fares?)\b", low):
+        return "fare_free_transit"
+    return None
+
+
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
+def _truth_social_post_window(text: str) -> tuple[str, str] | None:
+    """Extract explicit Truth Social post-count measurement dates.
+
+    This intentionally handles only explicit date ranges in the two formats
+    seen in market descriptions (named-month dates and M/D ranges). It does not
+    infer a week from a close date or a phrase such as "this week".
+    """
+    low = _ascii_lower(text)
+    if not re.search(r"\btruth\s+social\b.{0,48}\bposts?\b|\bposts?\b.{0,48}\btruth\s+social\b", low):
+        return None
+
+    month = r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?"
+    named = re.search(
+        rf"\b({month})\s+(\d{{1,2}})\s*(?:-|–|—|\bto\b)\s*(?:({month})\s+)?(\d{{1,2}}),?\s*(20\d{{2}})\b",
+        low,
+    )
+    if named:
+        months = {name[:3]: i for i, name in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"), 1)}
+        first_month = months[named.group(1)[:3]]
+        second_month = months[(named.group(3) or named.group(1))[:3]]
+        year, first_day, second_day = int(named.group(5)), int(named.group(2)), int(named.group(4))
+        try:
+            start = datetime(year, first_month, first_day).date().isoformat()
+            end_year = year + (1 if second_month < first_month else 0)
+            end = datetime(end_year, second_month, second_day).date().isoformat()
+            return start, end
+        except ValueError:
+            return None
+
+    numeric = re.search(r"\b(\d{1,2})/(\d{1,2})\s*(?:-|–|—|\bto\b)\s*(\d{1,2})/(\d{1,2})(?:,?\s*(20\d{2}))?\b", low)
+    if numeric:
+        year_match = re.search(r"\b(20\d{2})\b", low)
+        year = int(numeric.group(5) or (year_match.group(1) if year_match else "0"))
+        if not year:
+            return None
+        first_month, first_day, second_month, second_day = map(int, numeric.groups()[:4])
+        try:
+            start = datetime(year, first_month, first_day).date().isoformat()
+            end_year = year + (1 if second_month < first_month else 0)
+            end = datetime(end_year, second_month, second_day).date().isoformat()
+            return start, end
+        except ValueError:
+            return None
+    return None
 
 
 _SCHOOL_QUALIFIERS = frozenset({"a&m", "am", "state", "st", "tech", "southern",
@@ -2167,10 +2287,196 @@ def _same_outcome_label(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> boo
     return len(a) >= 3 and a == b
 
 
+# Event-title synonyms for the pass-11 event-agreement check only: applied to
+# the token sets of the two event titles so the champion/winner wording gap
+# ("Ecuador LigaPro Champion" vs "LigaPro Serie A: 2026 Winner") does not sink
+# a true pair that sits just under the Jaccard bar.
+_EVENT_TITLE_SYNONYMS = {"champion": "winner", "champions": "winner"}
+
+
+def _event_titles_agree(poly: "MarketSnapshot", kalshi: "MarketSnapshot",
+                        min_j: float = 0.45) -> bool:
+    """True when the two EVENT titles look like the same event.
+
+    Cross-event bare-name collisions (pass 11): a shared team/person name
+    ("Tampa Bay Buccaneers", "Taylor Swift", "Texas") is not contract identity
+    when one venue's event is "Team to Make Postseason" and the other's is
+    "1st Overall Pick in the 2027 Draft". Accepts Jaccard >= min_j over
+    _tokens (with the small synonym map above) or one squashed event title
+    containing the other. Returns True when either event title is missing —
+    that is no evidence either way, and the other gates decide.
+    """
+    pe = (getattr(poly, "extra", {}) or {}).get("event_title") or ""
+    ke = (getattr(kalshi, "extra", {}) or {}).get("event_title") or ""
+    if not pe or not ke:
+        return True
+    ptoks = {_EVENT_TITLE_SYNONYMS.get(t, t) for t in _tokens(pe)}
+    ktoks = {_EVENT_TITLE_SYNONYMS.get(t, t) for t in _tokens(ke)}
+    if ptoks and ktoks and _jaccard(ptoks, ktoks) >= min_j:
+        return True
+    ps, ks = _squash(pe), _squash(ke)
+    return bool(ps and ks and (ps in ks or ks in ps))
+
+
+# Outcome-shaping words that disqualify a short label from being treated as a
+# bare entity name ("Taylor Swift" is; "Winner", "Above 25", "Make Postseason"
+# are not — they already carry contract semantics).
+_LABEL_ACTION_WORDS = frozenset({
+    "win", "wins", "winner", "winning", "lose", "loses", "loser", "losing",
+    "yes", "no", "above", "below", "over", "under", "more", "less",
+    "make", "makes", "making", "miss", "misses",
+})
+
+# Superlative selecting among a set ("Dems' BEST tossup Senate race?") vs a
+# plain win question about one member of that set — different contracts even
+# with an identical outcome label ("Texas"). Both sides "best" (Oscars "Best
+# Director") never fires: the regex matches on BOTH sides. The trailing
+# lookahead keeps compound adjectives ("best-selling album") out — only a
+# standalone superlative selecting among options counts.
+_BEST_OF_SET_RE = re.compile(r"\b(?:best|biggest|largest|strongest)(?![-\w])")
+# Award-context superlatives are category NAMES ("Best Audio Design", "Best
+# Director"), not best-of-set selectors — their cross-venue counterparts also
+# say "best", so the asymmetry this veto targets never occurs in award-land
+# (the audited "Best Audio Design" vs "Game of the Year" pair is a different
+# award-category question, handled by the award gates, not this one).
+_AWARD_CONTEXT_RE = re.compile(r"\bawards?\b|\boscars?\b|\bemmys?\b|\bgrammys?\b|\btonys?\b|\bbaftas?\b")
+
+
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
+def _round_scope(text: str) -> frozenset[str]:
+    """Explicit sub-rounds a contract names: "First Round Winner" is not
+    "win the primary" when the primary runs two rounds (pass 11).
+    Case-insensitive: callers pass either lowercased context text or the
+    original-case spec raws from contract_spec."""
+    low = _ascii_lower(text)
+    out = set()
+    if re.search(r"\b(?:first|1st)\s+round\b", low):
+        out.add("first")
+    if re.search(r"\b(?:second|2nd)\s+round\b", low):
+        out.add("second")
+    if re.search(r"\brunoff\b", low):
+        out.add("runoff")
+    return frozenset(out)
+
+
+_RANK_WORDS = ("first", "1st", "second", "2nd", "third", "3rd", "fourth", "4th",
+               "fifth", "5th", "last")
+_RANK_NUM_RE = re.compile(r"#\s*(\d+)|\b(\d+)(?:st|nd|rd|th)\b")
+_RANK_TOP_RE = re.compile(r"\btop\s+(\d+)\b")
+
+
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
+def _rank_markers(text: str) -> frozenset[str]:
+    """Rank/position markers: "#2", "1st", "first", "top 10". Two venues
+    wording the same rank contract both carry one ("Top 20" vs "top 20"); a
+    rank contract matched on a bare name carries it on ONE side only — the
+    pass-11 cross-event collision signature (Spotify "#2", draft "1st")."""
+    low = _ascii_lower(text)
+    out = {w for w in _RANK_WORDS if re.search(rf"\b{re.escape(w)}\b", low)}
+    out |= {m.group(1) or m.group(2) for m in _RANK_NUM_RE.finditer(low)}
+    out |= {f"top{m.group(1)}" for m in _RANK_TOP_RE.finditer(low)}
+    return frozenset(out)
+
+
+_OCCURRENCE_NOUNS = ("recession", "default", "shutdown")
+
+
+@functools.lru_cache(maxsize=_TEXT_CACHE_SIZE)
+def _occurrence_window(text: str) -> str | None:
+    """Deadline phrasing vs within-period phrasing of a binary occurrence.
+
+    "US recession BY END OF 2027?" (NBER window, deadline-phrased) is not
+    "recession IN 2027?" (calendar-year occurrence) — pass 11, the pair that
+    docs/EXPANSION_PROPOSAL.md named on 2026-09-18. Both-sides "by/before"
+    (pass 5's same-instant equivalences, "by end of 2026" ~ "before Jan 1
+    2027") report the same window and never fire the veto.
+    """
+    if not any(re.search(rf"\b{n}\b", _ascii_lower(text)) for n in _OCCURRENCE_NOUNS):
+        return None
+    low = _ascii_lower(text)
+    if re.search(r"\bby end of\b|\bbefore\b|\bby\b", low):
+        return "deadline"
+    # A declaration/report in a year is its own resolution event, not a
+    # recession occurring within that year (for example, "declare a
+    # recession in 2026" can match "recession declared by end of 2026").
+    if re.search(r"\b(?:declare|declared|announced|reported)\b.{0,40}\b(?:recession|default|shutdown)\b.{0,24}\bin\s+20\d{2}\b", low) \
+            or re.search(r"\b(?:recession|default|shutdown)\b.{0,24}\b(?:declared|announced|reported)\s+in\s+20\d{2}\b", low):
+        return None
+    # "within" requires the occurrence noun directly before "in <year>":
+    # "recession in 2027" (the false-positive class) vs "recession DECLARED
+    # in 2026" (a declaration-year contract — the audited pairs_fixture pair
+    # "NBER recession declared in 2026?" is a TRUE match to "...by end of
+    # 2026?" and must not be touched).
+    nouns = "|".join(_OCCURRENCE_NOUNS)
+    if re.search(rf"\b(?:{nouns})\s+in\s+20\d{{2}}\b", low) \
+            or re.search(r"\bduring\s+20\d{2}\b|\bthis year\b", low):
+        return "within"
+    return None
+
+
 def context_veto(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> str | None:
     """Reason the two contracts' EVENT context disagrees, or None."""
     pe, ke = _event_text(poly), _event_text(kalshi)
     pt, kt = pe + " " + _ascii_lower(poly.title), ke + " " + _ascii_lower(kalshi.title)
+    # Explicit league table outcomes are distinct: relegation is not winning
+    # the league, even when both markets name the same competition/team.
+    po, ko = league_outcome_scope(pt), league_outcome_scope(kt)
+    if po and ko and po != ko:
+        return "relegation vs champion outcome"
+    # A market asking which coalition forms resolves the coalition itself;
+    # it does not settle on whether one party later joins government.
+    pg, kg = government_outcome_scope(pt), government_outcome_scope(kt)
+    if pg and kg and pg != kg:
+        return "coalition composition vs party membership"
+    pfw, kfw = featured_work_identity(pt), featured_work_identity(kt)
+    if pfw and kfw and pfw != kfw:
+        return "different featured work"
+    pcomp, kcomp = competition_result_scope(pt), competition_result_scope(kt)
+    if {pcomp, kcomp} == {"hole_in_one", "winner"}:
+        return "hole-in-one occurrence vs tournament winner"
+    if {pcomp, kcomp} == {"participant", "winner"}:
+        return "tournament participation vs winner"
+    pj, kj = judicial_selection_stage(pt), judicial_selection_stage(kt)
+    if {pj, kj} == {"nomination", "seated"}:
+        return "judicial nomination vs becoming justice"
+    pclubs, kclubs = club_team_scope(pt), club_team_scope(kt)
+    if len(pclubs) == len(kclubs) == 1 and pclubs.isdisjoint(kclubs):
+        return "different club/team"
+    poffices, koffices = election_office_bundle(pt), election_office_bundle(kt)
+    if poffices and koffices and poffices != koffices and (len(poffices) > 1 or len(koffices) > 1):
+        return "single race vs combo market"
+    pparties, kparties = party_list_scope(pt), party_list_scope(kt)
+    if len(pparties) == len(kparties) == 1 and pparties.isdisjoint(kparties):
+        return "party alliance vs member party"
+    pf1, kf1 = f1_career_scope(pt), f1_career_scope(kt)
+    if {pf1, kf1} == {"retirement", "next_team"}:
+        return "F1 retirement vs next team"
+    # Award categories are separate contracts even when the same game title
+    # or nominee appears on both sides (for example, GOTY vs Best Audio).
+    pac, kac = _award_category(pt), _award_category(kt)
+    if pac and kac and pac.isdisjoint(kac):
+        return "different award category"
+    # Hurricane category numbers and operators define distinct outcomes:
+    # Cat 2 exactly != Cat 2 or stronger, and weaker != stronger.
+    ph, kh = _hurricane_category(pt), _hurricane_category(kt)
+    if ph and kh and ph != kh:
+        return "hurricane category scope mismatch"
+    # These city-policy markets can share geography and generic policy words,
+    # but a rent freeze and a congestion toll settle on unrelated actions.
+    ptopic, ktopic = _policy_topic(pt), _policy_topic(kt)
+    if ptopic and ktopic and ptopic != ktopic:
+        return "different policy topic"
+    # Explicit head-to-head standings and championship-winner predicates are
+    # different settlement shapes, even when the same drivers are mentioned.
+    if ((relative_standings_scope(pt) and championship_winner_scope(kt))
+            or (relative_standings_scope(kt) and championship_winner_scope(pt))):
+        return "relative standings vs championship winner"
+    pregion, kregion = brazilian_governor_region(pt), brazilian_governor_region(kt)
+    if pregion and kregion and pregion != kregion:
+        return "Brazilian gubernatorial jurisdiction mismatch"
+    pposts, kposts = _truth_social_post_window(pt), _truth_social_post_window(kt)
+    if pposts and kposts and pposts != kposts:
+        return "different Truth Social post-count window"
     if pe and ke and _is_game_scope(pe) != _is_game_scope(ke):
         return "single-game vs season/aggregate scope"
     if _is_candidacy(pt) != _is_candidacy(kt):
@@ -2199,9 +2505,6 @@ def context_veto(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> str | None
             return "same granularity, different period"
     if _superlative_stat(pt) != _superlative_stat(kt):
         return "superlative stat vs advancement/win"
-    pac, kac = _award_category(pt), _award_category(kt)
-    if pac and kac and pac.isdisjoint(kac):
-        return "different award category"
     pmd, kmd = _model_domain(pt), _model_domain(kt)
     if pmd != kmd and re.search(r"\bmodel\b", pt + kt):
         return "qualified model domain vs general"
@@ -2299,6 +2602,57 @@ def context_veto(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> str | None
         return "opposite party wave"
     if _is_negated(_ascii_lower(poly.title)) != _is_negated(_ascii_lower(kalshi.title)):
         return "negated vs affirmative contract"
+    # --- pass 11: the 2026-09-21 top-10-by-edge audit's false-positive classes -
+    # (A) Rank contract matched on a bare name: the Polymarket title is a BARE
+    # ENTITY label ("Taylor Swift", "Tampa Bay Buccaneers") contained in (or
+    # identical to) the Kalshi outcome, the two EVENT titles fail the
+    # agreement check, AND the rank/position marker sits on ONE side only
+    # (Spotify "#2", draft "1st Overall Pick"). The two venues wording the
+    # SAME rank contract both carry the marker, so true pairs (top-20
+    # finishers, first-round placements on both sides) never fire. Award
+    # categories ("Best Director" vs plain "win") are class B; a bare-name
+    # collision WITHOUT any rank marker is left to the other gates — lexical
+    # overlap alone cannot separate that class from true pairs like
+    # "NBA Rookie of the Year" vs "Pro Basketball Rookie of the Year Winner"
+    # (pass-11 tuning, see docs).
+    plabel = _tokens(poly.title or "")
+    if (plabel and len(plabel) <= 5 and not any(t.isdigit() for t in plabel)
+            and plabel.isdisjoint(_LABEL_ACTION_WORDS)):
+        k_label_text = (kalshi.title or "") + " " + ((kalshi.extra or {}).get("yes_sub_title") or "")
+        contained = len(plabel & _tokens(k_label_text)) / len(plabel) >= 0.6
+        if (contained or _same_outcome_label(poly, kalshi)) \
+                and not _event_titles_agree(poly, kalshi):
+            prank = _rank_markers(pe) | _rank_markers(poly.title or "")
+            krank = _rank_markers(ke) | _rank_markers(k_label_text)
+            if (prank or krank) and prank.isdisjoint(krank):
+                return "rank contract matched on a bare name"
+    # (B) Superlative-vs-plain: "Dems' BEST tossup Senate race?" selects among
+    # a set; "Will Democrats win Texas?" is a plain win about one member.
+    # Award-context superlatives ("The Game Awards: Best Audio Design") are
+    # category names and are exempt — see _AWARD_CONTEXT_RE.
+    p_best = bool(_BEST_OF_SET_RE.search(pt)) and not _AWARD_CONTEXT_RE.search(pt)
+    k_best = bool(_BEST_OF_SET_RE.search(kt)) and not _AWARD_CONTEXT_RE.search(kt)
+    if p_best != k_best:
+        return "superlative (best-of-set) vs plain win"
+    # (C) Asymmetric round scope: one side names an explicit sub-round the
+    # other lacks ("First Round Winner" vs "win the primary") while the
+    # round-less side is an overall-win wording. Both sides naming the same
+    # round, and round-free pairs, never fire.
+    prnd, krnd = _round_scope(pt), _round_scope(kt)
+    if ({"first", "second"} & prnd) and ({"first", "second"} & krnd) \
+            and prnd.isdisjoint(krnd):
+        return "round scope mismatch"
+    if prnd.isdisjoint(krnd) and (prnd or krnd):
+        plain_text = kt if prnd else pt
+        if _is_win_market(plain_text) or re.search(r"\bchampions?\b", plain_text):
+            return "round scope mismatch"
+    # (D) Deadline-window vs within-year occurrence, scoped to occurrence
+    # nouns: "US recession by end of 2027?" (NBER deadline window) vs "Will
+    # there be a recession in 2027?" (calendar-year occurrence). Both-sides
+    # by/before phrasings are the same deadline (pass 5) and never fire.
+    pocc, kocc = _occurrence_window(pt), _occurrence_window(kt)
+    if pocc and kocc and pocc != kocc:
+        return "deadline window vs within-year occurrence"
     k_sub = (kalshi.extra or {}).get("yes_sub_title") or ""
     if k_sub:
         a, b = _proper_tokens(poly.title), _proper_tokens(k_sub)
@@ -3019,8 +3373,13 @@ def match_markets(
         for kalshi_id in candidate_ids:
             k = kalshi_by_id[kalshi_id]
             k_toks = kalshi_tok[k.market_id]
-            sim = _jaccard(p_toks, k_toks)
-            if sim < min_title_similarity:
+            length_can_reach_gate = _length_compatible(
+                len(p_toks), len(k_toks), min_title_similarity,
+            )
+            if not length_can_reach_gate and p_thr is None:
+                continue
+            sim: float | None = _jaccard(p_toks, k_toks) if length_can_reach_gate else None
+            if sim is None or sim < min_title_similarity:
                 # Threshold-led acceptance: asset price markets word the same
                 # level differently ("$150k" vs "above $149,999.99") and carry
                 # noise tokens ("at 11:59 PM ET"), so title overlap is low.
@@ -3042,6 +3401,8 @@ def match_markets(
                     p_ents = _named_entities(p.title)
                 if not (p_ents & kalshi_ents[kalshi_id]):
                     continue
+                if sim is None:
+                    sim = _jaccard(p_toks, k_toks)
             # Token-ratio guard: block short labels ("Democratic Party", 2 tokens)
             # from matching long questions (8+ tokens) via coincidental Jaccard.
             if min_token_ratio > 0 and p_toks and k_toks:
@@ -3114,4 +3475,3 @@ def clear_caches() -> int:
             obj.cache_clear()
             n += 1
     return n
-

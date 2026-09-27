@@ -26,8 +26,26 @@ documented in docs/history/PIPELINE_REDESIGN.md.
 from __future__ import annotations
 
 import re
+
+from semantic_identity import (
+    brazilian_governor_region,
+    championship_winner_scope,
+    featured_work_identity,
+    relative_standings_scope,
+)
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
+
+from semantic_scope import (
+    club_team_scope,
+    competition_result_scope,
+    election_office_bundle,
+    f1_career_scope,
+    government_outcome_scope,
+    judicial_selection_stage,
+    league_outcome_scope,
+    party_list_scope,
+)
 
 from matcher import (
     _ascii_lower,
@@ -37,9 +55,23 @@ from matcher import (
     _contract_actions,
     _contract_text,
     _domains,
+    _event_titles_agree,
+    _award_category,
+    _AWARD_CONTEXT_RE,
+    _BEST_OF_SET_RE,
+    _LABEL_ACTION_WORDS,
+    _occurrence_window,
+    _round_scope,
+    _is_candidacy,
+    _sub_jurisdiction,
     _is_ou_or_spread,
     _is_player_prop,
     _is_win_market,
+    _rank_markers,
+    _hurricane_category,
+    _policy_topic,
+    _truth_social_post_window,
+    _superlative_stat,
     _jaccard,
     _jurisdictions,
     _known_orgs,
@@ -992,11 +1024,27 @@ def _same_outcome_label(a: ContractSpec, b: ContractSpec) -> bool:
     return len(la) >= 3 and la == lb
 
 
+def _bare_label_contained(a: "ContractSpec", b: "ContractSpec") -> bool:
+    """The Polymarket side's outcome label is a BARE ENTITY name ("Taylor
+    Swift", "Tampa Bay Buccaneers") whose tokens are largely contained in the
+    Kalshi side's raw text — the pass-11 cross-event name-collision shape.
+    Mirrors matcher.context_veto's gate: PM-label only (an unrelated multi-word
+    alias like "RZP-Zehut" that the Kalshi question only half-mentions must
+    not qualify), label short, no digits, no outcome-shaping words."""
+    toks = _tokens(a.outcome_label or "")
+    if not (toks and len(toks) <= 5 and not any(t.isdigit() for t in toks)
+            and toks.isdisjoint(_LABEL_ACTION_WORDS)):
+        return False
+    other = _tokens(b.raw or "")
+    return bool(other) and len(toks & other) / len(toks) >= 0.6
+
+
 def match_spec(
     a: ContractSpec,
     b: ContractSpec,
     min_similarity: float = 0.30,
     same_event: bool = False,
+    events_agree: bool = False,
 ) -> MatchDecision:
     """Compare two ContractSpecs field by field.
 
@@ -1008,12 +1056,82 @@ def match_spec(
     a one-line PM label and a verbose Kalshi legal description ("SELF DRIVE
     Act" vs a 40-word bill description) are the same contract, and the
     full-text similarity gate under-fires on the length asymmetry (pass 10).
+    ``events_agree`` (pass 11) is the softer event-title agreement check used
+    to scope the cross-event bare-name veto and the identical-label shortcut.
     """
     reasons: list[str] = []
     inverted = False
 
     dh = _close_delta_hours(a.close_time, b.close_time)
     same_horizon = dh is not None and dh <= 72.0
+
+    # Semantic guards from the live top-yield audit. Keep these ahead of the
+    # identical-event/outcome shortcut: shared labels cannot make distinct
+    # award categories, hurricane ranges, or policy subjects identical.
+    award_a, award_b = _award_category(_ascii_lower(a.raw)), _award_category(_ascii_lower(b.raw))
+    if award_a and award_b and award_a.isdisjoint(award_b):
+        return _reject("different award category")
+    # A named award category and an annual-release question can share a game
+    # title, but they settle on unrelated facts.  Keep this deliberately
+    # narrow to the live-audit wording rather than treating all release
+    # mentions as an awards conflict.
+    release_a = bool(re.search(r"\b(?:video games? )?release(?:d)? this year\b", _ascii_lower(a.raw)))
+    release_b = bool(re.search(r"\b(?:video games? )?release(?:d)? this year\b", _ascii_lower(b.raw)))
+    if (award_a and release_b) or (award_b and release_a):
+        return _reject("award category vs annual release")
+    hurricane_a, hurricane_b = _hurricane_category(a.raw), _hurricane_category(b.raw)
+    if hurricane_a and hurricane_b and hurricane_a != hurricane_b:
+        return _reject("hurricane category scope mismatch")
+    topic_a, topic_b = _policy_topic(a.raw), _policy_topic(b.raw)
+    if topic_a and topic_b and topic_a != topic_b:
+        return _reject("different policy topic")
+    if ((relative_standings_scope(a.raw) and championship_winner_scope(b.raw))
+            or (relative_standings_scope(b.raw) and championship_winner_scope(a.raw))):
+        return _reject("relative standings vs championship winner")
+    region_a, region_b = brazilian_governor_region(a.raw), brazilian_governor_region(b.raw)
+    if region_a and region_b and region_a != region_b:
+        return _reject("Brazilian gubernatorial jurisdiction mismatch")
+    posts_a, posts_b = _truth_social_post_window(a.raw), _truth_social_post_window(b.raw)
+    if posts_a and posts_b and posts_a != posts_b:
+        return _reject("different Truth Social post-count window")
+    league_a, league_b = league_outcome_scope(a.raw), league_outcome_scope(b.raw)
+    if league_a and league_b and league_a != league_b:
+        return _reject("relegation vs champion outcome")
+    government_a = government_outcome_scope(a.raw)
+    government_b = government_outcome_scope(b.raw)
+    if government_a and government_b and government_a != government_b:
+        return _reject("coalition composition vs party membership")
+    featured_a, featured_b = featured_work_identity(a.raw), featured_work_identity(b.raw)
+    if featured_a and featured_b and featured_a != featured_b:
+        return _reject("different featured work")
+    competition_a = competition_result_scope(a.raw)
+    competition_b = competition_result_scope(b.raw)
+    if {competition_a, competition_b} == {"hole_in_one", "winner"}:
+        return _reject("hole-in-one occurrence vs tournament winner")
+    if {competition_a, competition_b} == {"participant", "winner"}:
+        return _reject("tournament participation vs winner")
+    judicial_a = judicial_selection_stage(a.raw)
+    judicial_b = judicial_selection_stage(b.raw)
+    if {judicial_a, judicial_b} == {"nomination", "seated"}:
+        return _reject("judicial nomination vs becoming justice")
+    clubs_a = club_team_scope(a.raw)
+    clubs_b = club_team_scope(b.raw)
+    if len(clubs_a) == len(clubs_b) == 1 and clubs_a.isdisjoint(clubs_b):
+        return _reject("different club/team")
+    offices_a = election_office_bundle(a.raw)
+    offices_b = election_office_bundle(b.raw)
+    if offices_a and offices_b and offices_a != offices_b and (len(offices_a) > 1 or len(offices_b) > 1):
+        return _reject("single race vs combo market")
+    parties_a = party_list_scope(a.raw)
+    parties_b = party_list_scope(b.raw)
+    if len(parties_a) == len(parties_b) == 1 and parties_a.isdisjoint(parties_b):
+        return _reject("party alliance vs member party")
+    f1_a = f1_career_scope(a.raw)
+    f1_b = f1_career_scope(b.raw)
+    if {f1_a, f1_b} == {"retirement", "next_team"}:
+        return _reject("F1 retirement vs next team")
+    if _superlative_stat(_ascii_lower(a.raw)) != _superlative_stat(_ascii_lower(b.raw)):
+        return _reject("superlative stat vs advancement/win")
 
     # --- identity gates -----------------------------------------------------
     if same_event and _same_outcome_label(a, b):
@@ -1118,6 +1236,10 @@ def match_spec(
     ca, cb = _corporate_event(a.raw), _corporate_event(b.raw)
     if ca and cb and ca != cb:
         return _reject(f"corporate-event mismatch: {ca} vs {cb}")
+    if _is_candidacy(_ascii_lower(a.raw)) != _is_candidacy(_ascii_lower(b.raw)):
+        return _reject("candidacy (run for) vs winning")
+    if _sub_jurisdiction(_ascii_lower(a.raw)) != _sub_jurisdiction(_ascii_lower(b.raw)):
+        return _reject("sub-jurisdiction mismatch")
     # A player prop on one side and a non-prop market on the same subject
     # (the other side has no bet_type) is still a different contract.
     # Two leader markets worded differently ("QB Points Leader" / "Season Top
@@ -1371,6 +1493,47 @@ def match_spec(
     if ra_ and rb_ and min(abs(x - y) for x in ra_ for y in rb_) > 1:
         return _reject(f"rung mismatch: {sorted(ra_)} vs {sorted(rb_)}")
 
+    # --- pass 11: top-10-by-edge audit false positives (mirror of
+    # matcher.context_veto; skipped when the event titles are identical —
+    # same_event pairs passed every other gate by construction) --------------
+    if not same_event:
+        raw_a, raw_b = a.raw or "", b.raw or ""
+        # (B) Superlative-vs-plain: "Dems' BEST tossup Senate race?" selects
+        # among a set; "Will Democrats win Texas?" is a plain win about one
+        # member. Award-context superlatives are category names and exempt
+        # (matcher._AWARD_CONTEXT_RE). (Raws keep original case.)
+        a_best = bool(_BEST_OF_SET_RE.search(_ascii_lower(raw_a))) \
+            and not _AWARD_CONTEXT_RE.search(_ascii_lower(raw_a))
+        b_best = bool(_BEST_OF_SET_RE.search(_ascii_lower(raw_b))) \
+            and not _AWARD_CONTEXT_RE.search(_ascii_lower(raw_b))
+        if a_best != b_best:
+            return _reject("superlative (best-of-set) vs plain win")
+        # (C) Asymmetric round scope: "First Round Winner" vs "win the
+        # primary" — one side names a sub-round the other lacks.
+        ra_r, rb_r = _round_scope(raw_a), _round_scope(raw_b)
+        if ({"first", "second"} & ra_r) and ({"first", "second"} & rb_r) \
+                and ra_r.isdisjoint(rb_r):
+            return _reject("round scope mismatch")
+        if ra_r.isdisjoint(rb_r) and (ra_r or rb_r):
+            plain = raw_b if ra_r else raw_a
+            if _is_win_market(plain) or re.search(r"\bchampions?\b", plain, flags=re.I):
+                return _reject("round scope mismatch")
+        # (D) Deadline-window vs within-year occurrence (occurrence nouns
+        # only): "US recession by end of 2027?" vs "recession in 2027?".
+        pa_, kb_ = _occurrence_window(raw_a), _occurrence_window(raw_b)
+        if pa_ and kb_ and pa_ != kb_:
+            return _reject("deadline window vs within-year occurrence")
+        # (A) Rank contract matched on a bare name: the PM label is a bare
+        # entity name largely contained in the Kalshi text and the event
+        # titles disagree, but the decisive signal is rank-marker asymmetry
+        # ("#2" Spotify, "1st" draft pick) — the same-rank true pairs carry
+        # the marker on BOTH sides ("Top 20" vs "top 20"). Mirrors
+        # matcher.context_veto (pass 11).
+        if not events_agree and _bare_label_contained(a, b):
+            arank, brank = _rank_markers(raw_a), _rank_markers(raw_b)
+            if (arank or brank) and arank.isdisjoint(brank):
+                return _reject("rank contract matched on a bare name")
+
     # --- acceptance -------------------------------------------------------------
     sim = _jaccard(a.tokens, b.tokens)
     # Identical DISTINCTIVE outcome label is sufficient acceptance evidence
@@ -1379,9 +1542,11 @@ def match_spec(
     # scored 0.29 because the Kalshi question text dominates the token sets,
     # but the label IS the contract — a disambiguating parenthetical is not
     # part of it. Every hard gate above (threshold, rung, range, week, fiscal,
-    # settlement-source, time-scope) has already passed. The >= 4 bar keeps
-    # generic "Yes"/"No" labels from accepting on identity alone.
-    if not inverted and same_outcome:
+    # settlement-source, time-scope, pass-11 vetoes) has already passed. The
+    # >= 4 bar keeps generic "Yes"/"No" labels from accepting on identity
+    # alone, and the event-agreement requirement (pass 11) stops an identical
+    # name from endorsing two unrelated questions (VMA vs Spotify).
+    if not inverted and same_outcome and (same_event or events_agree):
         la = re.sub(r"[^a-z0-9]", "", _ascii_lower(re.sub(r"\(.*?\)", "", a.outcome_label)))
         if len(la) >= 4:
             reasons.append(f"identical outcome label {la!r}")
@@ -1457,4 +1622,5 @@ def explain(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> MatchDecision:
     pe = _squash((getattr(poly, "extra", {}) or {}).get("event_title") or "")
     ke = _squash((getattr(kalshi, "extra", {}) or {}).get("event_title") or "")
     return match_spec(extract_spec(poly), extract_spec(kalshi),
-                      same_event=bool(pe and ke and pe == ke))
+                      same_event=bool(pe and ke and pe == ke),
+                      events_agree=_event_titles_agree(poly, kalshi))
