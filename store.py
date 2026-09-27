@@ -528,3 +528,102 @@ def review_history(pair_key_: str) -> list[dict]:
             (pair_key_,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Market evidence (Phase 2d): cached settlement-rule text per (venue, market)
+# ---------------------------------------------------------------------------
+
+def save_evidence(venue: str, market_id: str, rules_text: str, source_url: str | None) -> dict:
+    """Insert a market_evidence row, keyed by (venue, market_id, content_hash)
+    -- the hash of ``rules_text`` (sha256 hex, computed here so callers never
+    need to agree on a hashing scheme separately). Idempotent: if a row with
+    this exact (venue, market_id, content_hash) already exists (the rules
+    haven't changed since last fetch), that existing row is returned
+    unchanged rather than inserting a duplicate or bumping fetched_at --
+    ``latest_evidence`` reports the true first-seen time for the current
+    text, not just the most recent poll that happened to match it.
+    """
+    import hashlib
+    content_hash = hashlib.sha256(rules_text.encode("utf-8")).hexdigest()
+    with closing(connect()) as conn, conn:
+        existing = conn.execute(
+            """SELECT * FROM market_evidence
+               WHERE venue = ? AND market_id = ? AND content_hash = ?""",
+            (venue, market_id, content_hash),
+        ).fetchone()
+        if existing is not None:
+            return dict(existing)
+        conn.execute(
+            """INSERT INTO market_evidence
+                   (venue, market_id, content_hash, rules_text, source_url, fetched_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (venue, market_id, content_hash, rules_text, source_url, _now()),
+        )
+        row = conn.execute(
+            """SELECT * FROM market_evidence
+               WHERE venue = ? AND market_id = ? AND content_hash = ?""",
+            (venue, market_id, content_hash),
+        ).fetchone()
+        return dict(row)
+
+
+def latest_evidence(venue: str, market_id: str) -> dict | None:
+    """Most recently fetched market_evidence row for (venue, market_id), or
+    None if nothing has ever been cached for it."""
+    with closing(connect()) as conn:
+        row = conn.execute(
+            """SELECT * FROM market_evidence
+               WHERE venue = ? AND market_id = ?
+               ORDER BY fetched_at DESC LIMIT 1""",
+            (venue, market_id),
+        ).fetchone()
+        return dict(row) if row is not None else None
+
+
+# ---------------------------------------------------------------------------
+# Pair resolution (Phase 2d): pair_key -> venue market ids
+# ---------------------------------------------------------------------------
+
+def find_pair(pair_key_: str) -> dict | None:
+    """Resolve a pair_key to its venue market identifiers by searching the
+    most recent completed scan that snapshotted it. Returns
+    {"pair_key", "kalshi_ticker", "poly_id", "poly_token_id"} or None if the
+    pair_key never appeared in any completed scan."""
+    with closing(connect()) as conn:
+        row = conn.execute(
+            """SELECT ps.pair_key, ps.kalshi_ticker, ps.poly_id, ps.poly_token_id
+               FROM pair_snapshots ps
+               JOIN scans s ON s.id = ps.scan_id
+               WHERE ps.pair_key = ? AND s.status = 'completed'
+               ORDER BY s.id DESC LIMIT 1""",
+            (pair_key_,),
+        ).fetchone()
+        return dict(row) if row is not None else None
+
+
+def review_is_stale(review: dict) -> bool:
+    """True when the settlement rules for either market in ``review``'s pair
+    have changed since the review was recorded -- i.e. the review's stored
+    kalshi_rules_hash/poly_rules_hash no longer matches the latest cached
+    market_evidence hash for that market. False whenever there's nothing to
+    compare against (pair not resolvable, no stored hash on the review, or
+    no cached evidence yet) -- staleness is only ever asserted positively."""
+    pair = find_pair(review.get("pair_key") or "")
+    if pair is None:
+        return False
+
+    kalshi_hash = review.get("kalshi_rules_hash")
+    if kalshi_hash and pair.get("kalshi_ticker"):
+        latest = latest_evidence("kalshi", pair["kalshi_ticker"])
+        if latest is not None and latest["content_hash"] != kalshi_hash:
+            return True
+
+    poly_hash = review.get("poly_rules_hash")
+    poly_market_id = pair.get("poly_id")
+    if poly_hash and poly_market_id:
+        latest = latest_evidence("polymarket", poly_market_id)
+        if latest is not None and latest["content_hash"] != poly_hash:
+            return True
+
+    return False

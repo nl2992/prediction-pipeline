@@ -1,0 +1,13 @@
+{
+  "expected_kind": "bucket_vs_threshold",
+  "kalshi": {
+    "market_id": "KXCPICORE-26SEP-T0.2",
+    "rules_text": "If the seasonally adjusted Consumer Price Index for All Urban Consumers: All Items less Food and Energy for September 2026, as published by the Bureau of Labor Statistics, increases by above 0.2%, then the market resolves to Yes.\n\nPlease note that the value of the Underlying is the single-decimal value reported by the BLS.\n\nIn the case of a delay in data caused by a federal government shutdown impacting the reliability of the Source Agency, the market\u2019s latest Expiration Date will be extended to the sooner of the release of the Underlying or six months after the end of the government shutdown.\n\nBureau of Labor Statistics",
+    "source_url": "https://assets.kalshi.com/regulatory/product-certifications/CORECPI.pdf"
+  },
+  "polymarket": {
+    "market_id": "0xddf5a3cce8588c34d4970b002af99b4d2cee300d54ab6e8dcc86cba0b1e15096",
+    "rules_text": "Will Core CPI MoM be 0.2% in September?\n\nThis is a market about the one-month percent change in the Consumer Price Index for All Urban Consumers excluding food and energy in September 2026 as reported by the Bureau of Labor Statistics.\n\nThis market will resolve to the one-month percentage change in the Consumer Price Index for All Urban Consumers excluding food and energy (Core CPI-U) in September 2026 according to the monthly Bureau of Labor Statistics (BLS) report (seasonally adjusted change from the preceding month).\n\nThe resolution source for this market will be the BLS Consumer Price Index report released for September 2026 (https://www.bls.gov/bls/news-release/cpi.htm), currently scheduled to be released on October 14, 2026, at 8:30 AM ET. Resolution of this market will take place upon release of the aforementioned data.\n\nNote: the resolution source for this market will be the official monthly BLS CPI news release, which reports core inflation (all items less food and energy) over 1-month periods to only one decimal point (e.g., 0.3%). Thus, this is the level of precision that will be used when resolving the market. For the avoidance of doubt, this market resolves on the core CPI figure (the all items index excluding food and energy), not the headline all items CPI figure.\n\nIf the BLS does not release the relevant figures on the scheduled date, this market may remain open up until the scheduled release time of the next CPI report (https://www.bls.gov/schedule). If the information is not released by that time, this market will resolve according to the figures of the most recent previous month with available data.",
+    "source_url": "https://polymarket.com/event/core-cpi-mom-september-2026"
+  }
+}

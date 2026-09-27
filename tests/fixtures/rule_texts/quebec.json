@@ -1,0 +1,13 @@
+{
+  "expected_kind": "ranking_basis",
+  "kalshi": {
+    "market_id": "KXQUEBEC2ND-26OCT05-2-CAQ",
+    "rules_text": "If \u00c9quipe Christine Fr\u00e9chette - Coalition avenir Qu\u00e9bec finishes in 2nd place in the 2026 Quebec general election according to the certified results, then the market resolves to Yes.\n\nRanking is determined by the specified counting method:\nFor plurality voting: rank is based on province-wide certified valid-vote count or percentage, not seats won\n\nIn case of exact ties, markets resolve proportionally (1/number of tied entities), rounded down. If no listed party is tied for second and an unlisted party finishes second, every named market resolves NO. Parties that withdraw or are disqualified after the filing deadline but remain on the ballot are ranked based on votes received. Resolution uses the final certified result from \u00c9lections Qu\u00e9bec, not the preliminary election-night count. If the election is cancelled or postponed beyond expiration, all markets resolve NO.\n\nElections Quebec",
+    "source_url": "https://assets.kalshi.com/regulatory/product-certifications/ELECTIONPLACE.pdf"
+  },
+  "polymarket": {
+    "market_id": "0xc2d9e2df0b1d1005b22ace7655928da4e92177718bd367372897aa1aff30d3c5",
+    "rules_text": "Will CAQ finish in second place in the Quebec general election?\n\nParliamentary elections to elect all 127 seats of the National Assembly of Quebec are scheduled to take place in Quebec on October 5, 2026.\n\nThis market will resolve to the political party that wins the second-greatest number of seats in the National Assembly of Quebec as a result of this election.\n\nIf voting in the 2026 Quebec general election does not occur, or the results thereof are not known definitively, by January 31, 2027, 11:59 PM ET, this market will resolve to \"Other\".\n\nParties will be primarily ranked by the number of seats won in the specified election. If two or more parties are tied on seats, ties will be broken by the total number of valid votes received, with higher vote totals ranking higher. If parties remain tied, ties will be broken by alphabetical order of the listed party abbreviations. This market will resolve to the party that occupies the second finishing position after applying this ranking.\n\nThis market's resolution will be based solely on the number of seats won by the named party.\n\nThis market will resolve based on the result of the election as indicated by a consensus of credible reporting. If there is ambiguity, this market will resolve based solely on the official results as reported by \u00c9lections Qu\u00e9bec (https://www.electionsquebec.qc.ca).",
+    "source_url": "https://polymarket.com/event/quebec-general-election-second-place-20260825152158"
+  }
+}
