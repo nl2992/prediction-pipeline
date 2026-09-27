@@ -559,7 +559,7 @@
       <button type="button" class="sidebar-item" onclick="togglePricedOnly()" id="filter-priced" role="switch" aria-checked="false">
         <span>PRICED ONLY</span><span id="priced-only-ind" style="color:var(--dimmer)">○</span>
       </button>
-      <button type="button" class="sidebar-item" id="sort-btn">SORT: NET ▼ (click a column header)</button>
+      <div class="sidebar-item" id="sort-btn" aria-live="polite">SORT: NET ▼ (click a column header)</div>
     </div>
     <div class="sidebar-section">
       <div class="s-header">ACTIONS</div>
@@ -711,6 +711,7 @@ let currentView = 'pairs';
 let lastSummary = null;   // the `summary` object from the last scan payload (server.build_summary)
 let lastScanAt  = null;   // Date of the last completed scan — used to label Book Scan's
                            // retained-book age (server doesn't stamp a per-pair book timestamp).
+let modalPreviousFocus = null; // Focus to restore when closing book-arb modal
 
 // 'all' = no gate, 'eligible' = discover.py's arb_eligible (the dashboard's
 // historical ARB column — a strict eligibility filter), 'alerter' = v2_match
@@ -1071,7 +1072,12 @@ async function runBookArb() {
     const data = await r.json();
     if (data.error) throw new Error(data.error);
     renderBookArb(data, p, sourceNote);
-    document.getElementById('book-arb-modal').classList.add('show');
+    const modal = document.getElementById('book-arb-modal');
+    if (!modal.classList.contains('show')) {
+      modalPreviousFocus = document.activeElement;
+    }
+    modal.classList.add('show');
+    document.querySelector('#book-arb-box .ba-close').focus();
   } catch(e) {
     showError('BOOK SCAN FAILED: ' + e.message);
   } finally {
@@ -1080,7 +1086,12 @@ async function runBookArb() {
 }
 
 function closeBookArb() {
-  document.getElementById('book-arb-modal').classList.remove('show');
+  const modal = document.getElementById('book-arb-modal');
+  modal.classList.remove('show');
+  if (modalPreviousFocus && document.body.contains(modalPreviousFocus)) {
+    modalPreviousFocus.focus();
+  }
+  modalPreviousFocus = null;
 }
 
 // ── Sort ───────────────────────────────────────────────────────────────────
@@ -1702,9 +1713,10 @@ document.querySelectorAll('#pairs-table th.sortable').forEach(th => {
 });
 
 // Table rows: keyboard navigation (ArrowUp/ArrowDown to navigate, Enter/Space to select)
+// Ignore events from elements within the row (e.g., links) so they still work normally
 document.getElementById('pairs-body').addEventListener('keydown', e => {
-  if (!e.target.closest('tr[data-idx]')) return;
   const tr = e.target.closest('tr[data-idx]');
+  if (!tr || e.target !== tr) return;
   const idx = +tr.dataset.idx;
 
   if (e.key === 'ArrowDown') {
@@ -1731,35 +1743,8 @@ document.getElementById('pairs-body').addEventListener('keydown', e => {
   }
 });
 
-// Modal focus management
-let modalPreviousFocus = null;
-const bookArbModal = document.getElementById('book-arb-modal');
-const closeModalBtn = document.querySelector('#book-arb-box .ba-close');
-
-// Store previous focus when opening modal
-const origCloseBookArb = window.closeBookArb;
-window.closeBookArb = function() {
-  origCloseBookArb();
-  if (modalPreviousFocus) {
-    modalPreviousFocus.focus();
-    modalPreviousFocus = null;
-  }
-};
-
-// Intercept runBookArb to set modal focus
-const origRunBookArb = window.runBookArb;
-window.runBookArb = async function() {
-  modalPreviousFocus = document.activeElement;
-  await origRunBookArb.call(this);
-  // After modal opens, focus the close button
-  setTimeout(() => {
-    if (bookArbModal.classList.contains('show')) {
-      closeModalBtn.focus();
-    }
-  }, 0);
-};
-
 // Trap focus in modal (Tab/Shift+Tab cycle within modal)
+const bookArbModal = document.getElementById('book-arb-modal');
 bookArbModal.addEventListener('keydown', e => {
   if (e.key !== 'Tab') return;
   const focusableElements = Array.from(
