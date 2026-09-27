@@ -956,6 +956,7 @@ let modalPreviousFocus = null; // Focus to restore when closing book-arb modal
 let reviewsByKey = {};    // Latest review verdict for each pair_key
 let isRestoredScan = false;  // True if current data came from restore, false if from live scan
 let lastScanMode = null;  // 'full' or 'fast' to show in the status label
+let lastScanError = null; // Error message from last failed scan, or null if successful
 
 // 'all' = no gate, 'eligible' = discover.py's arb_eligible (the dashboard's
 // historical ARB column — a strict eligibility filter), 'alerter' = v2_match
@@ -1223,11 +1224,7 @@ function setCategory(cat) {
 
 function toggleArbOnly() {
   arbOnly = !arbOnly;
-  document.getElementById('arb-only-ind').textContent = arbOnly ? '●' : '○';
-  document.getElementById('arb-only-ind').style.color = arbOnly ? 'var(--green)' : 'var(--dimmer)';
-  const btn = document.getElementById('filter-arb');
-  btn.classList.toggle('active', arbOnly);
-  btn.setAttribute('aria-checked', arbOnly ? 'true' : 'false');
+  syncFilterButtons();
   renderPairs();
 }
 
@@ -1237,11 +1234,7 @@ function toggleArbOnly() {
 // what made the dashboard's old ARB count look near-zero.
 function togglePricedOnly() {
   pricedOnly = !pricedOnly;
-  document.getElementById('priced-only-ind').textContent = pricedOnly ? '●' : '○';
-  document.getElementById('priced-only-ind').style.color = pricedOnly ? 'var(--green)' : 'var(--dimmer)';
-  const btn = document.getElementById('filter-priced');
-  btn.classList.toggle('active', pricedOnly);
-  btn.setAttribute('aria-checked', pricedOnly ? 'true' : 'false');
+  syncFilterButtons();
   renderPairs();
 }
 
@@ -1255,6 +1248,7 @@ function applyScanResult(data, options = {}) {
   lastScanMode = data.mode || 'full';
   isRestoredScan = restored;
   reviewsByKey = data.reviews || {};
+  lastScanError = null;  // Clear error on successful scan
   document.getElementById('last-scan').textContent =
     restored ? `${lastScanAt.toISOString().slice(11,19)} UTC (restored)` : lastScanAt.toISOString().slice(11,19) + ' UTC';
   if (!restored && data.elapsed) {
@@ -1269,11 +1263,23 @@ function applyScanResult(data, options = {}) {
 // Update the "Scan · age · mode" label in the panel header
 function updateScanStatusLabel() {
   const label = document.getElementById('scan-status-label');
-  if (!lastScanAt) {
-    label.textContent = 'Scan · —';
-    label.classList.remove('stale');
+
+  // Show failed state if applicable (only when previous pairs exist)
+  if (lastScanError && allPairs.length) {
+    label.textContent = `Scan failed: ${lastScanError}. Showing previous results.`;
+    label.classList.add('stale');
+    label.style.color = 'var(--red)';
     return;
   }
+
+  // Show "No scan yet" if never scanned
+  if (!lastScanAt) {
+    label.textContent = 'No scan yet';
+    label.classList.remove('stale');
+    label.style.color = '';
+    return;
+  }
+
   const now = new Date();
   const ageMs = now - lastScanAt;
   const ageMins = Math.floor(ageMs / 60000);
@@ -1293,6 +1299,7 @@ function updateScanStatusLabel() {
 
   label.textContent = statusText;
   label.classList.toggle('stale', isStale);
+  label.style.color = '';
 }
 
 // Render table state (loading, never scanned, empty, filtered, failed)
@@ -1309,18 +1316,34 @@ function renderTableState(kind, detail) {
   tbody.innerHTML = `<tr><td colspan="17" class="empty-state">${msg}</td></tr>`;
 }
 
+// Sync filter UI buttons after state changes
+function syncFilterButtons() {
+  // ARB ONLY button
+  document.getElementById('arb-only-ind').textContent = arbOnly ? '●' : '○';
+  document.getElementById('arb-only-ind').style.color = arbOnly ? 'var(--green)' : 'var(--dimmer)';
+  const arbBtn = document.getElementById('filter-arb');
+  arbBtn.classList.toggle('active', arbOnly);
+  arbBtn.setAttribute('aria-checked', arbOnly ? 'true' : 'false');
+
+  // PRICED ONLY button
+  document.getElementById('priced-only-ind').textContent = pricedOnly ? '●' : '○';
+  document.getElementById('priced-only-ind').style.color = pricedOnly ? 'var(--green)' : 'var(--dimmer)';
+  const pricedBtn = document.getElementById('filter-priced');
+  pricedBtn.classList.toggle('active', pricedOnly);
+  pricedBtn.setAttribute('aria-checked', pricedOnly ? 'true' : 'false');
+}
+
 // Helper to reset filters
 function resetFilters() {
   currentCat = 'all';
-  currentGate = 'alerter';
+  currentGate = 'all';
   arbOnly = false;
   pricedOnly = false;
+
   setCategory('all');
-  setGate('alerter');
-  toggleArbOnly();
-  toggleArbOnly();
-  togglePricedOnly();
-  togglePricedOnly();
+  setGate('all');
+  syncFilterButtons();
+  renderPairs();
 }
 
 // Restore the last completed scan from the server on page load
@@ -1349,12 +1372,25 @@ async function runScan() {
     const r = await fetch(`/api/scan?category=${currentCat}&min_sim=0.30`);
     const d = await r.json();
     if (d.error) {
+      lastScanError = d.error;
       if (allPairs.length) {
-        renderTableState('failed', d.error);
+        // Previous pairs exist; keep them visible with error in header
+        updateScanStatusLabel();
       } else {
-        renderTableState('never');
+        // No previous pairs; show error in tbody
+        renderTableState('failed', d.error);
       }
       throw new Error(d.error);
+    }
+    // Successful scan: refresh review badges from /api/reviews
+    try {
+      const rr = await fetch('/api/reviews');
+      const reviews = await rr.json();
+      if (reviews && !reviews.error) {
+        d.reviews = reviews;
+      }
+    } catch (e) {
+      // If review fetch fails, keep the old reviewsByKey
     }
     applyScanResult(d, { restored: false });
   } catch(e) {
@@ -1374,12 +1410,25 @@ async function runFastScan() {
     const r = await fetch(`/api/scan/fast?category=${currentCat}`);
     const d = await r.json();
     if (d.error) {
+      lastScanError = d.error;
       if (allPairs.length) {
-        renderTableState('failed', d.error);
+        // Previous pairs exist; keep them visible with error in header
+        updateScanStatusLabel();
       } else {
-        renderTableState('never');
+        // No previous pairs; show error in tbody
+        renderTableState('failed', d.error);
       }
       throw new Error(d.error);
+    }
+    // Successful scan: refresh review badges from /api/reviews
+    try {
+      const rr = await fetch('/api/reviews');
+      const reviews = await rr.json();
+      if (reviews && !reviews.error) {
+        d.reviews = reviews;
+      }
+    } catch (e) {
+      // If review fetch fails, keep the old reviewsByKey
     }
     applyScanResult(d, { restored: false });
   } catch(e) {
