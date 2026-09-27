@@ -2076,8 +2076,8 @@ document.addEventListener('keydown', e => {
 // ── Summary view ───────────────────────────────────────────────────────────
 function updateSummaryBadge() {
   const el = document.getElementById('sb-summary');
-  if (!lastSummary) { el.textContent = '—'; return; }
-  el.textContent = lastSummary.funnel.alerter_gate.positive_accurate;
+  const gate = lastSummary?.funnel?.alerter_gate;
+  el.textContent = gate ? gate.positive_accurate : '—';
 }
 
 function fmtPct(part, whole) {
