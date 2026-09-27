@@ -1758,8 +1758,30 @@ _AWARD_CATEGORIES = (
     ("comeback", r"\bcomeback player\b|\bcpoty\b"),
     ("offensive_player", r"\boffensive player\b|\bopoty\b"),
     ("defensive_player", r"\bdefensive player\b|\bdpoty\b"),
-    ("rookie", r"\brookie of the year\b|\broty\b"),
-    ("mvp", r"\bmvp\b|\bmost valuable player\b"),
+    # "Offensive/Defensive Rookie of the Year" is a distinct named award from
+    # the plain "Rookie of the Year" (and from Offensive/Defensive Player of
+    # the Year above, which the "player"-not-"rookie" wording already keeps
+    # separate) — the lookbehind keeps a qualified rookie mention out of the
+    # generic "rookie" tag below so the two stay disjoint.
+    ("rookie_offensive", r"\boffensive rookie of the year\b"),
+    ("rookie_defensive", r"\bdefensive rookie of the year\b"),
+    ("rookie", r"(?<!offensive )(?<!defensive )\brookie of the year\b|\broty\b"),
+    # World Series/Super Bowl/(NBA) Finals MVP are stage-specific honors, not
+    # the regular-season MVP (audit FP: Ceddanne Rafaela "AL MVP" vs an
+    # unrelated award for the same player) — same lookbehind-dedup approach.
+    ("mvp_world_series", r"\bworld series mvp\b"),
+    ("mvp_super_bowl", r"\bsuper bowl mvp\b"),
+    ("mvp_finals", r"\b(?:nba )?finals mvp\b"),
+    ("mvp", r"(?<!world series )(?<!super bowl )(?<!finals )\bmvp\b|\bmost valuable player\b"),
+    ("cy_young", r"\bcy young\b"),
+    ("gold_glove", r"\bgold glove\b"),
+    ("platinum_glove", r"\bplatinum glove\b"),
+    ("silver_slugger", r"\bsilver slugger\b"),
+    ("hank_aaron", r"\bhank aaron award\b"),
+    ("sixth_man", r"\bsixth man\b"),
+    ("most_improved", r"\bmost improved player\b|\bmip award\b"),
+    ("clutch_player", r"\bclutch player\b"),
+    ("ballon_dor", r"\bballon d'?or\b"),
     ("coach", r"\bcoach of the year\b|\bmanager of the year\b|\bmoty\b"),
     # Film/TV/music categories — "Best Actress" is not "Best Actor".
     ("supporting_actor", r"\bbest supporting actor\b"),

@@ -660,6 +660,37 @@ class LiveTopTenRemediation(unittest.TestCase):
                "Serie A Top 4 Finishers", "Milan")
         self.assertIsNone(context_veto(p, k))
 
+    def test_mvp_vs_platinum_glove_same_player_rejected(self):
+        # Same player, different award: Kalshi's AL MVP market vs
+        # Polymarket's AL Platinum Glove outcome for Ceddanne Rafaela.
+        p = pm("Ceddanne Rafaela", "MLB: AL Platinum Glove Winner")
+        k = ks("Will Ceddanne Rafaela win AL MVP?", "MLB: AL MVP")
+        self.assertEqual(context_veto(p, k), "different award category")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_al_mvp_phrasing_variants_survive(self):
+        p = pm("Ceddanne Rafaela", "MLB: American League MVP")
+        k = ks("Will Ceddanne Rafaela win AL MVP?", "AL MVP winner")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_album_vs_record_of_the_year_rejected(self):
+        p = pm("Noah Kahan", "Grammys 2027: Record of the Year Winner")
+        k = ks("Will Noah Kahan win Album of the Year?", "Grammys 2027: Album of the Year")
+        self.assertEqual(context_veto(p, k), "different award category")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_grammys_album_of_the_year_phrasing_variants_survive(self):
+        p = pm("The Great Divide",
+               "Grammys 2027: Album of the Year Winner / The Great Divide - Noah Kahan")
+        k = ks("Will The Great Divide win Album of the Year?", "Grammys 2027: Album of the Year")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_best_actor_vs_best_supporting_actor_rejected(self):
+        p = pm("Timothee Chalamet", "Oscars 2027: Best Supporting Actor Winner")
+        k = ks("Will Timothee Chalamet win Best Actor?", "Oscars 2027: Best Actor")
+        self.assertEqual(context_veto(p, k), "different award category")
+        self.assertFalse(is_compatible_match(p, k))
+
     def test_single_race_vs_combo_market_rejected(self):
         p = pm("Cindy Holscher (D)", "Kansas Governor Election Winner")
         k = ks("Will Kansas Governor winner be Democratic party and Kansas Senate winner be Democratic party? Cindy Holscher and Adam Hamilton win",

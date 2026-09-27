@@ -1697,6 +1697,46 @@ class LiveTopTenSemanticGuards(unittest.TestCase):
         self.assertFalse(d.match)
         self.assertIn("different club/team", d.reasons)
 
+    def test_mvp_vs_platinum_glove_same_player_rejected(self):
+        # Same player, different award: Kalshi's AL MVP market vs Polymarket's
+        # AL Platinum Glove outcome for Ceddanne Rafaela.
+        d = decide_full(
+            "Ceddanne Rafaela", "MLB: AL Platinum Glove Winner",
+            "Will Ceddanne Rafaela win AL MVP?", "MLB: AL MVP",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("different award category", d.reasons)
+
+    def test_al_mvp_phrasing_variants_remain_matchable(self):
+        d = decide_full(
+            "Ceddanne Rafaela", "MLB: American League MVP",
+            "Will Ceddanne Rafaela win AL MVP?", "AL MVP winner",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_album_vs_record_of_the_year_rejected(self):
+        d = decide_full(
+            "Noah Kahan", "Grammys 2027: Record of the Year Winner",
+            "Will Noah Kahan win Album of the Year?", "Grammys 2027: Album of the Year",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("different award category", d.reasons)
+
+    def test_grammys_album_of_the_year_phrasing_variants_remain_matchable(self):
+        d = decide_full(
+            "The Great Divide", "Grammys 2027: Album of the Year Winner / The Great Divide - Noah Kahan",
+            "Will The Great Divide win Album of the Year?", "Grammys 2027: Album of the Year",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_best_actor_vs_best_supporting_actor_rejected(self):
+        d = decide_full(
+            "Timothee Chalamet", "Oscars 2027: Best Supporting Actor Winner",
+            "Will Timothee Chalamet win Best Actor?", "Oscars 2027: Best Actor",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("different award category", d.reasons)
+
     def test_ac_milan_alias_remains_matchable(self):
         d = decide_full(
             "AC Milan", "Serie A Top 4 Finishers (2026-27)",
