@@ -31,6 +31,8 @@ from semantic_scope import (
     competition_result_scope,
     election_office_bundle,
     f1_career_scope,
+    founded_by_scope,
+    founded_by_subject,
     government_outcome_scope,
     judicial_selection_stage,
     league_outcome_scope,
@@ -2437,6 +2439,18 @@ def context_veto(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> str | None
         return "hole-in-one occurrence vs tournament winner"
     if {pcomp, kcomp} == {"participant", "winner"}:
         return "tournament participation vs winner"
+    # A party/company "founded by" or possessively belonging to a person is
+    # that organization, not the person — even when the predicate (e.g.
+    # "win"/"contest") matches on both sides.
+    pfb, kfb = founded_by_scope(pt), founded_by_scope(kt)
+    if pfb != kfb:
+        org_text, person_text = (pt, kt) if pfb else (kt, pt)
+        person = founded_by_subject(org_text)
+        if person:
+            surname = person.split()[-1]
+            if re.search(rf"\b{re.escape(surname)}\b", person_text, re.I) \
+                    and not founded_by_scope(person_text):
+                return "organization founded by person vs person"
     if competition_identity_conflict(pt, kt):
         return "competition identity mismatch"
     pj, kj = judicial_selection_stage(pt), judicial_selection_stage(kt)

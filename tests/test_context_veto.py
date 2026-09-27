@@ -582,6 +582,45 @@ class LiveTopTenRemediation(unittest.TestCase):
                "Golfers to compete in the Presidents Cup this year", "J.J. Spaun")
         self.assertIsNone(context_veto(p, k))
 
+    def test_party_contest_election_vs_person_winner_rejected(self):
+        # Ranked-audit rank 10: Kalshi's "a party founded by Elon Musk" is
+        # both a different predicate (contesting vs winning) and a different
+        # subject (the party, not Musk) from Polymarket's "Elon Musk" winner
+        # outcome. The predicate mismatch alone is enough to veto here.
+        p = pm("Elon Musk", "Presidential Election Winner 2028")
+        k = ks("Will a party founded by Elon Musk contest the 2028 U.S. presidential election?",
+               "Will the America Party contest the 2028 U.S. presidential election?")
+        self.assertEqual(context_veto(p, k), "tournament participation vs winner")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_founded_by_party_vs_person_same_predicate_rejected(self):
+        # Same predicate (winning) on both sides, but the Kalshi subject is
+        # "a party founded by Elon Musk", not Musk himself.
+        p = pm("Elon Musk", "Presidential Election Winner 2028")
+        k = ks("Will a party founded by Elon Musk win the 2028 U.S. presidential election?",
+               "Will the America Party win the 2028 U.S. presidential election?")
+        self.assertEqual(context_veto(p, k), "organization founded by person vs person")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_person_winner_survives(self):
+        self.assertIsNone(context_veto(
+            pm("Elon Musk", "Presidential Election Winner 2028"),
+            ks("Will Elon Musk win the 2028 US presidential election?",
+               "2028 US Presidential Election Winner", "Elon Musk")))
+
+    def test_party_contest_vs_field_candidate_survives(self):
+        self.assertIsNone(context_veto(
+            pm("Yes", "Will the America Party contest the 2028 election?"),
+            ks("Will the America Party field a 2028 presidential candidate?",
+               "Will the America Party field a 2028 presidential candidate?", "Yes")))
+
+    def test_eurovision_song_contest_not_participant(self):
+        from semantic_scope import competition_result_scope
+        self.assertEqual(
+            competition_result_scope("Eurovision Song Contest winner 2026"), "winner")
+        self.assertEqual(
+            competition_result_scope("hot dog eating contest champion"), "winner")
+
     def test_steel_bridge_vs_ncaa_football_rejected(self):
         p = pm("Notre Dame", "Steel Bridge National Championship Winner")
         k = ks("Will Notre Dame Fighting Irish win the 2027 National Champion?",

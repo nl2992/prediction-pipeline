@@ -135,13 +135,30 @@ _PARTICIPATION_RE = re.compile(
     r"in\s+(?:the\s+)?[A-Z0-9][^?]{0,80}\b(?:cup|championship|tournament|open|classic|masters)\b",
     re.I,
 )
+# Election-participation phrasing: a party/candidate CONTESTING, RUNNING IN,
+# or FIELDING a candidate for an election is a participation predicate, not a
+# winner predicate — even though the sentence may separately mention
+# "election". Verb-form patterns only: "contests the election" is
+# participation, but "contested election"/"contested convention" (adjective)
+# and "Eurovision Song Contest"/"hot dog eating contest" (bare noun) must NOT
+# match, so the pattern requires "contest(s)" immediately followed by an
+# article ("the"/"a"/"an"), never by "-ed" or a noun.
+_ELECTION_PARTICIPATION_RE = re.compile(
+    r"\bcontests?\s+(?:the|a|an)\b.{0,40}\belection\b"
+    r"|\brun(?:s|ning)?\s+in\s+(?:the|a|an)\b.{0,40}\belection\b"
+    r"|\bfield(?:s|ed|ing)?\s+a\b.{0,40}\bcandidate\b"
+    r"|\bappear(?:s|ed|ing)?\s+on\s+the\s+ballot\b",
+    re.I,
+)
 
 
 def competition_result_scope(text: str) -> str | None:
     """Return narrow tournament predicate classes when exactly one is explicit."""
     hole = bool(_HOLE_IN_ONE_RE.search(text))
     winner = bool(_WINNER_RE.search(text))
-    participant = bool(_PARTICIPATION_RE.search(text))
+    participant = bool(_PARTICIPATION_RE.search(text)) or bool(
+        _ELECTION_PARTICIPATION_RE.search(text)
+    )
     if sum(bool(x) for x in (hole, winner, participant)) != 1:
         return None
     if hole:
@@ -149,6 +166,44 @@ def competition_result_scope(text: str) -> str | None:
     if participant:
         return "participant"
     return "winner"
+
+
+# A party/company framed as "founded by <person>" or "<person>'s party" is
+# that ORGANIZATION, not the person themselves — "a party founded by Elon
+# Musk" contesting an election is not "Elon Musk" winning it. Conservative:
+# only the explicit founded-by/possessive-organization phrasing counts. The
+# name capture stops at the next sentence/stop word so it doesn't swallow the
+# rest of the question (e.g. "founded by Elon Musk contest the ..." must
+# capture just "Elon Musk", not "Elon Musk contest the").
+_NAME_STOPWORDS = (
+    r"will|would|shall|is|are|was|were|win|wins|winning|won|contest|contests"
+    r"|contested|run|runs|running|field|fields|fielding|the|a|an|and|or|to"
+    r"|on|for|of|in|by"
+)
+_FOUNDED_BY_RE = re.compile(
+    rf"\b(?:party|company|organization|organisation)\s+founded\s+by\s+"
+    rf"((?:(?!\b(?:{_NAME_STOPWORDS})\b)[a-z][\w.-]*\s*){{1,3}})"
+    rf"|\b((?:(?!\b(?:{_NAME_STOPWORDS})\b)[a-z][\w.-]*\s*){{1,3}})'s\s+"
+    rf"(?:party|company|organization|organisation)\b",
+    re.I,
+)
+
+
+def founded_by_scope(text: str) -> bool:
+    """True when text frames a party/company/org as founded by, or
+    possessively belonging to, a named person (rather than being that
+    person)."""
+    return bool(_FOUNDED_BY_RE.search(text))
+
+
+def founded_by_subject(text: str) -> str | None:
+    """Return the lowercase person name behind a founded-by/possessive-
+    organization framing, or None when the pattern doesn't match."""
+    m = _FOUNDED_BY_RE.search(text)
+    if not m:
+        return None
+    name = m.group(1) or m.group(2)
+    return name.strip().lower() if name else None
 
 
 _JUDICIAL_CONTEXT_RE = re.compile(r"\b(?:scotus|supreme\s+court)\b", re.I)

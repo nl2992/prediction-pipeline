@@ -1615,6 +1615,45 @@ class LiveTopTenSemanticGuards(unittest.TestCase):
         )
         self.assertTrue(d.match, d.reasons)
 
+    def test_party_contest_election_vs_person_winner_rejected(self):
+        # Ranked-audit rank 10: "a party founded by Elon Musk" contesting the
+        # election is a different predicate (participate vs win) from Musk
+        # winning it — the predicate mismatch alone rejects this pair.
+        d = decide_full(
+            "Elon Musk", "Presidential Election Winner 2028",
+            "Will a party founded by Elon Musk contest the 2028 U.S. presidential election?",
+            "Will the America Party contest the 2028 U.S. presidential election?",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("tournament participation vs winner", d.reasons)
+
+    def test_founded_by_party_vs_person_same_predicate_rejected(self):
+        # Same predicate (winning) on both sides, but the subject on one side
+        # is "a party founded by Elon Musk", not Musk himself.
+        d = decide_full(
+            "Elon Musk", "Presidential Election Winner 2028",
+            "Will a party founded by Elon Musk win the 2028 U.S. presidential election?",
+            "Will the America Party win the 2028 U.S. presidential election?",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("organization founded by person vs person", d.reasons)
+
+    def test_person_winner_remains_matchable(self):
+        d = decide_full(
+            "Elon Musk", "Presidential Election Winner 2028",
+            "Will Elon Musk win the 2028 US presidential election?",
+            "2028 US Presidential Election Winner",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_party_contest_vs_field_candidate_remains_matchable(self):
+        d = decide_full(
+            "Yes", "Will the America Party contest the 2028 election?",
+            "Will the America Party field a 2028 presidential candidate?",
+            "Will the America Party field a 2028 presidential candidate?",
+        )
+        self.assertTrue(d.match, d.reasons)
+
     def test_steel_bridge_vs_ncaa_football_rejected(self):
         d = decide_full(
             "Notre Dame", "Steel Bridge National Championship Winner",
