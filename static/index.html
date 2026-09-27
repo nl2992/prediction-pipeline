@@ -669,6 +669,19 @@
     #topbar .clock { display: none; }
     #detail-left, #detail-right { padding-left: 16px; padding-right: 16px; }
     .sum-panel { padding-left: 16px; padding-right: 16px; }
+
+    /* Force CAT and KALSHI (the name column — its question is still in the
+       detail drawer) out of the table below 600px so NET lands right after
+       POLYMARKET without horizontal scrolling, regardless of what the
+       column picker has saved. This is a display-only override: it does
+       NOT touch columnVisibility / localStorage, so the columns reappear
+       exactly as the user left them once the viewport widens back past
+       600px. */
+    #pairs-table th[data-col="cat"], #pairs-table td[data-col="cat"],
+    #pairs-table th[data-col="kalshi"], #pairs-table td[data-col="kalshi"] {
+      display: none;
+    }
+    .title-cell { min-width: 150px; }
   }
 </style>
 </head>
@@ -1634,7 +1647,16 @@ function renderDetail(p, hiddenReason) {
   }
 
   const pb = p.poly_bid, pa = p.poly_ask, kb = p.kalshi_bid, ka = p.kalshi_ask;
-  const fmt3 = v => v != null ? (+v).toFixed(4) : 'N/A';
+  // Single helper for every "missing number" in this panel — bid/ask,
+  // confidence, and title sim used to disagree (fmt3's own 'N/A' here vs. a
+  // bare NaN% from confidence/title_sim multiplying null by 100 with no null
+  // check at all). Checks the RAW value for null/NaN before any multiplier
+  // is applied — `null * 100 === 0`, not NaN, so checking the multiplied
+  // result would have silently turned "missing" into "0.0%". One dash, one
+  // code path, no NaN and no false zero ever reaches the DOM.
+  const fmtN = (v, digits, suffix, mult) =>
+    (v == null || Number.isNaN(+v)) ? '—' : (+v * (mult || 1)).toFixed(digits) + (suffix || '');
+  const fmt3 = v => fmtN(v, 4);
 
   const polyEventLine  = p.poly_event_title   ? `<div class="detail-row"><span class="detail-key">  EVENT</span><span class="detail-val dim">${esc(p.poly_event_title)}</span></div>` : '';
   const kalshiEventLine = p.kalshi_event_title ? `<div class="detail-row"><span class="detail-key">  EVENT</span><span class="detail-val dim">${esc(p.kalshi_event_title)}</span></div>` : '';
@@ -1672,9 +1694,9 @@ function renderDetail(p, hiddenReason) {
     </div>
     <div class="detail-row" style="margin-top:4px;">
       <span class="detail-key">CONFIDENCE</span>
-      <span class="detail-val">${(p.confidence*100).toFixed(1)}%</span>
+      <span class="detail-val">${fmtN(p.confidence, 1, '%', 100)}</span>
       <span class="detail-key" style="margin-left:16px;">TITLE SIM</span>
-      <span class="detail-val">${(p.title_sim*100).toFixed(1)}%</span>
+      <span class="detail-val">${fmtN(p.title_sim, 1, '%', 100)}</span>
     </div>`;
 
   // Arb calc. Kalshi charges a taker fee of 0.07*p*(1-p) on ITS leg only (maxes
