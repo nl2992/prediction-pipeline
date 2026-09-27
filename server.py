@@ -21,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
 import book_arb
+import scan_jobs
 import store
 from arb import kalshi_taker_fee
 from pipeline import OrderBook, PriceLevel
@@ -435,25 +436,23 @@ _DEFAULT_SCAN_DAYS = None
 _DEFAULT_MAX_EVENTS = None
 
 
-def _run_scan(
+def _execute_scan(
+    scan_id: int | None,
     category: str = "all",
     min_sim: float = 0.30,
     max_events: int | None = _DEFAULT_MAX_EVENTS,
     show_prices: bool = True,
     days: int | None = _DEFAULT_SCAN_DAYS,
 ) -> dict:
+    """Runs discover() and persists the result against an ALREADY-CREATED
+    scan row (``scan_id``, from ``store.start_scan`` — or None if that failed
+    / isn't wanted). Split out of ``_run_scan`` (Phase 2c) so the background
+    job runner (scan_jobs.py) and the legacy synchronous endpoints
+    (``/api/scan``, ``/api/scan/fast``) share one code path: the job runner
+    creates its own scan row up front (so it can report the id before the
+    scan finishes) and calls this directly; ``_run_scan`` below still does
+    both steps itself for callers that don't need a job."""
     t0 = time.time()
-    mode = "full" if show_prices else "fast"
-    params = {
-        "category": category, "min_sim": min_sim, "max_events": max_events,
-        "show_prices": show_prices, "days": days,
-    }
-
-    scan_id: int | None = None
-    try:
-        scan_id = store.start_scan(mode, params)
-    except Exception:
-        logger.warning("store.start_scan failed; scan will not be persisted", exc_info=True)
 
     try:
         from discover import discover
@@ -466,6 +465,16 @@ def _run_scan(
             market_sweep=False,
         )
     except Exception as exc:
+        # Note: scan_jobs.ScanCancelled (the job runner's cooperative-
+        # cancellation signal, raised from its stdout proxy while discover()
+        # is running — see scan_jobs.py) is a BaseException, NOT an Exception
+        # subclass, specifically so this generic handler can't catch it: it
+        # must propagate all the way up to the job worker uncaught, the same
+        # way KeyboardInterrupt would, so the job/store row land in
+        # 'cancelled' rather than being caught here and reported as 'failed'.
+        # discover.py has ~19 bare `except Exception:` blocks around its own
+        # internal calls; a plain Exception subclass would risk being
+        # swallowed by one of those on its way out.
         if scan_id is not None:
             try:
                 store.fail_scan(scan_id, str(exc))
@@ -496,6 +505,29 @@ def _run_scan(
     result["scan_id"] = scan_id if persisted else None
     result["persisted"] = persisted
     return result
+
+
+def _run_scan(
+    category: str = "all",
+    min_sim: float = 0.30,
+    max_events: int | None = _DEFAULT_MAX_EVENTS,
+    show_prices: bool = True,
+    days: int | None = _DEFAULT_SCAN_DAYS,
+) -> dict:
+    mode = "full" if show_prices else "fast"
+    params = {
+        "category": category, "min_sim": min_sim, "max_events": max_events,
+        "show_prices": show_prices, "days": days,
+    }
+
+    scan_id: int | None = None
+    try:
+        scan_id = store.start_scan(mode, params)
+    except Exception:
+        logger.warning("store.start_scan failed; scan will not be persisted", exc_info=True)
+
+    return _execute_scan(scan_id, category=category, min_sim=min_sim,
+                          max_events=max_events, show_prices=show_prices, days=days)
 
 
 # ---------------------------------------------------------------------------
@@ -549,6 +581,49 @@ def api_scans_latest(mode: str | None = None):
 def api_scans(limit: int = 20):
     """Scan metadata only (no pairs) for the scan history list."""
     return JSONResponse({"scans": store.list_scans(limit=limit)})
+
+
+@app.post("/api/scans")
+def api_scans_start(payload: dict = _BODY_ELLIPSIS):
+    """Starts a background scan job (Phase 2c, docs/FRONTEND_REVIEW.md
+    finding 6) instead of blocking the request for the 10-20 minutes a full
+    scan takes. Single-flight: if a job is already running, that job is
+    returned unchanged with ``started: False`` rather than starting a
+    second concurrent scan — 202 when a new job was started, 200 when an
+    existing one was returned, 422 on an invalid mode."""
+    mode = payload.get("mode")
+    if mode not in ("full", "fast"):
+        return JSONResponse({"error": "mode must be 'full' or 'fast'"}, status_code=422)
+    params = {
+        "category": payload.get("category", "all"),
+        "min_sim": payload.get("min_sim", 0.30),
+        "max_events": payload.get("max_events"),
+        "days": payload.get("days"),
+    }
+    result = scan_jobs.start(mode, params)
+    return JSONResponse(result, status_code=202 if result["started"] else 200)
+
+
+@app.get("/api/scans/job")
+def api_scans_job():
+    """Current or most-recently-finished background scan job. 404 if no job
+    has been started since process startup. Registered ahead of
+    ``/api/scans/{scan_id}`` so the literal path 'job' is matched here first
+    rather than being parsed as a scan id."""
+    job = scan_jobs.status()
+    if job is None:
+        return JSONResponse({"error": "no scan job"}, status_code=404)
+    return JSONResponse(job)
+
+
+@app.post("/api/scans/job/cancel")
+def api_scans_job_cancel():
+    """Requests cancellation of the currently-running scan job (cooperative —
+    see scan_jobs.py). 409 if no job is currently running."""
+    job = scan_jobs.cancel()
+    if job is None:
+        return JSONResponse({"error": "no scan running"}, status_code=409)
+    return JSONResponse(job)
 
 
 @app.get("/api/scans/{scan_id}")

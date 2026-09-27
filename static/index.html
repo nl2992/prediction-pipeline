@@ -596,6 +596,19 @@
   .badge-reviewed { background: #0d0d1a; color: var(--magenta); border: 1px solid var(--magenta); }
 
   .book-scan-trigger.disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+  .scan-trigger.disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+
+  /* Phase 2c: background scan job progress, shown in the pairs panel header
+     while a scan runs — the previous results stay visible/interactive
+     underneath instead of a full-screen blocking overlay. */
+  #scan-job-progress { display: none; align-items: center; gap: 8px; color: var(--amber); }
+  #scan-job-progress.show { display: inline-flex; }
+  #scan-job-cancel-btn {
+    background: transparent; border: 1px solid var(--red); color: var(--red);
+    font-family: var(--font); font-size: 10px; padding: 2px 8px; cursor: pointer;
+  }
+  #scan-job-cancel-btn:hover { background: var(--red); color: #000; }
+  #scan-job-cancel-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
   #refresh-btn {
     background: transparent;
@@ -717,10 +730,10 @@
     <div class="fkeys">
       <button type="button" onclick="showView('pairs')">F1 PAIRS</button>
       <button type="button" onclick="showView('signals')">F2 SIGNALS</button>
-      <button type="button" onclick="runScan()">F3 SCAN</button>
+      <button type="button" class="scan-trigger" onclick="runScan()">F3 SCAN</button>
       <button type="button" class="book-scan-trigger" onclick="runBookArb()">F4 BOOK</button>
       <button type="button" onclick="showView('summary')">F5 SUMMARY</button>
-      <button type="button" onclick="runFastScan()">F8 FAST</button>
+      <button type="button" class="scan-trigger" onclick="runFastScan()">F8 FAST</button>
     </div>
   </div>
   <div class="clock" id="clock"></div>
@@ -794,8 +807,8 @@
     </div>
     <div class="sidebar-section">
       <div class="s-header">ACTIONS</div>
-      <button type="button" class="sidebar-item" onclick="runScan()">⟳ FULL SCAN</button>
-      <button type="button" class="sidebar-item" onclick="runFastScan()">⚡ FAST SCAN</button>
+      <button type="button" class="sidebar-item scan-trigger" onclick="runScan()">⟳ FULL SCAN</button>
+      <button type="button" class="sidebar-item scan-trigger" onclick="runFastScan()">⚡ FAST SCAN</button>
       <button type="button" class="sidebar-item book-scan-trigger" onclick="runBookArb()">▤ BOOK SCAN</button>
     </div>
     <div style="flex:1;"></div>
@@ -823,7 +836,9 @@
             <button type="button" id="columns-btn" onclick="toggleColumnsPopover()" aria-expanded="false" aria-controls="columns-popover">▤ COLUMNS</button>
             <div id="columns-popover" role="menu" aria-label="Show/hide columns"></div>
           </div>
-          <button id="refresh-btn" onclick="runScan()">⟳ REFRESH</button>
+          <span id="scan-job-progress"><span id="scan-job-progress-text"></span>
+            <button type="button" id="scan-job-cancel-btn" onclick="cancelScanJob()">✕ CANCEL</button></span>
+          <button id="refresh-btn" class="scan-trigger" onclick="runScan()">⟳ REFRESH</button>
         </div>
       </div>
       <div class="tbl-wrap">
@@ -1371,81 +1386,199 @@ async function restoreScan() {
   }
 }
 
-async function runScan() {
-  showLoading('FULL SCAN — fetching live orderbooks...');
-  const btn = document.getElementById('refresh-btn');
-  btn.disabled = true;
-  btn.textContent = '⟳ SCANNING...';
+// ── Background scan jobs (Phase 2c, docs/FRONTEND_REVIEW.md finding 6) ─────
+// FULL/FAST SCAN start a background job (POST /api/scans) instead of
+// blocking the request for the 10-20 minutes a full scan can take. The
+// previous results stay visible and interactive while a scan job polls in
+// the background; only a compact progress line + Cancel button appear in
+// the pairs panel header. showLoading/hideLoading (the full-screen overlay)
+// remain in use for BOOK SCAN, which is quick, but are no longer used here.
+let scanJobPollTimer = null;
+let scanJob = null;              // last-known job state from /api/scans/job
+let scanJobStartedAt = null;     // Date this job started, for the elapsed-time readout
+
+// A job is 'running', then briefly 'cancelling' (set almost immediately once
+// a cancel is requested, well before the scan actually stops — see
+// scan_jobs.py's watchdog) before reaching a terminal status. Both count as
+// "active": triggers stay disabled and polling continues through either.
+const ACTIVE_JOB_STATUSES = ['running', 'cancelling'];
+function scanJobActive(job) {
+  return !!job && ACTIVE_JOB_STATUSES.includes(job.status);
+}
+function scanJobRunning() {
+  return scanJobActive(scanJob);
+}
+
+function setScanTriggersDisabled(disabled) {
+  document.querySelectorAll('.scan-trigger').forEach(el => {
+    el.classList.toggle('disabled', disabled);
+    el.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+  });
+}
+
+function formatElapsed(ms) {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return m > 0 ? `${m}m${String(s).padStart(2, '0')}s` : `${s}s`;
+}
+
+function renderScanJobProgress(job) {
+  const wrap = document.getElementById('scan-job-progress');
+  const text = document.getElementById('scan-job-progress-text');
+  if (!scanJobActive(job)) {
+    wrap.classList.remove('show');
+    return;
+  }
+  const elapsed = scanJobStartedAt ? formatElapsed(Date.now() - scanJobStartedAt.getTime()) : '';
+  if (job.status === 'cancelling') {
+    // The cancel request lands almost instantly (a watchdog thread in
+    // scan_jobs.py flips this the moment cancel() is called), but the scan
+    // itself may keep running for a while longer — discover()'s matcher
+    // stage in particular can run minutes with no progress output at all,
+    // so there's nothing more specific to report here yet.
+    text.textContent = `Cancelling… (finishes current stage) · ${elapsed}`;
+  } else {
+    const stage = job.stage ? ` · ${job.stage}` : '';
+    text.textContent = `Scanning (${job.mode})${stage} · ${elapsed}`;
+  }
+  wrap.classList.add('show');
+  const cancelBtn = document.getElementById('scan-job-cancel-btn');
+  cancelBtn.disabled = job.status === 'cancelling';
+}
+
+async function startScanJob(mode) {
+  if (scanJobRunning()) {
+    showCmdHint('Scan already running');
+    return;
+  }
+  setScanTriggersDisabled(true);
   try {
-    const r = await fetch(`/api/scan?category=${currentCat}&min_sim=0.30`);
+    const r = await fetch('/api/scans', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode, category: currentCat, min_sim: 0.30 }),
+    });
     const d = await r.json();
-    if (d.error) {
-      lastScanError = d.error;
-      if (allPairs.length) {
-        // Previous pairs exist; keep them visible with error in header
-        updateScanStatusLabel();
-      } else {
-        // No previous pairs; show error in tbody
-        renderTableState('failed', d.error);
-      }
-      throw new Error(d.error);
+    if (r.status === 422) {
+      showError('SCAN FAILED: ' + (d.error || 'invalid request'));
+      setScanTriggersDisabled(false);
+      return;
     }
-    // Successful scan: refresh review badges from /api/reviews
-    try {
-      const rr = await fetch('/api/reviews');
-      const reviews = await rr.json();
-      if (reviews && !reviews.error) {
-        d.reviews = reviews;
-      }
-    } catch (e) {
-      // If review fetch fails, keep the old reviewsByKey
-    }
-    applyScanResult(d, { restored: false });
-  } catch(e) {
+    scanJob = d.job;
+    scanJobStartedAt = scanJob.started_at ? new Date(scanJob.started_at) : new Date();
+    renderScanJobProgress(scanJob);
+    schedulePollScanJob();
+  } catch (e) {
     showError('SCAN FAILED: ' + e.message);
-  } finally {
-    hideLoading();
-    btn.disabled = false;
-    btn.textContent = '⟳ REFRESH';
+    setScanTriggersDisabled(false);
   }
 }
 
-async function runFastScan() {
-  showLoading('FAST SCAN — catalog mid-prices only...');
-  const btn = document.getElementById('refresh-btn');
-  btn.disabled = true;
+function schedulePollScanJob() {
+  if (scanJobPollTimer) clearInterval(scanJobPollTimer);
+  scanJobPollTimer = setInterval(pollScanJobOnce, 2000);
+}
+
+async function pollScanJobOnce() {
   try {
-    const r = await fetch(`/api/scan/fast?category=${currentCat}`);
-    const d = await r.json();
-    if (d.error) {
-      lastScanError = d.error;
-      if (allPairs.length) {
-        // Previous pairs exist; keep them visible with error in header
-        updateScanStatusLabel();
-      } else {
-        // No previous pairs; show error in tbody
-        renderTableState('failed', d.error);
-      }
-      throw new Error(d.error);
+    const r = await fetch('/api/scans/job');
+    if (r.status === 404) {
+      stopPollingScanJob();
+      return;
     }
-    // Successful scan: refresh review badges from /api/reviews
+    const job = await r.json();
+    scanJob = job;
+    if (!scanJobStartedAt && job.started_at) scanJobStartedAt = new Date(job.started_at);
+    renderScanJobProgress(job);
+    if (!scanJobActive(job)) {
+      stopPollingScanJob();
+      await onScanJobTerminal(job);
+    }
+  } catch (e) {
+    // Transient network error — keep polling; the next tick will retry.
+  }
+}
+
+function stopPollingScanJob() {
+  if (scanJobPollTimer) { clearInterval(scanJobPollTimer); scanJobPollTimer = null; }
+  setScanTriggersDisabled(false);
+  renderScanJobProgress(null);
+}
+
+async function onScanJobTerminal(job) {
+  if (job.status === 'completed') {
     try {
-      const rr = await fetch('/api/reviews');
-      const reviews = await rr.json();
-      if (reviews && !reviews.error) {
-        d.reviews = reviews;
+      const r = await fetch('/api/scans/latest');
+      const d = await r.json();
+      if (!d.error) {
+        applyScanResult(d, { restored: false });
+        // /api/scans/latest (unlike the old synchronous /api/scan) doesn't
+        // carry an `elapsed` field, so compute it client-side from the job's
+        // own timestamps for the ELAPSED status-bar readout.
+        if (job.started_at && job.finished_at) {
+          const secs = (new Date(job.finished_at) - new Date(job.started_at)) / 1000;
+          document.getElementById('elapsed').textContent = `ELAPSED: ${secs.toFixed(1)}s`;
+        }
+      } else {
+        lastScanError = d.error;
+        updateScanStatusLabel();
       }
     } catch (e) {
-      // If review fetch fails, keep the old reviewsByKey
+      lastScanError = e.message;
+      updateScanStatusLabel();
     }
-    applyScanResult(d, { restored: false });
-  } catch(e) {
-    showError('SCAN FAILED: ' + e.message);
-  } finally {
-    hideLoading();
-    btn.disabled = false;
-    btn.textContent = '⟳ REFRESH';
+  } else if (job.status === 'failed') {
+    lastScanError = job.error || 'scan failed';
+    updateScanStatusLabel();
+    showCmdHint('Scan failed: ' + lastScanError);
+  } else if (job.status === 'cancelled') {
+    showCmdHint('Scan cancelled');
+    updateScanStatusLabel();
   }
+}
+
+async function cancelScanJob() {
+  try {
+    const r = await fetch('/api/scans/job/cancel', { method: 'POST' });
+    if (r.status === 409) {
+      showCmdHint('No scan running');
+      return;
+    }
+    const job = await r.json();
+    scanJob = job;
+    renderScanJobProgress(job);
+  } catch (e) {
+    showError('CANCEL FAILED: ' + e.message);
+  }
+}
+
+// On page load, resume polling if a scan job was already running when the
+// page loads/reloads (e.g. the user reloaded mid-scan) — see restoreScan()
+// below, called once at startup.
+async function resumeScanJobIfRunning() {
+  try {
+    const r = await fetch('/api/scans/job');
+    if (r.status === 404) return;
+    const job = await r.json();
+    scanJob = job;
+    if (scanJobActive(job)) {
+      scanJobStartedAt = job.started_at ? new Date(job.started_at) : new Date();
+      setScanTriggersDisabled(true);
+      renderScanJobProgress(job);
+      schedulePollScanJob();
+    }
+  } catch (e) {
+    // No job state available yet — nothing to resume.
+  }
+}
+
+async function runScan() {
+  await startScanJob('full');
+}
+
+async function runFastScan() {
+  await startScanJob('fast');
 }
 
 // ── Book scan (depth-walked executable arb) ─────────────────────────────────
@@ -2335,8 +2468,10 @@ updateSummaryBadge();
 applyColumnVisibility();
 updateBookScanAvailability();
 
-// Restore last scan on page load, if available
-restoreScan();
+// Restore last scan on page load, if available, then check whether a scan
+// job was already running when the page loaded (e.g. a reload mid-scan) and
+// resume polling/progress display for it.
+restoreScan().then(resumeScanJobIfRunning);
 </script>
 </body>
 </html>
