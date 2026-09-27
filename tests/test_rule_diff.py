@@ -62,6 +62,17 @@ class FixturePairs(unittest.TestCase):
         high = [f for f in flags if f["severity"] == "high"]
         self.assertEqual(high, [])
 
+    def test_hurricane_category_negative_has_no_flags(self):
+        """Regression fixture: Polymarket's disclaimer 'every possible peak
+        wind speed falls in exactly one category' used to trip
+        bucket_vs_threshold on a bare 'exactly' with no attached number
+        (found via the real-pair false-flag measurement in the Phase 2d
+        review). exact_bucket now requires a number directly after
+        'exactly', so this must raise no flags at all."""
+        data = self._load("hurricane_category")
+        flags = compare_rules(data["kalshi"]["rules_text"], data["polymarket"]["rules_text"])
+        self.assertEqual(flags, [])
+
     def test_flag_shape(self):
         data = self._load("mlb")
         flags = compare_rules(data["kalshi"]["rules_text"], data["polymarket"]["rules_text"])
@@ -175,6 +186,42 @@ class BucketVsThresholdSynthetic(unittest.TestCase):
         b = "Resolves Yes if the count is at least 6000."
         kinds = [f["kind"] for f in compare_rules(a, b)]
         self.assertNotIn("bucket_vs_threshold", kinds)
+
+    def test_bare_keywords_without_a_number_do_not_flag(self):
+        """Regression: bare 'exactly'/'above'/'at least'/'more than' are
+        common in ordinary rule prose with no bucket/threshold meaning, and
+        must not fire without a number attached."""
+        a = "Resolution will use at least one credible news source, exactly as reported."
+        b = "The above-mentioned sources take precedence; more than one may be consulted."
+        self.assertEqual(compare_rules(a, b), [])
+
+    def test_be_n_without_percent_does_not_flag_exact_bucket(self):
+        """Regression: 'be 2026' / 'be 18' (a year or an unrelated integer)
+        must not read as an exact-value bucket -- only a percent-denominated
+        'be N%' does."""
+        a = "This market resolves based on data that will be 2026 vintage."
+        b = "The relevant age requirement will be 18 at the time of the event."
+        self.assertEqual(compare_rules(a, b), [])
+
+    def test_year_or_time_after_threshold_word_does_not_flag(self):
+        a = "This market resolves above 2026 fiscal year figures, per the official report."
+        b = "The window remains open until at least 11:59 PM ET that day."
+        self.assertEqual(compare_rules(a, b), [])
+
+    def test_bare_over_without_unit_does_not_flag(self):
+        """Regression: 'over' overwhelmingly means 'across' in rule prose
+        ('over 1-month periods'), not 'greater than' -- it must not count as
+        an open threshold without a numeric unit attached."""
+        a = "This resolves based on data reported over 1-month periods."
+        b = "This market resolves Yes if the count is exactly 5."
+        self.assertEqual(compare_rules(a, b), [])
+
+    def test_over_with_unit_still_flags_as_threshold(self):
+        a = "This market resolves Yes if there are over 6000 cases reported."
+        b = "This market resolves Yes if the count is exactly 6000."
+        flags = compare_rules(a, b)
+        kinds = [f["kind"] for f in flags]
+        self.assertIn("bucket_vs_threshold", kinds)
 
 
 if __name__ == "__main__":

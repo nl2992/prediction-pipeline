@@ -535,14 +535,21 @@ def review_history(pair_key_: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def save_evidence(venue: str, market_id: str, rules_text: str, source_url: str | None) -> dict:
-    """Insert a market_evidence row, keyed by (venue, market_id, content_hash)
-    -- the hash of ``rules_text`` (sha256 hex, computed here so callers never
-    need to agree on a hashing scheme separately). Idempotent: if a row with
-    this exact (venue, market_id, content_hash) already exists (the rules
-    haven't changed since last fetch), that existing row is returned
-    unchanged rather than inserting a duplicate or bumping fetched_at --
-    ``latest_evidence`` reports the true first-seen time for the current
-    text, not just the most recent poll that happened to match it.
+    """Insert (or confirm) a market_evidence row, keyed by
+    (venue, market_id, content_hash) -- the hash of ``rules_text`` (sha256
+    hex, computed here so callers never need to agree on a hashing scheme
+    separately).
+
+    ``fetched_at`` is a "last confirmed" timestamp, not a "first seen" one:
+    if a row with this exact (venue, market_id, content_hash) already exists
+    (the rules haven't changed since the last fetch), its ``fetched_at`` is
+    bumped to now and the updated row is returned, rather than leaving the
+    original fetch time in place. This matters for cache freshness --
+    ``evidence.get_evidence`` compares ``fetched_at`` against ``max_age_s``
+    to decide whether to refetch, so an unchanged-text row must still read as
+    "just confirmed", or it would look permanently stale after the first
+    ``max_age_s`` window and force a live refetch on every single call
+    forever, even when nothing has changed.
     """
     import hashlib
     content_hash = hashlib.sha256(rules_text.encode("utf-8")).hexdigest()
@@ -553,13 +560,18 @@ def save_evidence(venue: str, market_id: str, rules_text: str, source_url: str |
             (venue, market_id, content_hash),
         ).fetchone()
         if existing is not None:
-            return dict(existing)
-        conn.execute(
-            """INSERT INTO market_evidence
-                   (venue, market_id, content_hash, rules_text, source_url, fetched_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (venue, market_id, content_hash, rules_text, source_url, _now()),
-        )
+            conn.execute(
+                """UPDATE market_evidence SET fetched_at = ?
+                   WHERE venue = ? AND market_id = ? AND content_hash = ?""",
+                (_now(), venue, market_id, content_hash),
+            )
+        else:
+            conn.execute(
+                """INSERT INTO market_evidence
+                       (venue, market_id, content_hash, rules_text, source_url, fetched_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (venue, market_id, content_hash, rules_text, source_url, _now()),
+            )
         row = conn.execute(
             """SELECT * FROM market_evidence
                WHERE venue = ? AND market_id = ? AND content_hash = ?""",

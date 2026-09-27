@@ -76,9 +76,13 @@ _RANKING_BASIS_POLICIES: list[tuple[str, re.Pattern]] = [
 ]
 
 # event_definition: one side resolves on a mere photograph/video of the
-# parties together, the other requires an actual in-person meeting -- and
-# some texts explicitly exclude a "group photo" from qualifying, which makes
-# the two contracts describe genuinely different events.
+# parties together, the other requires an actual in-person meeting. A bare
+# "does not qualify" is too generic on its own (it shows up in unrelated
+# exclusion clauses), so instead of matching it alone, it's only accepted as
+# in_person_meeting evidence when it's clearly about a photo/photograph not
+# counting (e.g. "a group photo ... does not qualify") -- exactly the phrase
+# that flags a contract explicitly rejecting mere-photo evidence in favor of
+# an actual meeting.
 _EVENT_DEFINITION_POLICIES: list[tuple[str, re.Pattern]] = [
     ("photographed_together", re.compile(
         r"\bphotographed or videotaped\b|\bsame frame\b|\bseen together\b|"
@@ -87,25 +91,45 @@ _EVENT_DEFINITION_POLICIES: list[tuple[str, re.Pattern]] = [
     )),
     ("in_person_meeting", re.compile(
         r"\btrilateral meeting\b|\bmeet in person\b|\bphysically present\b|"
-        r"\bdoes not qualify\b",
+        r"\b(?:group\s+)?photo(?:graph)?(?:ed)?\b.{0,120}?\b(?:does not|will not)\s+"
+        r"(?:qualify|count)\b",
         re.I,
     )),
 ]
 
 # bucket_vs_threshold: one side is an exact-value bucket (e.g. "be 0.2%",
-# "exactly", "between X and Y"), the other an open-ended threshold ("above",
-# "at least"). A bucket and an open threshold covering the same nominal
-# number are NOT equivalent contracts (the bucket loses on any value above
-# or below it; the threshold only cares about one direction).
+# "exactly 5", "between X and Y"), the other an open-ended threshold
+# ("above 6000", "at least 3"). A bucket and an open threshold covering the
+# same nominal number are NOT equivalent contracts (the bucket loses on any
+# value above or below it; the threshold only cares about one direction).
+#
+# Both patterns REQUIRE a numeric value directly attached to the keyword --
+# bare "exactly"/"above"/"at least"/"more than" show up constantly in
+# ordinary rule prose with no bucket/threshold meaning at all ("at least one
+# credible source", "exactly as reported", "above-mentioned", "the
+# above-listed sources"), and would otherwise make this the noisiest, not the
+# most conservative, of the four checks. A trailing 4-digit 19xx/20xx year or
+# a HH:MM time is excluded from counting as "the value" -- "above 2026" or
+# "at least 11:59" are dates/times, not thresholds.
+_NOT_YEAR_OR_TIME = r"(?!(?:19|20)\d{2}\b)(?!\d{1,2}:\d{2}\b)"
+_NUMERIC_UNIT = r"(?:%|k|m|bn|million|billion|cases|points|mph)"
+
 _BUCKET_THRESHOLD_POLICIES: list[tuple[str, re.Pattern]] = [
     ("exact_bucket", re.compile(
-        r"\bexactly\b|\bbe\s+\d+(?:\.\d+)?%?\b|"
-        r"\bbetween\s+[\d.]+%?\s+and\s+[\d.]+%?\b",
+        rf"\bbe\s+(?:exactly\s+)?-?\d+(?:\.\d+)?\s*%|"
+        rf"\bexactly\s+{_NOT_YEAR_OR_TIME}-?\d+(?:\.\d+)?\b|"
+        rf"\bbetween\s+-?[\d.]+%?\s+and\s+-?[\d.]+%?\b",
         re.I,
     )),
     ("open_threshold", re.compile(
-        r"\babove\b|\bmore than\b|\bat least\b|\bgreater than\b|"
-        r"\bor (?:more|higher|above)\b",
+        # "over" is deliberately excluded from the bare (no-unit) form -- it
+        # overwhelmingly means "across" in rule prose ("over 1-month
+        # periods", "over the following year"), not "greater than". It's
+        # still accepted when a numeric unit follows, where that reading
+        # isn't plausible (e.g. "over 6000 cases").
+        rf"\b(?:above|more than|greater than(?:\s+or\s+equal\s+to)?|at least)\s+"
+        rf"\$?-?{_NOT_YEAR_OR_TIME}\d[\d,.]*\s*{_NUMERIC_UNIT}?\b|"
+        rf"\bover\s+\$?-?{_NOT_YEAR_OR_TIME}\d[\d,.]*\s*{_NUMERIC_UNIT}\b",
         re.I,
     )),
 ]

@@ -211,6 +211,11 @@ def get_evidence(
 
     - A cached row fresher than ``max_age_s`` (or any cached row, if
       ``fetch`` is False) is returned as-is, with ``stale`` set to False.
+      ``fetched_at`` is a "last confirmed" timestamp (see
+      ``store.save_evidence``), not "first seen" -- an unchanged-text
+      re-save bumps it to now, so a market whose rules never change stays
+      "fresh" forever instead of forcing a live refetch on every call once
+      the first ``max_age_s`` window elapses.
     - Otherwise, fetches live. On success, saves (idempotent on unchanged
       text -- see ``store.save_evidence``) and returns the fresh row
       (``stale`` False).

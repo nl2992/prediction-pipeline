@@ -89,6 +89,34 @@ class GetEvidenceCaching(unittest.TestCase):
         self.assertEqual(row["rules_text"], "Fresh text.")
         self.assertFalse(row["stale"])
 
+    def test_unchanged_text_refresh_counts_as_confirmed_and_stays_fresh(self):
+        """Regression for the cache-freshness bug: re-saving the SAME text
+        must bump fetched_at (store.save_evidence's "last confirmed"
+        semantics), or get_evidence would treat the row as permanently
+        expired past the first max_age_s window and refetch on every call
+        forever, even though nothing about the rules ever changed."""
+        store.save_evidence("kalshi", "TICK7", "Unchanging text.", "https://x/7")
+        _backdate("kalshi", "TICK7", age_s=999_999)  # older than any max_age_s below
+
+        # First call: cache is expired, so this must fetch -- and the fetch
+        # returns the SAME text, so save_evidence must confirm (bump
+        # fetched_at on) the existing row rather than leaving it stale.
+        with patch("evidence._http_get_json",
+                   side_effect=_kalshi_responder("Unchanging text.")) as mock_fetch:
+            row1 = evidence.get_evidence("kalshi", "TICK7", max_age_s=3600, fetch=True)
+        self.assertTrue(mock_fetch.called)
+        self.assertEqual(row1["rules_text"], "Unchanging text.")
+        self.assertFalse(row1["stale"])
+        self.assertEqual(_row_count("kalshi", "TICK7"), 1)  # still idempotent, no duplicate
+
+        # Second call, well within max_age_s of the confirm above: must NOT
+        # fetch again.
+        with patch("evidence._http_get_json",
+                   side_effect=AssertionError("should not fetch -- just confirmed")):
+            row2 = evidence.get_evidence("kalshi", "TICK7", max_age_s=3600, fetch=True)
+        self.assertEqual(row2["rules_text"], "Unchanging text.")
+        self.assertFalse(row2["stale"])
+
     def test_same_text_same_hash_no_duplicate_row(self):
         with patch("evidence._http_get_json", side_effect=_kalshi_responder("Identical text.")):
             row1 = evidence.get_evidence("kalshi", "TICK4", max_age_s=0, fetch=True)
