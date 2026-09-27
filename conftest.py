@@ -9,3 +9,13 @@ directly as a manual smoke check (#18).
 """
 
 collect_ignore = ["tools/smoke_test.py"]
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _isolate_dashboard_db(tmp_path, monkeypatch):
+    """store.py defaults to data/dashboard.db; every test gets its own tmp
+    path via PRED_DASHBOARD_DB so the unit suite never reads or writes the
+    real dashboard database."""
+    monkeypatch.setenv("PRED_DASHBOARD_DB", str(tmp_path / "test-dashboard.db"))

@@ -21,10 +21,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
 import book_arb
+import store
 from arb import kalshi_taker_fee
 from pipeline import OrderBook, PriceLevel
 
 logging.disable(logging.WARNING)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Pred-Arb Monitor")
 app.add_middleware(
@@ -37,6 +39,13 @@ app.add_middleware(
 SIGNALS_FILE = Path(__file__).parent / "signals.jsonl"
 STATIC_DIR   = Path(__file__).parent / "static"
 STATIC_DIR.mkdir(exist_ok=True)
+
+_PRUNE_KEEP_SCANS = 50
+
+
+@app.on_event("startup")
+def _startup() -> None:
+    store.init_db()
 
 
 # ---------------------------------------------------------------------------
@@ -434,6 +443,18 @@ def _run_scan(
     days: int | None = _DEFAULT_SCAN_DAYS,
 ) -> dict:
     t0 = time.time()
+    mode = "full" if show_prices else "fast"
+    params = {
+        "category": category, "min_sim": min_sim, "max_events": max_events,
+        "show_prices": show_prices, "days": days,
+    }
+
+    scan_id: int | None = None
+    try:
+        scan_id = store.start_scan(mode, params)
+    except Exception:
+        logger.warning("store.start_scan failed; scan will not be persisted", exc_info=True)
+
     try:
         from discover import discover
         pairs = discover(
@@ -445,17 +466,36 @@ def _run_scan(
             market_sweep=False,
         )
     except Exception as exc:
+        if scan_id is not None:
+            try:
+                store.fail_scan(scan_id, str(exc))
+            except Exception:
+                logger.warning("store.fail_scan failed", exc_info=True)
         return {"error": str(exc), "pairs": [], "elapsed": 0}
 
     elapsed = round(time.time() - t0, 1)
-    return {
+    summary = build_summary(pairs)
+    result = {
         "pairs": pairs,
         "elapsed": elapsed,
         "scanned_at": datetime.now(timezone.utc).isoformat(),
         "count": len(pairs),
         "arb_count": sum(1 for p in pairs if (p.get("arb_net_profit") or 0) > 0),
-        "summary": build_summary(pairs),
+        "summary": summary,
     }
+
+    persisted = False
+    if scan_id is not None:
+        try:
+            store.finish_scan(scan_id, pairs, summary)
+            store.prune_scans(keep=_PRUNE_KEEP_SCANS)
+            persisted = True
+        except Exception:
+            logger.warning("store.finish_scan failed; scan result not persisted", exc_info=True)
+
+    result["scan_id"] = scan_id if persisted else None
+    result["persisted"] = persisted
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -483,6 +523,59 @@ def api_scan_fast(
     """Quick scan — no live orderbook enrichment, uses catalog mid-prices only."""
     return JSONResponse(_run_scan(category=category, show_prices=False,
                                   max_events=max_events, days=days))
+
+
+@app.get("/api/scans/latest")
+def api_scans_latest(mode: str | None = None):
+    """Latest completed scan, with pairs and a reviews map keyed by pair_key
+    for every pair in that scan."""
+    scan = store.latest_scan(mode=mode)
+    if scan is None:
+        return JSONResponse({"error": "no completed scan"}, status_code=404)
+    keys = [store.pair_key(p) for p in scan["pairs"]]
+    scan["reviews"] = store.current_reviews(keys)
+    return JSONResponse(scan)
+
+
+@app.get("/api/scans")
+def api_scans(limit: int = 20):
+    """Scan metadata only (no pairs) for the scan history list."""
+    return JSONResponse({"scans": store.list_scans(limit=limit)})
+
+
+@app.get("/api/scans/{scan_id}")
+def api_scan_by_id(scan_id: int):
+    scan = store.get_scan(scan_id)
+    if scan is None:
+        return JSONResponse({"error": "scan not found"}, status_code=404)
+    return JSONResponse(scan)
+
+
+@app.post("/api/reviews")
+def api_add_review(payload: dict = _BODY_ELLIPSIS):
+    """Records a human review verdict for a pair. Append-only: this always
+    inserts a new row, never overwrites a prior review of the same pair."""
+    pair_key_ = payload.get("pair_key")
+    verdict = payload.get("verdict")
+    reason = payload.get("reason")
+    if not pair_key_ or not isinstance(pair_key_, str):
+        return JSONResponse({"error": "pair_key is required"}, status_code=422)
+    if verdict not in ("match", "mismatch", "uncertain"):
+        return JSONResponse(
+            {"error": "verdict must be one of match, mismatch, uncertain"},
+            status_code=422,
+        )
+    review = store.add_review(pair_key_, verdict, reason)
+    return JSONResponse(review)
+
+
+@app.get("/api/reviews")
+def api_reviews(pair_key: str | None = None):
+    """History for one pair (``pair_key`` given) or the current-verdict map
+    for up to 500 pairs (no ``pair_key``)."""
+    if pair_key is not None:
+        return JSONResponse({"reviews": store.review_history(pair_key)})
+    return JSONResponse(store.current_reviews())
 
 
 @app.get("/api/signals")
