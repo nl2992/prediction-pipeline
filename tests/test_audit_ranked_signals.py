@@ -59,7 +59,7 @@ class RankedSignalAuditTest(unittest.TestCase):
     def test_partial_or_failed_orphan_sweeps_are_not_described_as_complete(self) -> None:
         for poly_status in ("failed", "cached", None):
             with self.subTest(polymarket_sweep=poly_status):
-                def fake_discover(**kwargs):
+                def fake_discover(poly_status=poly_status, **kwargs):
                     kwargs["coverage"].update({
                         "kalshi": {"sweep": "fresh"}, "polymarket": {"sweep": poly_status},
                     })
