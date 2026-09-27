@@ -465,13 +465,16 @@ def _execute_scan(
             market_sweep=False,
         )
     except Exception as exc:
-        # scan_jobs.ScanCancelled is a cooperative-cancellation signal raised
-        # from the job runner's stdout proxy while discover() is running (see
-        # scan_jobs.py) — it must propagate to the job worker uncaught so the
-        # job/store row land in 'cancelled', not 'failed'. Checked by name
-        # (not imported) to avoid a server.py -> scan_jobs -> server.py cycle.
-        if type(exc).__name__ == "ScanCancelled":
-            raise
+        # Note: scan_jobs.ScanCancelled (the job runner's cooperative-
+        # cancellation signal, raised from its stdout proxy while discover()
+        # is running — see scan_jobs.py) is a BaseException, NOT an Exception
+        # subclass, specifically so this generic handler can't catch it: it
+        # must propagate all the way up to the job worker uncaught, the same
+        # way KeyboardInterrupt would, so the job/store row land in
+        # 'cancelled' rather than being caught here and reported as 'failed'.
+        # discover.py has ~19 bare `except Exception:` blocks around its own
+        # internal calls; a plain Exception subclass would risk being
+        # swallowed by one of those on its way out.
         if scan_id is not None:
             try:
                 store.fail_scan(scan_id, str(exc))

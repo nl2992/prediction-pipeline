@@ -31,11 +31,44 @@ discover.py. Cancellation is therefore cooperative and coarse-grained: once
 next time discover() calls ``print()``). discover() has no top-level
 try/except around its body between progress prints, so the exception
 unwinds cleanly out of ``discover()`` and is caught here, where the job and
-the store row are both marked 'cancelled'. Because discover() only prints
-between its four top-level stages (not per-market), a cancel requested
-mid-stage will not actually stop the scan until that stage's ingestion/
-matching pass finishes and the next stage prints — this is a known
-limitation of a print-based cancellation hook.
+the store row are both marked 'cancelled'.
+
+``ScanCancelled`` subclasses ``BaseException``, not ``Exception`` — the same
+choice Python makes for ``KeyboardInterrupt`` / ``SystemExit``, and for the
+same reason: discover.py has roughly 19 bare ``except Exception:`` blocks
+around its own internal calls (retries, per-market error handling, etc.). A
+plain ``Exception`` subclass raised from inside a ``print()`` call that
+happens to sit inside one of those blocks would simply be swallowed and the
+scan would carry on as if nothing had been requested. A ``BaseException``
+passes straight through every ``except Exception`` in its path, all the way
+back to this module's own ``except ScanCancelled:`` in ``_worker``.
+
+Cancellation is still coarse-grained for two independent reasons, both
+unavoidable without editing discover.py:
+  1. discover() only calls ``print()`` between its four top-level stages,
+     not per-market — a cancel requested mid-stage won't actually raise
+     until that stage's work finishes and the next stage prints.
+  2. discover.py runs several of its own internal steps (ingestion) on a
+     ``concurrent.futures.ThreadPoolExecutor``, whose worker threads have a
+     different thread ident than the job's worker thread — the stdout proxy
+     only ever raises for writes coming from the registered job thread (by
+     design: raising from an arbitrary discover.py-internal thread would be
+     unsafe), so those pooled workers are never interrupted directly either
+     way; the job thread still gets a chance to raise as soon as it's back
+     to calling print() itself.
+  Stage 3 (the two-level group matcher) in particular can run for several
+  minutes with NO progress output at all, so a cancel requested during it
+  may take minutes to actually stop the scan, even though the UI reflects
+  the cancel request itself immediately (see ``_cancel_watchdog`` below).
+
+To keep the UI from looking stuck on 'running' for however long the actual
+stop takes, a job has a transient 'cancelling' status between 'running' and
+'cancelled': as soon as ``cancel()`` sets the cancel flag, a small watchdog
+thread (started by the worker for the lifetime of its own job) notices
+almost immediately and flips the job to 'cancelling'. This does not make
+the underlying cancellation itself any faster — it only makes the fact that
+one is pending visible right away instead of only once discover() next
+prints.
 """
 
 from __future__ import annotations
@@ -51,11 +84,18 @@ import store
 
 _STAGE_RE = re.compile(r"^\[(\d+)/(\d+)\]\s*(.*)")
 _LOG_TAIL_MAXLEN = 20
+_WATCHDOG_POLL_S = 0.15
+_ACTIVE_STATUSES = ("running", "cancelling")
 
 
-class ScanCancelled(Exception):
+class ScanCancelled(BaseException):
     """Raised inside the worker thread (via the stdout proxy) once a cancel
-    has been requested and the worker next writes a progress line."""
+    has been requested and the worker next writes a progress line.
+
+    Deliberately a BaseException, not an Exception, subclass — see the
+    module docstring's Cancellation section for why: discover.py's many
+    internal ``except Exception:`` blocks must NOT be able to swallow this
+    on its way out."""
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +219,7 @@ def start(mode: str, params: dict | None = None) -> dict:
 
     global _job, _thread, _cancel_event
     with _lock:
-        if _job is not None and _job["status"] == "running":
+        if _job is not None and _job["status"] in _ACTIVE_STATUSES:
             return {"job": _public_job(_job), "started": False}
 
         try:
@@ -224,26 +264,65 @@ def status() -> dict | None:
 
 
 def cancel() -> dict | None:
-    """Requests cancellation of the running job. Returns the job snapshot
-    (still 'running' at this instant — the transition to 'cancelled' happens
-    asynchronously, once the worker thread's next stdout write observes the
-    flag) or None if nothing is running."""
+    """Requests cancellation of the running job. Returns the job snapshot —
+    its ``status`` flips from 'running' to the transient 'cancelling' almost
+    immediately (via the watchdog started by ``_worker``, not synchronously
+    here), and to the terminal 'cancelled' only once the worker thread
+    actually stops (see the module docstring). Idempotent while a cancel is
+    already pending. Returns None if no job is running or cancelling."""
     with _lock:
-        if _job is None or _job["status"] != "running":
+        if _job is None or _job["status"] not in _ACTIVE_STATUSES:
             return None
         if _cancel_event is not None:
             _cancel_event.set()
         return _public_job(_job)
 
 
+def cancel_requested() -> bool:
+    """Whether a cancel has been requested for the current/most-recent job.
+    Single-flight — at most one job (and one cancel flag) exists at a time.
+    Exposed as a cheap, side-effect-free cooperative check alongside the
+    stdout-proxy hook; mainly useful for tests and any future caller that
+    wants to poll for a pending cancel without going through the stdout
+    proxy at all."""
+    with _lock:
+        return _cancel_event is not None and _cancel_event.is_set()
+
+
 # ---------------------------------------------------------------------------
 # Worker
 # ---------------------------------------------------------------------------
+
+def _cancel_watchdog(job: dict[str, Any], cancel_event: threading.Event,
+                      worker_finished: threading.Event) -> None:
+    """Started by ``_worker`` for the lifetime of its own job. discover()'s
+    stdout is the only place a cancel actually takes effect, and that can be
+    minutes away (stage 3, the matcher, prints nothing at all) — without
+    this, the job would keep reporting 'running' the whole time a cancel is
+    already pending, and the UI would look stuck. This thread just waits on
+    ``cancel_event`` and flips the job to the transient 'cancelling' status
+    the moment it's set, then exits; it never touches ``cancel_event`` or
+    tries to stop anything itself. It also exits on its own, within one poll
+    interval, once ``worker_finished`` is set — so a job that finishes
+    without ever being cancelled doesn't leave this thread blocked forever."""
+    while not worker_finished.is_set():
+        if cancel_event.wait(timeout=_WATCHDOG_POLL_S):
+            with _lock:
+                if job["status"] == "running":
+                    job["status"] = "cancelling"
+            return
+
 
 def _worker(job: dict[str, Any], cancel_event: threading.Event, mode: str, params: dict) -> None:
     global _worker_ident
     with _lock:
         _worker_ident = threading.get_ident()
+
+    worker_finished = threading.Event()
+    watchdog = threading.Thread(
+        target=_cancel_watchdog, args=(job, cancel_event, worker_finished), daemon=True,
+    )
+    watchdog.start()
 
     scan_id = job["scan_id"]
     category = params.get("category", "all")
@@ -281,6 +360,7 @@ def _worker(job: dict[str, Any], cancel_event: threading.Event, mode: str, param
             _finish_locked(job, "failed", scan_id=scan_id, error=str(exc))
 
     finally:
+        worker_finished.set()
         with _lock:
             _worker_ident = None
 

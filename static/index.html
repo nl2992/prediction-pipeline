@@ -608,6 +608,7 @@
     font-family: var(--font); font-size: 10px; padding: 2px 8px; cursor: pointer;
   }
   #scan-job-cancel-btn:hover { background: var(--red); color: #000; }
+  #scan-job-cancel-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
   #refresh-btn {
     background: transparent;
@@ -1396,8 +1397,16 @@ let scanJobPollTimer = null;
 let scanJob = null;              // last-known job state from /api/scans/job
 let scanJobStartedAt = null;     // Date this job started, for the elapsed-time readout
 
+// A job is 'running', then briefly 'cancelling' (set almost immediately once
+// a cancel is requested, well before the scan actually stops — see
+// scan_jobs.py's watchdog) before reaching a terminal status. Both count as
+// "active": triggers stay disabled and polling continues through either.
+const ACTIVE_JOB_STATUSES = ['running', 'cancelling'];
+function scanJobActive(job) {
+  return !!job && ACTIVE_JOB_STATUSES.includes(job.status);
+}
 function scanJobRunning() {
-  return !!(scanJob && scanJob.status === 'running');
+  return scanJobActive(scanJob);
 }
 
 function setScanTriggersDisabled(disabled) {
@@ -1417,14 +1426,25 @@ function formatElapsed(ms) {
 function renderScanJobProgress(job) {
   const wrap = document.getElementById('scan-job-progress');
   const text = document.getElementById('scan-job-progress-text');
-  if (!job || job.status !== 'running') {
+  if (!scanJobActive(job)) {
     wrap.classList.remove('show');
     return;
   }
   const elapsed = scanJobStartedAt ? formatElapsed(Date.now() - scanJobStartedAt.getTime()) : '';
-  const stage = job.stage ? ` · ${job.stage}` : '';
-  text.textContent = `Scanning (${job.mode})${stage} · ${elapsed}`;
+  if (job.status === 'cancelling') {
+    // The cancel request lands almost instantly (a watchdog thread in
+    // scan_jobs.py flips this the moment cancel() is called), but the scan
+    // itself may keep running for a while longer — discover()'s matcher
+    // stage in particular can run minutes with no progress output at all,
+    // so there's nothing more specific to report here yet.
+    text.textContent = `Cancelling… (finishes current stage) · ${elapsed}`;
+  } else {
+    const stage = job.stage ? ` · ${job.stage}` : '';
+    text.textContent = `Scanning (${job.mode})${stage} · ${elapsed}`;
+  }
   wrap.classList.add('show');
+  const cancelBtn = document.getElementById('scan-job-cancel-btn');
+  cancelBtn.disabled = job.status === 'cancelling';
 }
 
 async function startScanJob(mode) {
@@ -1471,7 +1491,7 @@ async function pollScanJobOnce() {
     scanJob = job;
     if (!scanJobStartedAt && job.started_at) scanJobStartedAt = new Date(job.started_at);
     renderScanJobProgress(job);
-    if (job.status !== 'running') {
+    if (!scanJobActive(job)) {
       stopPollingScanJob();
       await onScanJobTerminal(job);
     }
@@ -1542,7 +1562,7 @@ async function resumeScanJobIfRunning() {
     if (r.status === 404) return;
     const job = await r.json();
     scanJob = job;
-    if (job.status === 'running') {
+    if (scanJobActive(job)) {
       scanJobStartedAt = job.started_at ? new Date(job.started_at) : new Date();
       setScanTriggersDisabled(true);
       renderScanJobProgress(job);

@@ -166,7 +166,11 @@ class Cancellation(ScanJobsTestCase):
             cancelled = scan_jobs.cancel()
             self.assertIsNotNone(cancelled)
 
-            job = _poll_until(lambda j: j["status"] != "running", timeout=10.0)
+            # 'cancelling' is a real, but non-terminal, status the watchdog
+            # sets almost immediately (see CancellingTransientStatus below) —
+            # wait past it to the actual terminal status, not just past
+            # 'running'.
+            job = _poll_until(lambda j: j["status"] not in ("running", "cancelling"), timeout=10.0)
 
         self.assertEqual(job["status"], "cancelled")
         stored = store.get_scan(second_scan_id)
@@ -186,14 +190,90 @@ class WorkerException(ScanJobsTestCase):
 
         with patch("discover.discover", side_effect=boom):
             result = scan_jobs.start("fast", {})
-        scan_id = result["job"]["scan_id"]
-
-        job = _poll_until(lambda j: j["status"] != "running")
+            scan_id = result["job"]["scan_id"]
+            job = _poll_until(lambda j: j["status"] != "running")
         self.assertEqual(job["status"], "failed")
         self.assertEqual(job["error"], "kaboom")
 
         stored = store.get_scan(scan_id)
         self.assertEqual(stored["status"], "failed")
+
+
+class CancellingTransientStatus(ScanJobsTestCase):
+    """The watchdog thread scan_jobs._worker starts must flip the job to the
+    transient 'cancelling' status almost immediately after cancel() is
+    called -- well before the scan itself actually stops -- so the UI has
+    something to show right away instead of looking stuck on 'running'."""
+
+    def test_status_becomes_cancelling_promptly_then_cancelled(self):
+        # Prints spaced 0.5s apart -- much slower than the watchdog's ~0.15s
+        # poll interval -- so the watchdog reliably flips the status to
+        # 'cancelling' well before the next print gets a chance to actually
+        # raise ScanCancelled and finish the job. (A tight print loop, as in
+        # other tests here, can race straight past 'cancelling' to
+        # 'cancelled' within a single poll tick -- that's fine for THOSE
+        # tests, which don't assert on this transient state, but this test
+        # needs the window to be wide enough to observe it.)
+        with patch("discover.discover", side_effect=_slow_fake_discover(ticks=20, delay=0.5)):
+            scan_jobs.start("fast", {})
+            _poll_until(lambda j: j["stage_index"] >= 1)
+            scan_jobs.cancel()
+
+            job = _poll_until(lambda j: j["status"] == "cancelling", timeout=1.0)
+            self.assertEqual(job["status"], "cancelling")
+
+            job = _poll_until(lambda j: j["status"] == "cancelled", timeout=10.0)
+        self.assertEqual(job["status"], "cancelled")
+
+
+class CancelRequestedHelper(ScanJobsTestCase):
+    def test_cancel_requested_reflects_flag_state(self):
+        self.assertFalse(scan_jobs.cancel_requested())
+        with patch("discover.discover", side_effect=_slow_fake_discover()):
+            scan_jobs.start("fast", {})
+            self.assertFalse(scan_jobs.cancel_requested())
+            scan_jobs.cancel()
+            self.assertTrue(scan_jobs.cancel_requested())
+            _poll_until(lambda j: j["status"] not in ("running", "cancelling"), timeout=10.0)
+
+
+class CancelSurvivesSwallowedExceptions(ScanJobsTestCase):
+    """Regression test for the review requirement that ScanCancelled must be
+    a BaseException, not an Exception subclass: discover.py has ~19 bare
+    `except Exception:` blocks around its own internal calls. If a fake (or
+    real) discover() happens to wrap a print() in one of those -- exactly
+    the shape shown below -- a plain Exception raised from inside the stdout
+    proxy's write() would be silently caught right there and the scan would
+    just keep going as if cancel() had never been called. With
+    ScanCancelled as a BaseException, it passes straight through."""
+
+    def test_cancel_propagates_through_a_broad_except_exception_block(self):
+        def fake_with_swallowing_prints(**kwargs):
+            for i in range(200):
+                try:
+                    print(f"[2/4] guarded tick {i}", flush=True)
+                except Exception:
+                    # Mirrors discover.py's own defensive except-Exception
+                    # blocks. Must NOT be able to catch ScanCancelled.
+                    pass
+                time.sleep(0.02)
+            return [{"arb_net_profit": 0.0}]
+
+        with patch("discover.discover", side_effect=fake_with_swallowing_prints):
+            scan_jobs.start("fast", {})
+            _poll_until(lambda j: j["stage_index"] >= 1)
+            cancelled = scan_jobs.cancel()
+            self.assertIsNotNone(cancelled)
+
+            job = _poll_until(lambda j: j["status"] not in ("running", "cancelling"), timeout=10.0)
+
+        self.assertEqual(job["status"], "cancelled")
+        # It must have stopped well short of all 200 ticks -- proof the
+        # `except Exception: pass` did NOT swallow the cancellation.
+        tick_lines = [line for line in job["log_tail"] if "guarded tick" in line]
+        self.assertTrue(tick_lines)
+        last_tick = int(tick_lines[-1].rsplit(" ", 1)[-1])
+        self.assertLess(last_tick, 199)
 
 
 class MainThreadStdoutNotCaptured(ScanJobsTestCase):
