@@ -816,7 +816,7 @@
       <div class="panel-header">
         <span class="panel-title">CROSS-EXCHANGE MATCHED PAIRS</span>
         <div class="panel-meta">
-          <span id="scan-status-label" class="scan-status">Scan · —</span>
+          <span id="scan-status-label" class="scan-status">No scan yet</span>
           <span>SHOWING <span class="highlight" id="showing-count">—</span> PAIRS</span>
           <span class="arb-count" id="showing-arb">— ARB</span>
           <div id="columns-wrap">
@@ -957,6 +957,7 @@ let reviewsByKey = {};    // Latest review verdict for each pair_key
 let isRestoredScan = false;  // True if current data came from restore, false if from live scan
 let lastScanMode = null;  // 'full' or 'fast' to show in the status label
 let lastScanError = null; // Error message from last failed scan, or null if successful
+let hasScan = false;      // True if a scan has been loaded (restored or completed); used to distinguish "never" from "empty"
 
 // 'all' = no gate, 'eligible' = discover.py's arb_eligible (the dashboard's
 // historical ARB column — a strict eligibility filter), 'alerter' = v2_match
@@ -1244,11 +1245,17 @@ function applyScanResult(data, options = {}) {
   const { restored = false } = options;
   allPairs = data.pairs || [];
   lastSummary = data.summary || null;
-  lastScanAt = new Date(data.finished_at);
+  // Parse finished_at robustly: if no timezone (e.g. SQLite format), treat as UTC
+  let finishedAt = data.finished_at;
+  if (finishedAt && !finishedAt.includes('Z') && !finishedAt.includes('+') && !finishedAt.includes('-00')) {
+    finishedAt = finishedAt.replace(' ', 'T') + 'Z';
+  }
+  lastScanAt = new Date(finishedAt);
   lastScanMode = data.mode || 'full';
   isRestoredScan = restored;
   reviewsByKey = data.reviews || {};
   lastScanError = null;  // Clear error on successful scan
+  hasScan = true;  // Mark that a scan has been loaded
   document.getElementById('last-scan').textContent =
     restored ? `${lastScanAt.toISOString().slice(11,19)} UTC (restored)` : lastScanAt.toISOString().slice(11,19) + ' UTC';
   if (!restored && data.elapsed) {
@@ -1359,7 +1366,8 @@ async function restoreScan() {
     if (data.error) throw new Error(data.error);
     applyScanResult(data, { restored: true });
   } catch (e) {
-    renderTableState('never');
+    console.error('restore failed', e);
+    renderTableState('failed', e.message);
   }
 }
 
@@ -1692,14 +1700,14 @@ function renderPairs() {
   const tbody = document.getElementById('pairs-body');
   if (!pairs.length) {
     // Determine which empty state to show
-    if (!allPairs.length) {
+    if (!hasScan) {
       renderTableState('never');
-    } else if (allPairs.length && !gateGlobal.length) {
-      // All pairs are hidden by the gate
-      renderTableState('filtered', allPairs.length);
+    } else if (!allPairs.length) {
+      // Scan loaded but found no pairs
+      renderTableState('empty');
     } else {
       // Pairs exist, but current filters hide them all
-      renderTableState('filtered', pairs.length);
+      renderTableState('filtered', allPairs.length);
     }
     reconcileSelection();
     return;
