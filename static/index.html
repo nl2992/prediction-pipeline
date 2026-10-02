@@ -329,6 +329,8 @@
   #pairs-table.hide-col-execprofit th[data-col="execprofit"], #pairs-table.hide-col-execprofit td[data-col="execprofit"] { display: none; }
   #pairs-table.hide-col-execcontracts th[data-col="execcontracts"], #pairs-table.hide-col-execcontracts td[data-col="execcontracts"] { display: none; }
   #pairs-table.hide-col-close th[data-col="close"],       #pairs-table.hide-col-close td[data-col="close"] { display: none; }
+  #pairs-table.hide-col-days th[data-col="days"],         #pairs-table.hide-col-days td[data-col="days"] { display: none; }
+  #pairs-table.hide-col-roc th[data-col="roc"],           #pairs-table.hide-col-roc td[data-col="roc"] { display: none; }
 
   .title-cell { min-width: 220px; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
   .title-cell .exch { color: var(--dim); font-size: 11px; }
@@ -374,6 +376,61 @@
     letter-spacing: 0.3px;
     margin-left: 4px;
   }
+  .badge-stale {
+    background: var(--amber);
+    color: #000;
+    font-size: 9px;
+    font-weight: bold;
+    padding: 1px 4px;
+    letter-spacing: 0.3px;
+    margin-left: 4px;
+  }
+
+  /* ── Review queue view ────────────────────────────────────────── */
+  #review-view { display: none; flex-direction: column; flex: 1; overflow: hidden; }
+  #review-controls { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center;
+    padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--bg1);
+    font-size: 11px; color: var(--dim); }
+  #review-controls label { display: flex; align-items: center; gap: 4px; }
+  #review-controls select, #review-controls input[type="number"] {
+    background: var(--bg2); color: var(--white); border: 1px solid var(--border2);
+    font-family: inherit; font-size: 11px; padding: 2px 4px;
+  }
+  table.review-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  table.review-table th {
+    text-align: left; padding: 5px 8px; background: var(--bg2); color: var(--orange);
+    border-bottom: 1px solid var(--border2); position: sticky; top: 0; white-space: nowrap;
+  }
+  table.review-table th.r, table.review-table td.r { text-align: right; }
+  table.review-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.review-table tr:hover { background: var(--bg3); }
+  table.review-table td.dim-col { color: var(--dimmer); }
+  .rq-question { cursor: pointer; color: var(--white); }
+  .rq-question:hover { text-decoration: underline; color: var(--amber); }
+  .rq-event { color: var(--dim); font-size: 10px; }
+  .rq-verdict-btns { display: flex; gap: 3px; flex-wrap: wrap; align-items: center; }
+  .rq-verdict-btns button {
+    font-family: inherit; font-size: 9px; padding: 2px 5px; cursor: pointer;
+    border: 1px solid var(--border2); background: var(--bg2); color: var(--dim);
+    letter-spacing: 0.3px;
+  }
+  .rq-verdict-btns button.rq-match:hover, .rq-verdict-btns button.rq-match.active {
+    background: var(--green2); color: #000; border-color: var(--green2);
+  }
+  .rq-verdict-btns button.rq-mismatch:hover, .rq-verdict-btns button.rq-mismatch.active {
+    background: var(--red); color: #fff; border-color: var(--red);
+  }
+  .rq-verdict-btns button.rq-uncertain:hover, .rq-verdict-btns button.rq-uncertain.active {
+    background: var(--amber); color: #000; border-color: var(--amber);
+  }
+  .rq-reason {
+    font-family: inherit; font-size: 9px; padding: 2px 4px; width: 100px;
+    background: var(--bg2); color: var(--white); border: 1px solid var(--border2);
+  }
+  .rq-rules-ok   { color: var(--green); font-size: 10px; }
+  .rq-rules-flag { color: var(--amber); font-size: 10px; }
+  .rq-rules-high { color: var(--red); font-size: 10px; }
+  .rq-rules-none { color: var(--dimmer); font-size: 10px; }
 
   /* ── Detail panel ─────────────────────────────────────────────
      ≥1200px: docked below the table, as before. <1200px: becomes a
@@ -733,6 +790,7 @@
       <button type="button" class="scan-trigger" onclick="runScan()">F3 SCAN</button>
       <button type="button" class="book-scan-trigger" onclick="runBookArb()">F4 BOOK</button>
       <button type="button" onclick="showView('summary')">F5 SUMMARY</button>
+      <button type="button" onclick="showView('review')">F6 REVIEW</button>
       <button type="button" class="scan-trigger" onclick="runFastScan()">F8 FAST</button>
     </div>
   </div>
@@ -776,6 +834,9 @@
       </button>
       <button type="button" class="sidebar-item" onclick="showView('summary')" id="nav-summary" aria-pressed="false">
         <span>SUMMARY</span><span class="badge arb" id="sb-summary">—</span>
+      </button>
+      <button type="button" class="sidebar-item" onclick="showView('review')" id="nav-review" aria-pressed="false">
+        <span>REVIEW QUEUE</span><span class="badge" id="sb-review">—</span>
       </button>
     </div>
     <div class="sidebar-section">
@@ -862,10 +923,12 @@
               <th class="sortable r" data-col="catedge" data-sort="catalog_edge" style="width:64px;" aria-sort="none" tabindex="0">CAT-EDGE<span class="sort-ind"></span></th>
               <th class="sortable r" data-col="conf" data-sort="conf" style="width:56px;" aria-sort="none" tabindex="0">CONF<span class="sort-ind"></span></th>
               <th class="sortable r" data-col="close" data-sort="close" style="width:64px;" aria-sort="none" tabindex="0">CLOSE<span class="sort-ind"></span></th>
+              <th class="sortable r" data-col="days" data-sort="days" style="width:56px;" aria-sort="none" tabindex="0">DAYS<span class="sort-ind"></span></th>
+              <th class="sortable r" data-col="roc" data-sort="roc" style="width:56px;" aria-sort="none" tabindex="0">ROC %<span class="sort-ind"></span></th>
             </tr>
           </thead>
           <tbody id="pairs-body">
-            <tr><td colspan="17" class="empty-state">Press F3 SCAN or F8 FAST to load live data</td></tr>
+            <tr><td colspan="19" class="empty-state">Press F3 SCAN or F8 FAST to load live data</td></tr>
           </tbody>
         </table>
       </div>
@@ -927,6 +990,61 @@
       </div>
       <div id="summary-body" class="tbl-wrap" style="padding:14px 16px;">
         <div class="empty-state">Run a scan first (F3 SCAN or F8 FAST) — no scan data yet.</div>
+      </div>
+    </div>
+
+    <!-- Review queue view (Phase 2e) -->
+    <div id="review-view">
+      <div class="panel-header">
+        <span class="panel-title">REVIEW QUEUE — TOP-RANKED CANDIDATES FOR HUMAN SETTLEMENT REVIEW</span>
+        <div class="panel-meta">
+          <span id="review-scan-label" class="dim">—</span>
+          <button type="button" id="review-refresh-btn" class="scan-trigger" onclick="loadReviewQueue()">⟳ REFRESH</button>
+        </div>
+      </div>
+      <div id="review-controls">
+        <label for="review-topn">TOP N
+          <select id="review-topn" onchange="onReviewControlsChanged()">
+            <option value="10">10</option>
+            <option value="25" selected>25</option>
+            <option value="50">50</option>
+          </select>
+        </label>
+        <label for="review-minsize">MIN SIZE
+          <input type="number" id="review-minsize" value="20" min="1" step="1" style="width:56px;"
+                 onchange="onReviewControlsChanged()">
+        </label>
+        <label for="review-sortby">SORT BY
+          <select id="review-sortby" onchange="renderReviewQueue()">
+            <option value="exec_net" selected>EXEC EDGE</option>
+            <option value="profit_usd">PROFIT $</option>
+            <option value="return_on_capital">ROC</option>
+            <option value="annualized_return">ANNUALIZED</option>
+          </select>
+        </label>
+      </div>
+      <div class="tbl-wrap">
+        <table class="review-table">
+          <thead>
+            <tr>
+              <th style="width:32px;">#</th>
+              <th>KALSHI QUESTION</th>
+              <th>POLYMARKET QUESTION</th>
+              <th class="r">EDGE/CT</th>
+              <th class="r">CONTRACTS</th>
+              <th class="r">CAPITAL $</th>
+              <th class="r">PROFIT $</th>
+              <th class="r">ROC %</th>
+              <th class="r">DAYS</th>
+              <th class="r" title="estimate; assumes capital is redeployed at the same return; shown only for ≥30-day horizons">ANN. %</th>
+              <th>RULES</th>
+              <th>VERDICT</th>
+            </tr>
+          </thead>
+          <tbody id="review-body">
+            <tr><td colspan="12" class="empty-state">Open this view to load the review queue.</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -994,6 +1112,8 @@ const SORT_COLUMNS = {
   sim:            { get: p => p.title_sim,          label: 'SIM' },
   conf:           { get: p => p.confidence,         label: 'CONF' },
   close:          { get: p => p.kalshi_close || p.poly_close || null, label: 'CLOSE' },
+  days:           { get: p => daysToSettle(p),  label: 'DAYS' },
+  roc:            { get: p => p.exec_roi,        label: 'ROC %' },
 };
 let currentSort = { key: 'net_accurate', dir: 'desc' };
 
@@ -1021,6 +1141,8 @@ const COLUMN_DEFS = [
   { key: 'catedge',       label: 'CAT-EDGE',   visible: false },
   { key: 'conf',          label: 'CONF',       visible: false },
   { key: 'close',         label: 'CLOSE',      visible: true  },
+  { key: 'days',          label: 'DAYS',       visible: false },
+  { key: 'roc',           label: 'ROC %',      visible: false },
 ];
 const COLUMN_STORAGE_KEY = 'predarb.visibleColumns.v1';
 
@@ -1144,6 +1266,24 @@ function kalshiTakerFee(p) { return 0.07 * p * (1 - p); }
 // pair, not a real opportunity.
 const PLAUSIBLE_EDGE_MAX = 0.10;
 
+// Days from now until the LATER of a pair's two close dates (capital is
+// locked until BOTH legs settle) — mirrors review_queue.yield_metrics'
+// days_to_settle exactly (same "unknown unless BOTH dates are known" rule,
+// same 0.5-day floor), so the main pairs table's optional DAYS/ROC % columns
+// (Phase 2e item 6) read consistently with the REVIEW QUEUE view.
+const MIN_DAYS_TO_SETTLE = 0.5;
+function daysToSettle(p) {
+  const k = p.kalshi_close ? new Date(p.kalshi_close) : null;
+  const pm = p.poly_close ? new Date(p.poly_close) : null;
+  if (!k || !pm || isNaN(k) || isNaN(pm)) return null;
+  const later = k > pm ? k : pm;
+  const days = (later - new Date()) / 86400000;
+  return Math.max(days, MIN_DAYS_TO_SETTLE);
+}
+function fmtDays(v) {
+  return v != null ? v.toFixed(1) : '<span class="dim">—</span>';
+}
+
 // ── Stable pair identity ─────────────────────────────────────────────────
 // kalshi_ticker + poly_token_id (falling back to poly_id when a fast/legacy
 // scan didn't carry a CLOB token id) uniquely identifies a matched pair
@@ -1198,7 +1338,8 @@ function showView(v) {
   document.getElementById('pairs-view').style.display   = v === 'pairs'   ? 'flex' : 'none';
   document.getElementById('signals-view').style.display = v === 'signals' ? 'flex' : 'none';
   document.getElementById('summary-view').style.display = v === 'summary' ? 'flex' : 'none';
-  ['pairs', 'signals', 'summary'].forEach(view => {
+  document.getElementById('review-view').style.display  = v === 'review'  ? 'flex' : 'none';
+  ['pairs', 'signals', 'summary', 'review'].forEach(view => {
     const btn = document.getElementById(`nav-${view}`);
     const isActive = v === view;
     btn.classList.toggle('active', isActive);
@@ -1206,6 +1347,7 @@ function showView(v) {
   });
   if (v === 'signals') loadSignals();
   if (v === 'summary') renderSummary();
+  if (v === 'review') loadReviewQueue();
 }
 
 // ── Gate (which pairs "count") ────────────────────────────────────────────
@@ -1335,7 +1477,7 @@ function renderTableState(kind, detail) {
     failed: detail ? `Scan failed: ${detail}. Showing previous results.` : 'Scan failed. Showing previous results.',
   };
   const msg = messages[kind] || 'Unknown state';
-  tbody.innerHTML = `<tr><td colspan="17" class="empty-state">${msg}</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="19" class="empty-state">${msg}</td></tr>`;
 }
 
 // Sync filter UI buttons after state changes
@@ -1904,6 +2046,8 @@ function renderPairs() {
       <td class="r dim" data-col="catedge">${fmtNum(p.catalog_gross_edge)}</td>
       <td class="r dim" data-col="conf">${p.confidence != null ? (p.confidence*100).toFixed(0)+'%' : '—'}</td>
       <td class="dim r" data-col="close">${(p.kalshi_close||p.poly_close||'').slice(0,10) || '—'}</td>
+      <td class="r dim" data-col="days">${fmtDays(daysToSettle(p))}</td>
+      <td class="r dim" data-col="roc">${fmtNum(p.exec_roi != null ? p.exec_roi * 100 : null)}</td>
     </tr>`;
   }).join('');
 
@@ -2131,6 +2275,8 @@ document.getElementById('cmd-input').addEventListener('keydown', async e => {
     showView('pairs');
   } else if (val === 'SUMMARY' || val === 'F5') {
     showView('summary');
+  } else if (val === 'REVIEW' || val === 'F6') {
+    showView('review');
   } else if (val === 'ARB') {
     // Toggle exactly once — toggleArbOnly() already flips arbOnly itself;
     // flipping it here too was a no-op bug (ARB never visibly changed state).
@@ -2147,7 +2293,7 @@ document.getElementById('cmd-input').addEventListener('keydown', async e => {
     await runBookArb();
   } else if (val === 'HELP') {
     showCmdHint(
-      'CMDS: SCAN [cat] | FAST | SIGNALS | PAIRS | SUMMARY | ARB (toggle) | PRICED (toggle) | ' +
+      'CMDS: SCAN [cat] | FAST | SIGNALS | PAIRS | SUMMARY | REVIEW | ARB (toggle) | PRICED (toggle) | ' +
       'GATE ALL|ELIGIBLE|ALERTER | BOOK (depth-walked arb on selected row)');
   } else if (val) {
     showCmdError('UNKNOWN COMMAND: ' + val + ' — type HELP for a list of commands.');
@@ -2198,6 +2344,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'F3') { e.preventDefault(); runScan(); }
   if (e.key === 'F4') { e.preventDefault(); runBookArb(); }
   if (e.key === 'F5') { e.preventDefault(); showView('summary'); }
+  if (e.key === 'F6') { e.preventDefault(); showView('review'); }
   if (e.key === 'F8') { e.preventDefault(); runFastScan(); }
   if (e.key === 'Escape') {
     closeBookArb();
@@ -2392,6 +2539,231 @@ function renderSummary() {
       <ul class="sum-caveats">${s.caveats.map(c => `<li>${esc(c)}</li>`).join('')}</ul>
     </div>
   `;
+}
+
+// ── Review queue (Phase 2e) ──────────────────────────────────────────────────
+// state
+let reviewQueueRows = [];       // rows as returned by /api/review-queue (pre-sort)
+let reviewQueueMeta  = null;    // {scan_id, scan_finished_at, parameters}
+let ruleFlagsByKey  = {};       // pair_key -> [{kind,severity,detail,...}] | null (not fetched) | undefined (not checked)
+let ruleFlagsChecked = false;   // whether /api/evidence/rule-flags has been tried at all this load
+
+function onReviewControlsChanged() {
+  loadReviewQueue();
+}
+
+async function loadReviewQueue() {
+  const topN = +document.getElementById('review-topn').value || 25;
+  const minSize = +document.getElementById('review-minsize').value || 20;
+  const tbody = document.getElementById('review-body');
+  tbody.innerHTML = '<tr><td colspan="12" class="empty-state">Loading review queue…</td></tr>';
+  try {
+    const r = await fetch(`/api/review-queue?top_n=${topN}&min_size=${minSize}`);
+    if (r.status === 404) {
+      reviewQueueRows = [];
+      reviewQueueMeta = null;
+      tbody.innerHTML = '<tr><td colspan="12" class="empty-state">No completed scan yet — run F3 SCAN first.</td></tr>';
+      document.getElementById('sb-review').textContent = '—';
+      document.getElementById('review-scan-label').textContent = '—';
+      return;
+    }
+    const d = await r.json();
+    if (!r.ok) {
+      tbody.innerHTML = `<tr><td colspan="12" class="empty-state">Error: ${esc(d.error || r.status)}</td></tr>`;
+      return;
+    }
+    reviewQueueRows = d.rows || [];
+    reviewQueueMeta = { scan_id: d.scan_id, scan_finished_at: d.scan_finished_at, parameters: d.parameters };
+    document.getElementById('sb-review').textContent = reviewQueueRows.length;
+    document.getElementById('review-scan-label').textContent =
+      `SCAN #${d.scan_id} · ${(d.scan_finished_at || '').slice(0, 19).replace('T', ' ')} UTC`;
+    ruleFlagsByKey = {};
+    ruleFlagsChecked = false;
+    renderReviewQueue();
+    loadRuleFlags(reviewQueueRows.map(row => row.pair_key));
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="12" class="empty-state">Error loading review queue: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+// Rule-flag evidence (evidence.py/rule_diff.py): read-only cache lookup
+// (fetch:false), in batches of 25. A failed batch just leaves its rows as
+// "not checked" and never breaks the review queue.
+async function loadRuleFlags(pairKeys) {
+  for (let i = 0; i < pairKeys.length; i += 25) {
+    const batch = pairKeys.slice(i, i + 25);
+    try {
+      const r = await fetch('/api/evidence/rule-flags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pair_keys: batch, fetch: false, limit: 25 }),
+      });
+      if (!r.ok) continue;
+      const d = await r.json();
+      Object.assign(ruleFlagsByKey, d.flags || {});
+    } catch (e) {
+      // network error -- these rows stay "not checked"
+    }
+  }
+  ruleFlagsChecked = true;
+  renderReviewQueue();
+}
+
+function rulesCellHtml(key) {
+  if (!ruleFlagsChecked || !(key in ruleFlagsByKey)) {
+    return '<span class="rq-rules-none">not checked</span>';
+  }
+  const flags = ruleFlagsByKey[key];
+  if (flags == null) return '<span class="rq-rules-none">not checked</span>';
+  if (!flags.length) return '<span class="rq-rules-ok">✓ no flags</span>';
+  const order = { critical: 3, high: 2, medium: 1, low: 0 };
+  const worst = flags.reduce((a, b) => (order[b.severity] || 0) > (order[a.severity] || 0) ? b : a, flags[0]);
+  const cls = (order[worst.severity] || 0) >= 2 ? 'rq-rules-high' : 'rq-rules-flag';
+  const tip = flags.map(f => {
+    let t = `[${f.severity}] ${f.kind}: ${f.detail || ''}`;
+    if (f.kalshi_excerpt) t += `\n  Kalshi: ${f.kalshi_excerpt}`;
+    if (f.poly_excerpt) t += `\n  Polymarket: ${f.poly_excerpt}`;
+    return t;
+  }).join('\n');
+  return `<span class="${cls}" title="${esc(tip)}">⚠ ${flags.length}</span>`;
+}
+
+const REVIEW_SORT_GETTERS = {
+  exec_net:           r => r.exec_net ?? r.net_accurate,
+  profit_usd:         r => r.profit_usd,
+  return_on_capital:  r => r.return_on_capital,
+  annualized_return:  r => r.annualized_return,
+};
+
+function sortedReviewRows() {
+  const sortBy = document.getElementById('review-sortby').value;
+  const get = REVIEW_SORT_GETTERS[sortBy] || REVIEW_SORT_GETTERS.exec_net;
+  // Missing values always sort to the bottom, same convention as the main
+  // pairs table's SORT_COLUMNS (a null yield metric is "unknown", not zero).
+  return [...reviewQueueRows].sort((a, b) => {
+    const av = get(a), bv = get(b);
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    return bv - av;
+  });
+}
+
+function showSecondary(primary, secondary) {
+  const n = v => String(v || '').trim().toLowerCase();
+  return !!n(secondary) && n(secondary) !== n(primary);
+}
+
+function renderReviewQueue() {
+  const tbody = document.getElementById('review-body');
+  const rows = sortedReviewRows();
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="12" class="empty-state">No v2-endorsed, depth-backed pairs in the latest scan at this MIN SIZE.</td></tr>';
+    return;
+  }
+  const fmt$ = v => v != null ? '$' + (+v).toFixed(2) : '<span class="dim">—</span>';
+  const fmtPctV = v => v != null ? (+v * 100).toFixed(1) + '%' : '<span class="dim">—</span>';
+  const fmtEdge = v => v != null ? (+v).toFixed(4) : '<span class="dim">—</span>';
+
+  tbody.innerHTML = rows.map((row, i) => {
+    const review = row.review;
+    const verdict = review ? review.verdict : null;
+    const staleBadge = (row.review_stale || (row.review && row.review.stale)) ? '<span class="badge-stale">STALE</span>' : '';
+    const reviewTitle = review
+      ? `${esc(review.reviewer||'local')} · ${esc((review.created_at||'').slice(0,19).replace('T',' '))} UTC${review.reason ? ' — ' + esc(review.reason) : ''}`
+      : 'No review yet';
+    const btn = (v, label) => `<button type="button" class="rq-${v} ${verdict===v?'active':''}"
+        onclick="submitReviewVerdict('${esc(row.pair_key)}', '${v}', this)"
+        aria-pressed="${verdict===v ? 'true' : 'false'}" title="${reviewTitle}">${label}</button>`;
+
+    return `<tr>
+      <td class="dim">${row.rank ?? i+1}</td>
+      <td class="rq-question" onclick="openReviewRow('${esc(row.pair_key)}')" tabindex="0"
+          onkeydown="if(event.key==='Enter'){openReviewRow('${esc(row.pair_key)}')}">
+        ${esc(truncate(row.kalshi_title||'', 60))}
+        ${showSecondary(row.kalshi_title, row.kalshi_event_title) ? `<div class="rq-event">${esc(truncate(row.kalshi_event_title,60))}</div>` : ''}
+      </td>
+      <td class="rq-question" onclick="openReviewRow('${esc(row.pair_key)}')" tabindex="0"
+          onkeydown="if(event.key==='Enter'){openReviewRow('${esc(row.pair_key)}')}">
+        ${esc(truncate(row.poly_title||'', 60))}
+        ${showSecondary(row.poly_title, row.poly_event_title) ? `<div class="rq-event">${esc(truncate(row.poly_event_title,60))}</div>` : ''}
+      </td>
+      <td class="r">${fmtEdge(row.edge_per_contract)}</td>
+      <td class="r">${row.contracts == null ? '<span class="dim">—</span>'
+        : row.size_basis === 'max_depth' ? String(+(+row.contracts).toFixed(2))
+        : `<span class="dim" title="depth walk unavailable — economics at the min-size probe">${+(+row.contracts).toFixed(2)} (probe)</span>`}</td>
+      <td class="r">${fmt$(row.capital)}</td>
+      <td class="r">${fmt$(row.profit_usd)}</td>
+      <td class="r">${fmtPctV(row.return_on_capital)}</td>
+      <td class="r">${row.days_to_settle != null ? (+row.days_to_settle).toFixed(1) : '<span class="dim">—</span>'}</td>
+      <td class="r dim">${fmtPctV(row.annualized_return)}</td>
+      <td>${rulesCellHtml(row.pair_key)}</td>
+      <td>
+        <div class="rq-verdict-btns">
+          ${btn('match', 'MATCH')}${btn('mismatch', 'MISMATCH')}${btn('uncertain', 'UNSURE')}${staleBadge}
+        </div>
+        <input type="text" class="rq-reason" placeholder="reason (optional)"
+               aria-label="Review reason for ${esc(row.pair_key)}" id="rq-reason-${esc(row.pair_key)}">
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function submitReviewVerdict(pairKey, verdict, btnEl) {
+  const reasonEl = document.getElementById(`rq-reason-${pairKey}`);
+  const reason = reasonEl ? reasonEl.value.trim() || null : null;
+  try {
+    const r = await fetch('/api/reviews', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pair_key: pairKey, verdict, reason }),
+    });
+    const review = await r.json();
+    if (!r.ok) { showError('Could not save review: ' + (review.error || r.status)); return; }
+    // Update the review-queue row in place.
+    const row = reviewQueueRows.find(rr => rr.pair_key === pairKey);
+    if (row) { row.review = review; row.review_stale = false; }
+    // Update the global map the main PAIRS table's badges read from, and
+    // re-render that table if it's the one currently showing.
+    reviewsByKey[pairKey] = review;
+    if (currentView === 'pairs') renderPairs();
+    renderReviewQueue();
+  } catch (e) {
+    showError('Could not save review: ' + e.message);
+  }
+}
+
+// Clicking a review-queue row's question: select the same pair in the main
+// PAIRS table if the latest scan (allPairs) still carries it (matched via
+// the same stable pairKey() used everywhere else), otherwise fall back to
+// rendering the queue row's own data directly in the detail panel.
+function openReviewRow(targetKey) {
+  showView('pairs');
+  const foundInAllPairs = allPairs.some(p => pairKey(p) === targetKey);
+  if (foundInAllPairs) {
+    selectedKey = targetKey;
+    renderPairs();   // reconcileSelection() (called by renderPairs) renders the detail panel
+    openDetailDrawer();
+    const dispIdx = displayedPairs.findIndex(p => pairKey(p) === targetKey);
+    if (dispIdx !== -1) {
+      const tr = document.querySelector(`#pairs-body tr[data-idx="${dispIdx}"]`);
+      if (tr) tr.scrollIntoView({ block: 'center' });
+    }
+  } else {
+    const row = reviewQueueRows.find(r => r.pair_key === targetKey);
+    selectedKey = null;
+    renderPairs();
+    if (row) {
+      renderDetail({
+        category: row.category, poly_title: row.poly_title, kalshi_title: row.kalshi_title,
+        poly_event_title: row.poly_event_title, kalshi_event_title: row.kalshi_event_title,
+        poly_bid: row.poly_bid, poly_ask: row.poly_ask, kalshi_bid: row.kalshi_bid, kalshi_ask: row.kalshi_ask,
+        poly_close: row.poly_close, kalshi_close: row.kalshi_close,
+        confidence: row.confidence, poly_slug: row.poly_slug, kalshi_ticker: row.kalshi_ticker,
+      });
+    }
+    openDetailDrawer();
+  }
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
