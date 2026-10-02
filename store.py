@@ -15,6 +15,7 @@ this file's directory, matching ``server.py``'s ``STATIC_DIR`` pattern). The
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sqlite3
 from contextlib import closing
@@ -22,7 +23,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
+
+# v3 -> v4 added market_evidence_fts (FTS5 full-text index over rules_text,
+# kept in sync with market_evidence by triggers; see _ensure_fts). If the
+# running sqlite lacks FTS5 the table is skipped and rule_search raises
+# SearchUnavailable; everything else is unaffected.
+
+_log = logging.getLogger(__name__)
+_fts_warned = False
 
 _VALID_SCAN_STATUS = {"running", "completed", "failed", "cancelled"}
 _VALID_SCAN_MODE = {"full", "fast"}
@@ -96,6 +105,59 @@ def _column_names(conn: sqlite3.Connection, table: str) -> set[str]:
 def _add_column_if_missing(conn: sqlite3.Connection, table: str, column: str, coldef: str) -> None:
     if column not in _column_names(conn, table):
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coldef}")
+
+
+def _ensure_fts(conn: sqlite3.Connection) -> None:
+    """Idempotently create the FTS5 index over market_evidence.rules_text,
+    its sync triggers, and (only when the table is newly created) backfill
+    it from existing rows. Degrades to a one-time warning if the sqlite
+    build lacks FTS5."""
+    global _fts_warned
+    exists = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE name = 'market_evidence_fts'"
+    ).fetchone() is not None
+    if not exists:
+        try:
+            conn.execute("""
+                CREATE VIRTUAL TABLE market_evidence_fts USING fts5(
+                    rules_text,
+                    venue UNINDEXED,
+                    market_id UNINDEXED,
+                    content_hash UNINDEXED,
+                    tokenize='porter unicode61'
+                )
+            """)
+        except sqlite3.OperationalError as exc:
+            if not _fts_warned:
+                _log.warning("FTS5 unavailable (%s); settlement-rule search disabled", exc)
+                _fts_warned = True
+            return
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS market_evidence_fts_ai
+        AFTER INSERT ON market_evidence BEGIN
+            INSERT INTO market_evidence_fts (rowid, rules_text, venue, market_id, content_hash)
+            VALUES (new.rowid, new.rules_text, new.venue, new.market_id, new.content_hash);
+        END
+    """)
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS market_evidence_fts_ad
+        AFTER DELETE ON market_evidence BEGIN
+            DELETE FROM market_evidence_fts WHERE rowid = old.rowid;
+        END
+    """)
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS market_evidence_fts_au
+        AFTER UPDATE OF rules_text ON market_evidence BEGIN
+            DELETE FROM market_evidence_fts WHERE rowid = old.rowid;
+            INSERT INTO market_evidence_fts (rowid, rules_text, venue, market_id, content_hash)
+            VALUES (new.rowid, new.rules_text, new.venue, new.market_id, new.content_hash);
+        END
+    """)
+    if not exists:
+        conn.execute("""
+            INSERT INTO market_evidence_fts (rowid, rules_text, venue, market_id, content_hash)
+            SELECT rowid, rules_text, venue, market_id, content_hash FROM market_evidence
+        """)
 
 
 def init_db() -> None:
@@ -200,6 +262,7 @@ def init_db() -> None:
                 PRIMARY KEY (venue, market_id, content_hash)
             )
         """)
+        _ensure_fts(conn)
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS reviews (

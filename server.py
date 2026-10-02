@@ -16,13 +16,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import Body, FastAPI
+from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
 import book_arb
 import evidence
 import review_queue
+import rule_search
 import scan_jobs
 import store
 from arb import kalshi_taker_fee
@@ -851,6 +852,19 @@ def api_pair_evidence(pair_key: str, refresh: bool = False):
         "poly": _venue_evidence_payload(poly_evidence),
         "rule_flags": rule_flags,
     })
+
+
+@app.get("/api/evidence/search")
+def api_evidence_search(q: str = "", limit: int = 20, venue: str | None = None):
+    """Full-text search over cached settlement-rule text (Phase 4a)."""
+    if len(q) > rule_search.MAX_QUERY_CHARS:
+        raise HTTPException(status_code=422, detail="q too long (max 200 chars)")
+    limit = max(1, min(int(limit), 50))
+    try:
+        results = rule_search.search(q, limit=limit, venue=venue)
+    except rule_search.SearchUnavailable as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    return JSONResponse({"query": q, "results": results})
 
 
 @app.post("/api/evidence/rule-flags")
