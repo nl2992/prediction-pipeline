@@ -21,10 +21,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
 import book_arb
+import evidence
 import scan_jobs
 import store
 from arb import kalshi_taker_fee
 from pipeline import OrderBook, PriceLevel
+from rule_diff import compare_rules
 
 logging.disable(logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -649,8 +651,36 @@ def api_add_review(payload: dict = _BODY_ELLIPSIS):
             {"error": "verdict must be one of match, mismatch, uncertain"},
             status_code=422,
         )
-    review = store.add_review(pair_key_, verdict, reason)
+    # Phase 2d: stamp the review with the rule-evidence hashes current at
+    # review time (if any evidence has ever been cached for this pair's two
+    # markets), so a later rules change can be detected via
+    # store.review_is_stale without re-fetching anything. Behavior is
+    # unchanged when no evidence is cached -- both hashes stay None, exactly
+    # as store.add_review already defaults them.
+    kalshi_rules_hash = None
+    poly_rules_hash = None
+    pair = store.find_pair(pair_key_)
+    if pair is not None:
+        if pair.get("kalshi_ticker"):
+            kalshi_evidence = store.latest_evidence("kalshi", pair["kalshi_ticker"])
+            if kalshi_evidence is not None:
+                kalshi_rules_hash = kalshi_evidence["content_hash"]
+        if pair.get("poly_id"):
+            poly_evidence = store.latest_evidence("polymarket", pair["poly_id"])
+            if poly_evidence is not None:
+                poly_rules_hash = poly_evidence["content_hash"]
+    review = store.add_review(
+        pair_key_, verdict, reason,
+        kalshi_rules_hash=kalshi_rules_hash, poly_rules_hash=poly_rules_hash,
+    )
     return JSONResponse(review)
+
+
+def _with_stale(review: dict) -> dict:
+    """Adds a purely additive "stale" field (Phase 2d) -- True when the
+    review's stored rule-evidence hash no longer matches the latest cached
+    evidence for that pair's markets. Never changes any existing field."""
+    return {**review, "stale": store.review_is_stale(review)}
 
 
 @app.get("/api/reviews")
@@ -658,8 +688,10 @@ def api_reviews(pair_key: str | None = None):
     """History for one pair (``pair_key`` given) or the current-verdict map
     for up to 500 pairs (no ``pair_key``)."""
     if pair_key is not None:
-        return JSONResponse({"reviews": store.review_history(pair_key)})
-    return JSONResponse(store.current_reviews())
+        history = [_with_stale(r) for r in store.review_history(pair_key)]
+        return JSONResponse({"reviews": history})
+    current = {k: _with_stale(r) for k, r in store.current_reviews().items()}
+    return JSONResponse(current)
 
 
 @app.get("/api/signals")
@@ -725,6 +757,103 @@ def api_status():
 
     results["ts"] = datetime.now(timezone.utc).isoformat()
     return JSONResponse(results)
+
+
+# ---------------------------------------------------------------------------
+# Phase 2d: settlement-rule evidence + rule diff. NEW routes only (additive) --
+# see evidence.py / rule_diff.py for the fetch/cache and comparison logic.
+# ---------------------------------------------------------------------------
+
+_RULE_FLAGS_BATCH_CAP = 25
+
+
+def _venue_evidence_payload(evidence_row: dict | None) -> dict | None:
+    if evidence_row is None:
+        return None
+    return {
+        "rules_text": evidence_row.get("rules_text"),
+        "source_url": evidence_row.get("source_url"),
+        "fetched_at": evidence_row.get("fetched_at"),
+        "hash": evidence_row.get("content_hash"),
+        "stale": bool(evidence_row.get("stale", False)),
+    }
+
+
+@app.get("/api/pairs/{pair_key:path}/evidence")
+def api_pair_evidence(pair_key: str, refresh: bool = False):
+    """Settlement-rule evidence for both legs of a pair, plus rule_diff
+    conflict flags. Fetches from the venue APIs only if nothing is cached
+    yet (or ``refresh=true``); otherwise serves the cached rows."""
+    pair = store.find_pair(pair_key)
+    if pair is None:
+        return JSONResponse({"error": "pair not found"}, status_code=404)
+
+    kalshi_ticker = pair.get("kalshi_ticker")
+    poly_id = pair.get("poly_id")
+    max_age_s = 0 if refresh else evidence.DEFAULT_MAX_AGE_S
+    kalshi_evidence = (
+        evidence.get_evidence("kalshi", kalshi_ticker, max_age_s=max_age_s, fetch=True)
+        if kalshi_ticker else None
+    )
+    poly_evidence = (
+        evidence.get_evidence("polymarket", poly_id, max_age_s=max_age_s, fetch=True)
+        if poly_id else None
+    )
+
+    kalshi_text = kalshi_evidence.get("rules_text") if kalshi_evidence else None
+    poly_text = poly_evidence.get("rules_text") if poly_evidence else None
+    rule_flags = compare_rules(kalshi_text, poly_text)
+
+    return JSONResponse({
+        "pair_key": pair_key,
+        "kalshi": _venue_evidence_payload(kalshi_evidence),
+        "poly": _venue_evidence_payload(poly_evidence),
+        "rule_flags": rule_flags,
+    })
+
+
+@app.post("/api/evidence/rule-flags")
+def api_evidence_rule_flags(payload: dict = _BODY_ELLIPSIS):
+    """Batch rule-flag lookup for the dashboard's pair list. For each
+    ``pair_key``: null means evidence isn't cached for it yet (unknown, not
+    "no conflict"); an empty list means evidence is cached and compared with
+    no flags found. With ``fetch: true``, fetches evidence (live) for up to
+    ``limit`` (capped at 25) pairs missing a cache entry before comparing."""
+    pair_keys = payload.get("pair_keys") or []
+    should_fetch = bool(payload.get("fetch"))
+    limit = min(int(payload.get("limit") or _RULE_FLAGS_BATCH_CAP), _RULE_FLAGS_BATCH_CAP)
+
+    flags: dict[str, list[dict] | None] = {}
+    fetched_so_far = 0
+    for pair_key in pair_keys:
+        pair = store.find_pair(pair_key)
+        if pair is None:
+            flags[pair_key] = None
+            continue
+        kalshi_ticker = pair.get("kalshi_ticker")
+        poly_id = pair.get("poly_id")
+
+        kalshi_cached = store.latest_evidence("kalshi", kalshi_ticker) if kalshi_ticker else None
+        poly_cached = store.latest_evidence("polymarket", poly_id) if poly_id else None
+        missing = kalshi_cached is None or poly_cached is None
+
+        if missing and should_fetch and fetched_so_far < limit:
+            if kalshi_ticker and kalshi_cached is None:
+                kalshi_cached = evidence.get_evidence("kalshi", kalshi_ticker)
+            if poly_id and poly_cached is None:
+                poly_cached = evidence.get_evidence("polymarket", poly_id)
+            fetched_so_far += 1
+            missing = kalshi_cached is None or poly_cached is None
+
+        if missing:
+            flags[pair_key] = None
+            continue
+
+        kalshi_text = kalshi_cached.get("rules_text") if kalshi_cached else None
+        poly_text = poly_cached.get("rules_text") if poly_cached else None
+        flags[pair_key] = compare_rules(kalshi_text, poly_text)
+
+    return JSONResponse({"flags": flags})
 
 
 # ---------------------------------------------------------------------------

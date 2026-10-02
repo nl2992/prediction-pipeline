@@ -1,0 +1,13 @@
+{
+  "expected_kind": "tie_break",
+  "kalshi": {
+    "market_id": "KXLEADERMLBWINS-26-SGRA",
+    "rules_text": "If Sonny Gray leads Pro Baseball in wins for the 2026 regular season, then the market resolves to Yes.\n\nThe participant must have the highest total of the specified statistic across the entire season type as documented by the official league statistics. Only statistics from games officially designated as part of the specified season type are included. Preseason, postseason, playoff, exhibition, friendly, or all-star statistics are excluded unless the season_type specifically includes them. If a participant competes for multiple teams during the season, statistics from all teams are combined. Participants who do not play any games due to injury, suspension, retirement, or other reasons resolve to No. League minimum qualification thresholds apply. In case of exact ties where the league does not declare a single winner, tied participants receive a proportional payout. Statistical corrections are only considered if made before the expiration date.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.\n\nESPN\n\nthe Governing League",
+    "source_url": "https://assets.kalshi.com/regulatory/product-certifications/LEAGUELEADER.pdf"
+  },
+  "polymarket": {
+    "market_id": "0xfad5a723109f7efd82d82f0ce47c41d34a31a3987c9a4d7d369f6ce01285d17a",
+    "rules_text": "Will Sonny Gray lead MLB in pitcher wins for the 2026 season?\n\nThis market will resolve in favor of the pitcher who finishes the 2026 MLB regular season with the most wins.\n\nIn the event of a tie, this market will resolve to the tied pitcher with the lower earned run average (ERA) in the 2026 MLB regular season. If a tie still persists, this market will resolve to the tied pitcher whose listed last name comes first alphabetically.\n\nIf at any point it becomes impossible for a listed pitcher to finish with the most wins, the corresponding market will resolve to \"No\".\n\nIf the 2026 MLB regular season is cancelled, shortened, or no wins leader is determined by October 11, 2026, 11:59 PM ET, this market will resolve to \"Other\".\n\nThe primary resolution source will be official information from Major League Baseball (https://www.mlb.com); however, a consensus of credible reporting may also be used.\n\nhttps://www.mlb.com",
+    "source_url": "https://polymarket.com/event/mlb-wins-leader-2026"
+  }
+}

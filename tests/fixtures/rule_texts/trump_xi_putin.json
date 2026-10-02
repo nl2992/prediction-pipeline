@@ -1,0 +1,13 @@
+{
+  "expected_kind": "event_definition",
+  "kalshi": {
+    "market_id": "KXTRUMPXIPUTIN-28JAN01-27JAN01",
+    "rules_text": "If Donald Trump and Xi Jinping and Vladimir Putin meet in person together in the same trilateral meeting after Issuance and before Jan 1, 2027, then the market resolves to Yes.\n\nDonald Trump, Xi Jinping, and Vladimir Putin must all be physically present and participate together in the same trilateral meeting. Separate bilateral meetings, delegation or envoy talks, remote participation, and mere co-attendance without interaction do not qualify. A documented pull-aside, sideline, or informal meeting of only the three leaders qualifies. A greeting, handshake, group photo, or exchange that takes place only within a larger session, such as an APEC or G20 leaders' session, does not qualify.\n\nMinistry of Foreign Affairs of the People's Republic of China\n\nThe Wall Street Journal\n\nPresident of Russia\n\nthe White House\n\nthe Associated Press\n\nReuters\n\nThe Washington Post\n\nthe New York Times",
+    "source_url": "https://assets.kalshi.com/regulatory/product-certifications/PERSONMEETING.pdf"
+  },
+  "polymarket": {
+    "market_id": "0x542376eacfaf03a742254d639f09b3b03bb9bc5fb496c3f1cd355116e1c700f4",
+    "rules_text": "Trump, Putin, and Xi seen together before 2027?\n\nThis market will resolve to \"Yes\" if Donald Trump, Vladimir Putin, and Xi Jinping are photographed or videotaped together, in the same frame, between this market's creation and December 31, 2026, 11:59 PM ET. Otherwise, this market will resolve to \"No\".\n\nFor this market to resolve to \"Yes,\" the images or video must be taken and released within this market's timeframe. The images or video must be authentic, not the result of artificial intelligence or video editing.\n\nThe resolution source for this market will be the images or video of Donald Trump, Vladimir Putin, and Xi Jinping together.",
+    "source_url": "https://polymarket.com/event/trump-putin-and-xi-seen-together-before-2027"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "expected_kind": "negative",
+  "kalshi": {
+    "market_id": "KXMEASLES-26-6000",
+    "rules_text": "If the number of measles in 2026 is above 6000, then the market resolves to Yes.\n\nCDC",
+    "source_url": "https://assets.kalshi.com/regulatory/product-certifications/MEASLES.pdf"
+  },
+  "polymarket": {
+    "market_id": "0x15c05c313a5a2743d3400b8f7250c418a94a8b6ed16fadf6ad29542d1673014b",
+    "rules_text": "Will there be at least 6000 measles cases in the U.S. in 2026?\n\nThis market will resolve to \"Yes\" if there have been the specified amount or more confirmed cases of Measles (Rubeola) in humans in the territory of the United States of America in 2026 according to the CDC case counter between January 1, 2026, 12:00 AM ET and December 31, 2026, 11:59 PM ET. Otherwise, this market will resolve to \"No\".\n\nThe resolution source for this market will be the CDC Measles (Rubeola) counter (see: https://www.cdc.gov/measles/data-research/index.html) at the resolution time. If the counter becomes unavailable, another credible source will be used.\n\nNote: Only cases reported by the CDC Measles (Rubeola) counter will qualify, regardless of reports from U.S. State agencies or other sources.",
+    "source_url": "https://polymarket.com/event/measles-cases-in-us-in-2026"
+  }
+}
