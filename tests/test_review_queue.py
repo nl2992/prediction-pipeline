@@ -51,7 +51,8 @@ class YieldMetrics(unittest.TestCase):
         self.assertAlmostEqual(m["return_on_capital"], (20 * 0.10) / (20 * 0.75), places=5)
         # later of the two closes is poly_close (Oct 20) -> 23 days from NOW
         self.assertAlmostEqual(m["days_to_settle"], 23.0, places=3)
-        self.assertIsNotNone(m["annualized_return"])
+        self.assertIsNone(m["annualized_return"])   # < 30 days: suppressed
+        self.assertEqual(m["size_basis"], "min_size_probe")
 
     def test_missing_kalshi_close_leaves_days_and_annualized_null(self):
         m = yield_metrics(self._signal(kalshi_close=None), NOW, contracts=20)
@@ -63,11 +64,29 @@ class YieldMetrics(unittest.TestCase):
         self.assertIsNone(m["days_to_settle"])
         self.assertIsNone(m["annualized_return"])
 
-    def test_days_under_seven_suppresses_annualized_but_not_roc(self):
+    def test_days_under_thirty_suppresses_annualized_but_not_roc(self):
         soon = (NOW + timedelta(days=3)).isoformat()
         m = yield_metrics(self._signal(kalshi_close=soon, poly_close=soon), NOW, contracts=20)
         self.assertIsNotNone(m["return_on_capital"])
         self.assertIsNone(m["annualized_return"])
+
+    def test_annualized_null_at_29_9_days_present_at_30(self):
+        early = (NOW + timedelta(days=29.9)).isoformat()
+        m = yield_metrics(self._signal(kalshi_close=early, poly_close=early), NOW, contracts=20)
+        self.assertIsNone(m["annualized_return"])
+        edge = (NOW + timedelta(days=30)).isoformat()
+        m = yield_metrics(self._signal(kalshi_close=edge, poly_close=edge), NOW, contracts=20)
+        self.assertIsNotNone(m["annualized_return"])
+
+    def test_depth_overrides_probe_economics(self):
+        depth = {"contracts": 100.0, "profit": 8.0, "roi": 0.2, "capital": 40.0}
+        m = yield_metrics(self._signal(), NOW, contracts=20, depth=depth)
+        self.assertEqual(m["size_basis"], "max_depth")
+        self.assertEqual(m["contracts"], 100.0)
+        self.assertEqual(m["profit_usd"], 8.0)
+        self.assertEqual(m["capital"], 40.0)
+        self.assertEqual(m["return_on_capital"], 0.2)
+        self.assertAlmostEqual(m["edge_per_contract"], 0.10)  # min-size edge unchanged
 
     def test_days_to_settle_clamped_at_half_day_minimum(self):
         past = (NOW - timedelta(days=5)).isoformat()
@@ -162,6 +181,36 @@ class BuildReviewQueueRows(unittest.TestCase):
         self.assertIn("return_on_capital", row)
         self.assertIn("days_to_settle", row)
         self.assertIn("annualized_return", row)
+
+    def test_size_basis_max_depth_when_exec_fields_present(self):
+        p = pair(0.38, 0.40, 0.65, 0.68, **deep_books(),
+                 exec_contracts=100.0, exec_profit=10.0, exec_roi=0.25)
+        row = build_review_queue_rows([p], top_n=5, min_size=20, now=NOW)[0]
+        self.assertEqual(row["size_basis"], "max_depth")
+        self.assertEqual(row["contracts"], 100.0)
+        self.assertEqual(row["exec_contracts"], 100.0)
+        self.assertEqual(row["profit_usd"], 10.0)
+        self.assertAlmostEqual(row["capital"], 40.0)
+        self.assertEqual(row["return_on_capital"], 0.25)
+
+    def test_size_basis_probe_when_exec_fields_absent_or_null(self):
+        for extra in ({}, {"exec_contracts": None, "exec_profit": None, "exec_roi": None},
+                      {"exec_contracts": 100.0, "exec_profit": 5.0, "exec_roi": 0.0}):
+            p = pair(0.38, 0.40, 0.65, 0.68, **deep_books(), **extra)
+            row = build_review_queue_rows([p], top_n=5, min_size=20, now=NOW)[0]
+            self.assertEqual(row["size_basis"], "min_size_probe")
+            self.assertEqual(row["contracts"], 20)
+
+    def test_ordering_ignores_depth_fields(self):
+        # high-edge pair has tiny depth profit; low-edge pair has huge depth profit.
+        hi = pair(0.10, 0.11, 0.85, 0.86, poly_id="hi", kalshi_ticker="KHI", **deep_books(0.11, 0.85),
+                  exec_contracts=1.0, exec_profit=0.01, exec_roi=0.01)
+        lo = pair(0.45, 0.46, 0.50, 0.51, poly_id="lo", kalshi_ticker="KLO", **deep_books(0.46, 0.50),
+                  exec_contracts=900.0, exec_profit=500.0, exec_roi=0.5)
+        rows = build_review_queue_rows([lo, hi], top_n=5, min_size=20, now=NOW)
+        nets = [r["exec_net"] for r in rows]
+        self.assertEqual(nets, sorted(nets, reverse=True))
+        self.assertIn("hi", rows[0]["key"])
 
     def test_pair_key_falls_back_to_poly_id_without_token(self):
         p = pair(0.38, 0.40, 0.65, 0.68, poly_id="pm1", kalshi_ticker="KX1", **deep_books())

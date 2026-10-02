@@ -1035,7 +1035,7 @@
               <th class="r">PROFIT $</th>
               <th class="r">ROC %</th>
               <th class="r">DAYS</th>
-              <th class="r">ANN. %</th>
+              <th class="r" title="estimate; assumes capital is redeployed at the same return; shown only for ≥30-day horizons">ANN. %</th>
               <th>RULES</th>
               <th>VERDICT</th>
             </tr>
@@ -2642,6 +2642,11 @@ function sortedReviewRows() {
   });
 }
 
+function showSecondary(primary, secondary) {
+  const n = v => String(v || '').trim().toLowerCase();
+  return !!n(secondary) && n(secondary) !== n(primary);
+}
+
 function renderReviewQueue() {
   const tbody = document.getElementById('review-body');
   const rows = sortedReviewRows();
@@ -2669,15 +2674,17 @@ function renderReviewQueue() {
       <td class="rq-question" onclick="openReviewRow('${esc(row.pair_key)}')" tabindex="0"
           onkeydown="if(event.key==='Enter'){openReviewRow('${esc(row.pair_key)}')}">
         ${esc(truncate(row.kalshi_title||'', 60))}
-        ${row.kalshi_event_title ? `<div class="rq-event">${esc(truncate(row.kalshi_event_title,60))}</div>` : ''}
+        ${showSecondary(row.kalshi_title, row.kalshi_event_title) ? `<div class="rq-event">${esc(truncate(row.kalshi_event_title,60))}</div>` : ''}
       </td>
       <td class="rq-question" onclick="openReviewRow('${esc(row.pair_key)}')" tabindex="0"
           onkeydown="if(event.key==='Enter'){openReviewRow('${esc(row.pair_key)}')}">
         ${esc(truncate(row.poly_title||'', 60))}
-        ${row.poly_event_title ? `<div class="rq-event">${esc(truncate(row.poly_event_title,60))}</div>` : ''}
+        ${showSecondary(row.poly_title, row.poly_event_title) ? `<div class="rq-event">${esc(truncate(row.poly_event_title,60))}</div>` : ''}
       </td>
       <td class="r">${fmtEdge(row.edge_per_contract)}</td>
-      <td class="r">${row.contracts != null ? (+row.contracts).toFixed(2) : '<span class="dim">—</span>'}</td>
+      <td class="r">${row.contracts == null ? '<span class="dim">—</span>'
+        : row.size_basis === 'max_depth' ? String(+(+row.contracts).toFixed(2))
+        : `<span class="dim" title="depth walk unavailable — economics at the min-size probe">${+(+row.contracts).toFixed(2)} (probe)</span>`}</td>
       <td class="r">${fmt$(row.capital)}</td>
       <td class="r">${fmt$(row.profit_usd)}</td>
       <td class="r">${fmtPctV(row.return_on_capital)}</td>

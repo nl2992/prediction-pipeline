@@ -41,11 +41,12 @@ def _parse_dt(value: Any) -> datetime | None:
 
 
 _MIN_DAYS_TO_SETTLE = 0.5     # a same-day settlement is not truly instant capital recycling
-_MIN_DAYS_FOR_ANNUALIZED = 7  # below this, compounding out to a year is too noisy to show
+_MIN_DAYS_FOR_ANNUALIZED = 30  # below this, compounding out to a year is noise (11d -> 1742%)
 
 
 def yield_metrics(signal: dict[str, Any], now: datetime, *,
-                   contracts: float | None = None) -> dict[str, Any]:
+                   contracts: float | None = None,
+                   depth: dict[str, float] | None = None) -> dict[str, Any]:
     """Pure capital/return economics for one signal row (docs/IMPLEMENTATION_PLAN.md
     Phase 2, "Yield columns"). ``signal`` is a compute_signals()-shaped dict (or
     anything carrying the same field names): ``exec_net``/``net_accurate``,
@@ -58,6 +59,13 @@ def yield_metrics(signal: dict[str, Any], now: datetime, *,
     ``min_size`` *is* the executable contract count whenever
     ``exec_vwap_kalshi``/``exec_vwap_poly`` are present). None when the
     caller doesn't know the executable size (e.g. a top-of-book-only signal).
+
+    ``depth`` (optional) carries the full depth-walk economics discover.py
+    computed for the pair (``contracts``, ``profit``, ``capital``, ``roi``);
+    when given it replaces the probe-sized contracts/capital/profit/return
+    (``size_basis="max_depth"``). ``edge_per_contract`` always stays the
+    min-size edge. ``annualized_return`` is only computed when
+    ``days_to_settle >= 30``.
 
     Every field can be None -- callers must handle missing capital/profit/
     return/annualized gracefully; that's the whole point of separating an
@@ -82,6 +90,14 @@ def yield_metrics(signal: dict[str, Any], now: datetime, *,
     if profit_usd is not None and capital:  # capital not None and not 0.0
         return_on_capital = round(profit_usd / capital, 6)
 
+    size_basis = "min_size_probe"
+    if depth is not None:
+        contracts = depth["contracts"]
+        profit_usd = round(float(depth["profit"]), 6)
+        capital = round(float(depth["capital"]), 6)
+        return_on_capital = round(float(depth["roi"]), 6)
+        size_basis = "max_depth"
+
     kalshi_close = _parse_dt(signal.get("kalshi_close"))
     poly_close = _parse_dt(signal.get("poly_close"))
     # Capital is locked until BOTH legs settle -- if either leg's close date
@@ -105,6 +121,7 @@ def yield_metrics(signal: dict[str, Any], now: datetime, *,
     return {
         "edge_per_contract": edge,
         "contracts": contracts,
+        "size_basis": size_basis,
         "capital": capital,
         "profit_usd": profit_usd,
         "return_on_capital": return_on_capital,
@@ -154,6 +171,24 @@ def review_is_stale(review: dict[str, Any] | None, pair: dict[str, Any] | None) 
     return stale
 
 
+def _depth_economics(pair: dict[str, Any] | None) -> dict[str, float] | None:
+    """discover.py's full depth walk for the pair (``exec_contracts``,
+    ``exec_profit``, ``exec_roi`` = book_arb ``profit / (cost_a + cost_b)``,
+    so capital = profit / roi). None unless all are present and positive."""
+    if not pair:
+        return None
+    c, p, r = pair.get("exec_contracts"), pair.get("exec_profit"), pair.get("exec_roi")
+    if c is None or p is None or r is None:
+        return None
+    try:
+        c, p, r = float(c), float(p), float(r)
+    except (TypeError, ValueError):
+        return None
+    if c <= 0 or r <= 0:
+        return None
+    return {"contracts": c, "profit": p, "roi": r, "capital": p / r}
+
+
 def serialize_review_row(signal: dict[str, Any], rank: int,
                           provenance: dict[str, dict[str, Any]],
                           full_index: dict[str, dict[str, Any]],
@@ -170,7 +205,11 @@ def serialize_review_row(signal: dict[str, Any], rank: int,
         contracts = signal.get("_min_size_hint")
     row["exec_contracts"] = contracts
     row["pair_key"] = _signal_pair_key(signal, full_index)
-    row.update(yield_metrics(signal, now, contracts=contracts))
+    prov_key = "|".join(str(signal.get("key", "")).split("|")[:2])
+    depth = _depth_economics(full_index.get(prov_key))
+    row.update(yield_metrics(signal, now, contracts=contracts, depth=depth))
+    if depth is not None:
+        row["exec_contracts"] = depth["contracts"]
     return row
 
 
