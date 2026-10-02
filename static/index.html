@@ -429,6 +429,7 @@
   }
   .rq-rules-ok   { color: var(--green); font-size: 10px; }
   .rq-rules-flag { color: var(--amber); font-size: 10px; }
+  .rq-rules-high { color: var(--red); font-size: 10px; }
   .rq-rules-none { color: var(--dimmer); font-size: 10px; }
 
   /* ── Detail panel ─────────────────────────────────────────────
@@ -2585,28 +2586,27 @@ async function loadReviewQueue() {
   }
 }
 
-// Rule-flag evidence is built by a separate, concurrently-developed module
-// (evidence.py/rule_diff.py, not yet on main) — this call is OPTIONAL: a
-// 404 (endpoint not deployed yet) or any other failure must not break the
-// review queue, it just leaves every row showing "not checked".
+// Rule-flag evidence (evidence.py/rule_diff.py): read-only cache lookup
+// (fetch:false), in batches of 25. A failed batch just leaves its rows as
+// "not checked" and never breaks the review queue.
 async function loadRuleFlags(pairKeys) {
-  if (!pairKeys.length) { ruleFlagsChecked = true; return; }
-  try {
-    const r = await fetch('/api/evidence/rule-flags', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pair_keys: pairKeys.slice(0, 25), fetch: false, limit: 25 }),
-    });
-    if (!r.ok) { ruleFlagsChecked = true; renderReviewQueue(); return; }
-    const d = await r.json();
-    ruleFlagsByKey = d.flags || {};
-    ruleFlagsChecked = true;
-    renderReviewQueue();
-  } catch (e) {
-    // Network error / endpoint not present -- rules simply stay "not checked".
-    ruleFlagsChecked = true;
-    renderReviewQueue();
+  for (let i = 0; i < pairKeys.length; i += 25) {
+    const batch = pairKeys.slice(i, i + 25);
+    try {
+      const r = await fetch('/api/evidence/rule-flags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pair_keys: batch, fetch: false, limit: 25 }),
+      });
+      if (!r.ok) continue;
+      const d = await r.json();
+      Object.assign(ruleFlagsByKey, d.flags || {});
+    } catch (e) {
+      // network error -- these rows stay "not checked"
+    }
   }
+  ruleFlagsChecked = true;
+  renderReviewQueue();
 }
 
 function rulesCellHtml(key) {
@@ -2618,7 +2618,14 @@ function rulesCellHtml(key) {
   if (!flags.length) return '<span class="rq-rules-ok">✓ no flags</span>';
   const order = { critical: 3, high: 2, medium: 1, low: 0 };
   const worst = flags.reduce((a, b) => (order[b.severity] || 0) > (order[a.severity] || 0) ? b : a, flags[0]);
-  return `<span class="rq-rules-flag" title="${esc(flags.map(f => `[${f.severity}] ${f.kind}: ${f.detail||''}`).join('\n'))}">⚠ ${flags.length} flag${flags.length===1?'':'s'} (${esc(worst.severity||'?')})</span>`;
+  const cls = (order[worst.severity] || 0) >= 2 ? 'rq-rules-high' : 'rq-rules-flag';
+  const tip = flags.map(f => {
+    let t = `[${f.severity}] ${f.kind}: ${f.detail || ''}`;
+    if (f.kalshi_excerpt) t += `\n  Kalshi: ${f.kalshi_excerpt}`;
+    if (f.poly_excerpt) t += `\n  Polymarket: ${f.poly_excerpt}`;
+    return t;
+  }).join('\n');
+  return `<span class="${cls}" title="${esc(tip)}">⚠ ${flags.length}</span>`;
 }
 
 const REVIEW_SORT_GETTERS = {
@@ -2661,7 +2668,7 @@ function renderReviewQueue() {
   tbody.innerHTML = rows.map((row, i) => {
     const review = row.review;
     const verdict = review ? review.verdict : null;
-    const staleBadge = row.review_stale ? '<span class="badge-stale">STALE</span>' : '';
+    const staleBadge = (row.review_stale || (row.review && row.review.stale)) ? '<span class="badge-stale">STALE</span>' : '';
     const reviewTitle = review
       ? `${esc(review.reviewer||'local')} · ${esc((review.created_at||'').slice(0,19).replace('T',' '))} UTC${review.reason ? ' — ' + esc(review.reason) : ''}`
       : 'No review yet';

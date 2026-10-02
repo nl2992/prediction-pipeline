@@ -21,11 +21,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
 import book_arb
-<<<<<<< HEAD
 import evidence
-=======
 import review_queue
->>>>>>> 4cfd29f (Add Phase 2e review queue with honest yield columns)
 import scan_jobs
 import store
 from arb import kalshi_taker_fee
@@ -722,9 +719,13 @@ def api_review_queue(top_n: int = 25, min_size: float = 20.0, mode: str | None =
     full_index = review_queue._full_pair_index(scan["pairs"])
     for row in rows:
         review = reviews.get(row["pair_key"])
-        row["review"] = review
         pair = full_index.get(f"{row.get('poly_id')}|{row.get('kalshi_ticker')}")
-        row["review_stale"] = review_queue.review_is_stale(review, pair)
+        stale = review_queue.review_is_stale(review, pair)
+        if review is not None:
+            review = _with_stale(review)
+            stale = stale or bool(review["stale"])
+        row["review"] = review
+        row["review_stale"] = stale
 
     return JSONResponse({
         "scan_id": scan["id"],
