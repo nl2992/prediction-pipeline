@@ -673,3 +673,86 @@ def award_phrase_conflict(a: str, b: str) -> bool:
     if not pa or not pb:
         return False
     return not any(x <= y or y <= x for x in pa for y in pb)
+
+
+_REVIEW_SOURCE = (r"(?:rotten\s+tomatoes|metacritic|imdb|cinemascore|letterboxd|"
+                  r"opening\s+weekend|box\s+office)")
+_REVIEW_QUOTED_RE = re.compile(rf"[\"“]([^\"”]{{1,60}})[\"”]\s+{_REVIEW_SOURCE}\b", re.I)
+_REVIEW_SOURCE_RE = re.compile(rf"\b{_REVIEW_SOURCE}\b", re.I)
+_REVIEW_LEAD_STOP = {"will", "the", "a", "an", "does", "did", "what", "is", "be", "score", "of", "for"}
+
+
+def review_work_title(text: str) -> str | None:
+    """Work title of a review-score / box-office market ("Clayface Rotten
+    Tomatoes score?", '"Digger" Rotten Tomatoes Score?'), normalised for
+    comparison; None when no title can be identified."""
+    m = _REVIEW_QUOTED_RE.search(text)
+    if m:
+        raw = m.group(1)
+    else:
+        src = _REVIEW_SOURCE_RE.search(text)
+        if not src:
+            return None
+        raw = re.split(r"[?.!/\"“”]", text[:src.start()])[-1]
+    raw = re.sub(r"['’]s\b", "", raw.lower())
+    toks = re.findall(r"[a-z0-9]+", raw)
+    # A leading outcome label ("$80M+", "90+") is not part of the title.
+    while toks and (toks[0] in _REVIEW_LEAD_STOP or re.fullmatch(r"\d+[kmb]?", toks[0])):
+        toks.pop(0)
+    toks = [t for t in toks if t not in {"the", "a", "an"}]
+    if not toks or len(toks) > 6:
+        return None
+    return " ".join(toks)
+
+
+def review_title_conflict(a: str, b: str) -> bool:
+    """True when both sides are review-score markets and neither side's
+    extracted title occurs (whole-word) in the other side's text. Containment
+    rather than equality keeps sloppy unquoted extractions ("oppenheimer gross
+    more than 80m on") from vetoing genuine pairs."""
+    if not (_REVIEW_SOURCE_RE.search(a) and _REVIEW_SOURCE_RE.search(b)):
+        return False
+    ta, tb = review_work_title(a), review_work_title(b)
+    if not (ta or tb):
+        return False
+    na, nb = _review_norm(a), _review_norm(b)
+    a_in_b = bool(ta) and re.search(rf"\b{re.escape(ta)}\b", nb) is not None
+    b_in_a = bool(tb) and re.search(rf"\b{re.escape(tb)}\b", na) is not None
+    return not a_in_b and not b_in_a
+
+
+def _review_norm(text: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+_CEREMONIES: tuple[tuple[re.Pattern[str], str], ...] = tuple(
+    (re.compile(p, re.I), k) for p, k in (
+        (r"\bstreamer\s+awards?\b", "streamer"),
+        (r"\besports\s+awards?\b", "esports"),
+        (r"\bgame\s+awards\b", "game_awards"),
+        (r"\bgolden\s+joystick\b", "golden_joystick"),
+        (r"\boscars?\b|\bacademy\s+awards?\b", "oscars"),
+        (r"\bgolden\s+globes?\b", "golden_globes"),
+        (r"\bemmys?\b", "emmys"),
+        (r"\bgrammys?\b", "grammys"),
+        (r"\bbafta\b", "bafta"),
+        (r"\bsag\s+awards?\b|\bscreen\s+actors\s+guild\b", "sag"),
+        (r"\bcritics['’]?\s+choice\b", "critics_choice"),
+        (r"\bmtv\s+(?:video\s+music\s+awards?|vmas?)\b|\bvmas?\b", "vmas"),
+        (r"\bbillboard\s+music\s+awards?\b", "billboard"),
+        (r"\bballon\s+d['’]?or\b", "ballon_dor"),
+        (r"\btony\s+awards?\b|\btonys\b", "tonys"),
+    )
+)
+
+
+def award_ceremonies(text: str) -> frozenset[str]:
+    return frozenset(key for pat, key in _CEREMONIES if pat.search(text))
+
+
+def award_ceremony_conflict(a: str, b: str) -> bool:
+    """True when both sides name an awarding body and the named sets are
+    disjoint (Streamer Awards vs Esports Awards). A side that names no
+    ceremony is neutral."""
+    ca, cb = award_ceremonies(a), award_ceremonies(b)
+    return bool(ca and cb and ca.isdisjoint(cb))
