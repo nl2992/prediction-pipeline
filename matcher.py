@@ -34,6 +34,12 @@ from semantic_scope import (
     election_office_conflict,
     f1_career_scope,
     founded_by_conflict,
+    speaker_conflict,
+    central_bank_granularity_conflict,
+    tournament_round_conflict,
+    advancement_vs_relegation_conflict,
+    fantasy_category_conflict,
+    team_season_predicate_conflict,
     government_outcome_scope,
     judicial_selection_stage,
     league_outcome_scope,
@@ -837,6 +843,7 @@ def _is_ou_or_spread(text: str) -> bool:
     return bool(
         re.search(r"\bo/u\b|\bover\s*/\s*under\b", low)
         or re.search(r"\b(?:over|under)\b\s*\d", low)        # "over 1.5"
+        or re.search(r"\bwins?\s+by\s+(?:more\s+than|at\s+least)\s*\d", low)  # "wins by more than 1.5"
         # "Team (-1.5)" / "(2.5)" — a SIGNED or fractional line. A bare
         # parenthesised integer is usually a year ("Japan Series Champion (2026)").
         or re.search(r"[a-z)]\s*\(\s*(?:[+-]\d+(?:\.\d+)?|\d+\.\d+)\s*\)", low)
@@ -2235,6 +2242,9 @@ def _stat_line(text: str) -> bool:
     """A numeric line on a counting stat ("1250+ rushing yards", "at least 10
     receptions"). Basis-point moves are excluded: they have their own range rule."""
     comparator = r"at least|over|more than|fewer than|under|above|below"
+    # "wins by more than 1.5 goals" is a margin/spread, not a counting stat.
+    if re.search(r"\bwins?\s+by\s+(?:more\s+than|at\s+least|over)\b", text):
+        return False
     return bool(
         re.search(rf"\b{_STAT_NUM}\s*\+\s*(?:\w+\s+)?(?:{_STAT_NOUNS})\b", text)
         or re.search(rf"\b(?:{comparator})\s+{_STAT_NUM}\s*(?:\w+\s+)?(?:{_STAT_NOUNS})\b", text)
@@ -2467,6 +2477,16 @@ def context_veto(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> str | None
         return "organization founded by person vs person"
     if competition_identity_conflict(pt, kt):
         return "competition identity mismatch"
+    if speaker_conflict(pt, kt):
+        return "different speaker or venue"
+    if central_bank_granularity_conflict(pt, kt):
+        return "specific meeting/size vs period-wide rate question"
+    if advancement_vs_relegation_conflict(pt, kt):
+        return "advancement vs relegation outcome"
+    if fantasy_category_conflict(pt, kt):
+        return "different fantasy category"
+    if team_season_predicate_conflict(pt, kt):
+        return "different team-season predicate"
     # An exact-value bucket ("be 0.2%") and an open-ended threshold ("above
     # 0.2%") are disjoint outcomes even on the same strike. The question text
     # (e.g. "Will Core CPI MoM be 0.2%?") often carries the only "be <value>"
@@ -2685,6 +2705,8 @@ def context_veto(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> str | None
         plain_text = kt if prnd else pt
         if _is_win_market(plain_text) or re.search(r"\bchampions?\b", plain_text):
             return "round scope mismatch"
+    if tournament_round_conflict(pt, kt):
+        return "different tournament round"
     # (D) Deadline-window vs within-year occurrence, scoped to occurrence
     # nouns: "US recession by end of 2027?" (NBER deadline window) vs "Will
     # there be a recession in 2027?" (calendar-year occurrence). Both-sides

@@ -2009,5 +2009,93 @@ class ElectionOfficeConflictTests(unittest.TestCase):
         self.assertNotIn("different office/race level", d.reasons)
 
 
+class Oct2026FalsePositiveFamilies(unittest.TestCase):
+    """Live top-20 audit families: speaker/venue, central-bank granularity,
+    tournament round, qualify vs relegated, fantasy category, team predicate."""
+
+    def test_speaker_albertsons_vs_mrbeast_rejected(self):
+        d = decide_full('AI / Artificial Intelligence', 'What will MrBeast say during his next YouTube video?',
+                        'What will Albertsons say during their next earnings call? AI / Artificial Intelligence', 'What will Albertsons say during their next earnings call?')
+        self.assertFalse(d.match)
+        self.assertTrue(any('different speaker or venue' in r for r in d.reasons), d.reasons)
+
+    def test_speaker_mccormick_vs_constellation_rejected(self):
+        d = decide_full('Mexico', 'What will Constellation Brands say during their next earnings call?',
+                        'What will McCormick & Company, Incorporated say during their next earnings call? Mexico', 'What will McCormick & Company, Incorporated say during their next earnings call?')
+        self.assertFalse(d.match)
+        self.assertTrue(any('different speaker or venue' in r for r in d.reasons), d.reasons)
+
+    def test_same_speaker_survives_ok(self):
+        d = decide_full('AI', 'What will Albertsons say during their next earnings call?',
+                        'What will Albertsons say during their next earnings call? AI', 'What will Albertsons say during their next earnings call?')
+        self.assertTrue(d.match, d.reasons)
+
+    def test_central_bank_meeting_vs_year_rejected(self):
+        d = decide_full('Yes', 'Bank of Canada Rate Hike in 2026?',
+                        'Will Bank of Canada Hike rates by >25bps at their December 2026 meeting? Hike >25bps', 'Bank of Canada Hike rates by >25bps at their December 2026 meeting?')
+        self.assertFalse(d.match)
+        self.assertTrue(any('specific meeting/size vs period-wide rate question' in r for r in d.reasons), d.reasons)
+
+    def test_central_bank_same_meeting_survives_ok(self):
+        d = decide_full('Hike', 'Bank of Canada decision in December 2026?',
+                        'Will Bank of Canada hike rates at their December 2026 meeting?', 'Will Bank of Canada hike rates at their December 2026 meeting?')
+        self.assertTrue(d.match, d.reasons)
+
+    def test_golf_round3_vs_round2_rejected(self):
+        d = decide_full('Austin Smotherman', 'PGA Tour: Bank of Utah Championship Second Round Leader',
+                        'Austin Smotherman leads at the end of Round 3', 'Bank of Utah Championship: Round 3 Leader')
+        self.assertFalse(d.match)
+        self.assertTrue(any('different tournament round' in r for r in d.reasons), d.reasons)
+
+    def test_golf_round3_vs_third_survives_ok(self):
+        d = decide_full('Austin Smotherman', 'Bank of Utah Championship Third Round Leader',
+                        'Austin Smotherman leads at the end of Round 3', 'Bank of Utah Championship: Round 3 Leader')
+        self.assertTrue(d.match, d.reasons)
+
+    def test_nations_league_qualify_vs_relegated_rejected(self):
+        d = decide_full('Czechia', 'UEFA Nations League A: Teams relegated (2026-27)',
+                        'Will Czechia qualify for the UEFA Nations League Final?', 'UEFA Nations League Final qualifiers')
+        self.assertFalse(d.match)
+        self.assertTrue(any('advancement vs relegation' in r for r in d.reasons), d.reasons)
+
+    def test_nations_league_relegated_survives_ok(self):
+        d = decide_full('Czechia', 'UEFA Nations League A: Teams relegated (2026-27)',
+                        'Will Czechia be relegated from UEFA Nations League A?', 'UEFA Nations League A relegation')
+        self.assertTrue(d.match, d.reasons)
+
+    def test_fantasy_rookie_vs_rb_rejected(self):
+        d = decide_full('Jeremiyah Love', 'Fantasy Football: 2026-27 Top 5 Scoring RBs',
+                        'Will Jeremiyah Love be a top 5 fantasy rookie in the 2026-27 Pro Football regular season?', 'Top 5 fantasy rookies 2026-27')
+        self.assertFalse(d.match)
+        self.assertTrue(any('different fantasy category' in r for r in d.reasons), d.reasons)
+
+    def test_fantasy_rookie_vs_flex_rejected(self):
+        d = decide_full('Carnell Tate', 'Fantasy Football: 2026-27 Top 5 Scoring FLEX',
+                        'Will Carnell Tate be a top 5 fantasy rookie in the 2026-27 Pro Football regular season?', 'Top 5 fantasy rookies 2026-27')
+        self.assertFalse(d.match)
+        self.assertTrue(any('different fantasy category' in r for r in d.reasons), d.reasons)
+
+    def test_fantasy_same_category_survives_ok(self):
+        d = decide_full('Jeremiyah Love', 'Fantasy Football: 2026-27 Top 5 Scoring RBs',
+                        'Will Jeremiyah Love be a top 5 fantasy RB in the 2026-27 Pro Football regular season?', 'Top 5 fantasy RBs 2026-27')
+        self.assertTrue(d.match, d.reasons)
+
+    def test_last_team_to_win_vs_win_totals_rejected(self):
+        d = decide_full('Houston Texans', 'Pro Football: 2026 Regular Season Win Totals',
+                        'Will Houston be the last team to win a game in the 2026-27 Pro Football regular season?', 'Last team to win a game 2026-27')
+        self.assertFalse(d.match)
+        self.assertTrue(any('different team-season predicate' in r for r in d.reasons), d.reasons)
+
+    def test_almere_winner_survives_ok(self):
+        d = decide_full('Almere City FC', 'Almere City FC vs. FC Volendam',
+                        'Almere wins', 'Almere City FC vs. FC Volendam')
+        self.assertTrue(d.match, d.reasons)
+
+    def test_volendam_spread_survives_ok(self):
+        d = decide_full('FC Volendam (-1.5)', 'Almere City FC vs. FC Volendam - More Markets',
+                        'Rkav Volendam wins by more than 1.5 goals?', 'Almere City FC vs. FC Volendam: Spread')
+        self.assertTrue(d.match, d.reasons)
+
+
 if __name__ == "__main__":
     unittest.main()
