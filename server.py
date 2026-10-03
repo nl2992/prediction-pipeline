@@ -20,6 +20,9 @@ from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
+import ask
+import ask_provider
+import ask_tools
 import book_arb
 import evidence
 import review_queue
@@ -821,14 +824,12 @@ def _venue_evidence_payload(evidence_row: dict | None) -> dict | None:
     }
 
 
-@app.get("/api/pairs/{pair_key:path}/evidence")
-def api_pair_evidence(pair_key: str, refresh: bool = False):
-    """Settlement-rule evidence for both legs of a pair, plus rule_diff
-    conflict flags. Fetches from the venue APIs only if nothing is cached
-    yet (or ``refresh=true``); otherwise serves the cached rows."""
+def pair_evidence_payload(pair_key: str, refresh: bool = False) -> dict | None:
+    """Shared body of the evidence route (also used by ask_tools). None when
+    the pair_key is unknown."""
     pair = store.find_pair(pair_key)
     if pair is None:
-        return JSONResponse({"error": "pair not found"}, status_code=404)
+        return None
 
     kalshi_ticker = pair.get("kalshi_ticker")
     poly_id = pair.get("poly_id")
@@ -846,12 +847,23 @@ def api_pair_evidence(pair_key: str, refresh: bool = False):
     poly_text = poly_evidence.get("rules_text") if poly_evidence else None
     rule_flags = compare_rules(kalshi_text, poly_text)
 
-    return JSONResponse({
+    return {
         "pair_key": pair_key,
         "kalshi": _venue_evidence_payload(kalshi_evidence),
         "poly": _venue_evidence_payload(poly_evidence),
         "rule_flags": rule_flags,
-    })
+    }
+
+
+@app.get("/api/pairs/{pair_key:path}/evidence")
+def api_pair_evidence(pair_key: str, refresh: bool = False):
+    """Settlement-rule evidence for both legs of a pair, plus rule_diff
+    conflict flags. Fetches from the venue APIs only if nothing is cached
+    yet (or ``refresh=true``); otherwise serves the cached rows."""
+    payload = pair_evidence_payload(pair_key, refresh)
+    if payload is None:
+        return JSONResponse({"error": "pair not found"}, status_code=404)
+    return JSONResponse(payload)
 
 
 @app.get("/api/evidence/search")
@@ -909,6 +921,27 @@ def api_evidence_rule_flags(payload: dict = _BODY_ELLIPSIS):
         flags[pair_key] = compare_rules(kalshi_text, poly_text)
 
     return JSONResponse({"flags": flags})
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Ask assistant (tool-calling, read-only). See ask.py / ask_tools.py.
+# ---------------------------------------------------------------------------
+
+@app.get("/api/ask/tools")
+def api_ask_tools():
+    return JSONResponse({"tools": ask_tools.TOOLS})
+
+
+@app.post("/api/ask")
+def api_ask(payload: Any = _BODY_ELLIPSIS):
+    provider = ask_provider.get_provider()
+    if provider is None:
+        return JSONResponse({"error": "Ask is not configured"}, status_code=503)
+    try:
+        question, history = ask.validate_request(payload)
+    except ask.AskValidationError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=422)
+    return JSONResponse(ask.run_ask(question, history, provider))
 
 
 # ---------------------------------------------------------------------------
