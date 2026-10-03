@@ -432,6 +432,101 @@ class Oct2026FalsePositiveFamilies(unittest.TestCase):
         self.assertIsNone(context_veto(p, k))
 
 
+class AlertHistoryFalsePositives(unittest.TestCase):
+    """2026-09-14 alerter-history false-positive families: match period,
+    near-miss organisation, price race, award category, vote share vs place."""
+
+    def _veto(self, p, k):
+        self.assertIsNotNone(context_veto(p, k))
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_halftime_vs_margin_rejected(self):
+        for line, outcome in (("1.5", "Al-Ittihad Club"), ("2.5", "Al-Shamal")):
+            with self.subTest(line=line):
+                self._veto(
+                    pm(outcome, "Al-Shamal vs. Al-Ittihad Club - Halftime Result"),
+                    ks(f"Al-Ittihad wins by more than {line} goals?",
+                       "Al-Shamal vs. Al-Ittihad Club: Spread"))
+
+    def test_full_time_and_halftime_survive(self):
+        self.assertIsNone(context_veto(
+            pm("Al-Ittihad Club", "Al-Shamal vs. Al-Ittihad Club"),
+            ks("Al-Ittihad wins?", "Al-Shamal vs. Al-Ittihad Club")))
+        self.assertIsNone(context_veto(
+            pm("Al-Ittihad Club", "Al-Shamal vs. Al-Ittihad Club - Halftime Result"),
+            ks("Al-Ittihad leads at halftime?", "Al-Shamal vs. Al-Ittihad Club: Halftime")))
+
+    def test_near_miss_organisation_rejected(self):
+        self._veto(
+            pm("Reporters Without Borders", "Nobel Peace Prize Winner 2026"),
+            ks("Who will win the Nobel Peace Prize? Doctors Without Borders (Médecins Sans Frontières)",
+               "Who will win the Nobel Peace Prize?", "Doctors Without Borders (Médecins Sans Frontières)"))
+
+    def test_same_organisation_and_abbreviations_survive(self):
+        self.assertIsNone(context_veto(
+            pm("Doctors Without Borders", "Nobel Peace Prize Winner 2026"),
+            ks("Who will win the Nobel Peace Prize? Doctors Without Borders",
+               "Who will win the Nobel Peace Prize?", "Doctors Without Borders")))
+        self.assertIsNone(context_veto(
+            pm("Centre Party (C)", "Which parties will be in next Swedish Government?"),
+            ks("Will Centre Party be a part of the next government in Sweden?",
+               "Which parties will be in next Swedish Government?")))
+
+    def test_price_race_rejected(self):
+        self._veto(
+            pm("by December 31, 2026", "When will Bitcoin hit $100k?"),
+            ks("Will BTC hit $50,000 before $100,000 by Dec 31, 2026? 50,000 first",
+               "Will BTC hit $50,000 before $100,000?", "50,000 first"))
+
+    def test_single_threshold_hit_survives(self):
+        self.assertIsNone(context_veto(
+            pm("by December 31, 2026", "When will Bitcoin hit $100k?"),
+            ks("Will BTC hit $100,000 by Dec 31, 2026?", "Will BTC hit $100,000?")))
+
+    def test_game_of_the_year_vs_best_audio_rejected(self):
+        self._veto(
+            pm("Resident Evil Requiem", "The Game Awards: Best Audio Design"),
+            ks("2026 Game of the Year? Resident Evil Requiem", "2026 Game of the Year?",
+               "Resident Evil Requiem"))
+
+    def test_game_of_the_year_same_category_survives(self):
+        self.assertIsNone(context_veto(
+            pm("Resident Evil Requiem", "The Game Awards: Game of the Year"),
+            ks("2026 Game of the Year? Resident Evil Requiem", "2026 Game of the Year?",
+               "Resident Evil Requiem")))
+
+    def test_vote_share_vs_first_place_rejected(self):
+        self._veto(
+            pm("Renan Santos", "Brazil Presidential Election First Round: 1st Place"),
+            ks("Will Renan Santos receive at least 12% of the popular vote in the first round "
+               "of the 2026 Brazilian presidential election?",
+               "Brazilian presidential election: Renan Santos vote percent (1st Round)"))
+
+    def test_finish_first_vs_first_place_survives(self):
+        self.assertIsNone(context_veto(
+            pm("Renan Santos", "Brazil Presidential Election First Round: 1st Place"),
+            ks("Will Renan Santos finish first in the first round?",
+               "Brazil Presidential Election first round")))
+
+    def test_real_alerted_pairs_survive(self):
+        for p, k in (
+            (pm("Los Angeles Rams", "Pro Football: 2026-27 Best Regular Season Record"),
+             ks("Will Los Angeles R have the best regular season record in the 2026-27 Pro Football season?",
+                "Best regular season record 2026-27")),
+            (pm("Caribbean Premier League: Antigua And Barbuda Falcons",
+                "Caribbean Premier League: Antigua And Barbuda Falcons"),
+             ks("Will Antigua And Barbuda Falcons win the 2026 Caribbean Premier League?",
+                "2026 Caribbean Premier League winner")),
+            (pm("Stefan Krkobabić", "Next Prime Minister of Serbia?"),
+             ks("Will Stefan Krkobabić become Prime Minister of Serbia following the next Serbian election?",
+                "Next Prime Minister of Serbia?")),
+            (pm("Republican", "Which party wins 2028 US Presidential Election?"),
+             ks("Will Republican win the Presidency in 2028? Republican party",
+                "Which party wins 2028 US Presidential Election?", "Republican party")),
+        ):
+            self.assertIsNone(context_veto(p, k))
+
+
 if __name__ == "__main__":
     unittest.main()
 

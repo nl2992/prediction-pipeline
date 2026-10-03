@@ -46,6 +46,10 @@ from semantic_scope import (
     f1_career_scope,
     founded_by_conflict,
     speaker_conflict,
+    match_period_conflict,
+    price_race_conflict,
+    award_phrase_conflict,
+    vote_share_vs_placement_conflict,
     central_bank_granularity_conflict,
     tournament_round_conflict,
     advancement_vs_relegation_conflict,
@@ -1127,6 +1131,14 @@ def match_spec(
         return _reject("competition identity mismatch")
     if speaker_conflict(a.raw, b.raw):
         return _reject("different speaker or venue")
+    if match_period_conflict(a.raw, b.raw):
+        return _reject("settlement-period mismatch: different match period")
+    if price_race_conflict(a.raw, b.raw):
+        return _reject("price race (X before Y) vs single level")
+    if award_phrase_conflict(a.raw, b.raw):
+        return _reject("different award category")
+    if vote_share_vs_placement_conflict(a.raw, b.raw):
+        return _reject("vote-share threshold vs placement")
     if central_bank_granularity_conflict(a.raw, b.raw):
         return _reject("specific meeting/size vs period-wide rate question")
     if advancement_vs_relegation_conflict(a.raw, b.raw):

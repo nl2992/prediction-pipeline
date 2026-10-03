@@ -548,3 +548,128 @@ def team_season_predicate_conflict(a: str, b: str) -> bool:
     pa = {k for p, k in _TEAM_SEASON_PREDICATES if p.search(a)}
     pb = {k for p, k in _TEAM_SEASON_PREDICATES if p.search(b)}
     return bool(pa and pb and pa.isdisjoint(pb))
+
+
+# ---------------------------------------------------------------------------
+# Alert-history families: match period, price race, award category phrases,
+# vote share vs placement.
+# ---------------------------------------------------------------------------
+
+_PERIOD_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\bhalf\s*-?\s*time\b|\b(?:1st|first)\s+half\b|\b1h\b", re.I), "h1"),
+    (re.compile(r"\b(?:2nd|second)\s+half\b|\b2h\b", re.I), "h2"),
+    (re.compile(r"\b(?:1st|first)\s+(?:quarter|period)\b", re.I), "p1"),
+    (re.compile(r"\b(?:2nd|second)\s+(?:quarter|period)\b", re.I), "p2"),
+    (re.compile(r"\b(?:3rd|third)\s+(?:quarter|period)\b", re.I), "p3"),
+    (re.compile(r"\b(?:4th|fourth)\s+quarter\b", re.I), "p4"),
+)
+# "second half of 2026", "first quarter earnings" are calendar/fiscal periods.
+_CALENDAR_PERIOD_RE = re.compile(
+    r"\b(?:half|quarter)\b\s+(?:of\s+)?(?:the\s+)?(?:year|20\d\d|fiscal)\b"
+    r"|\b(?:earnings|gdp|revenue|eps|inflation|cpi|jobs|growth|sales|profit|fiscal)\b",
+    re.I,
+)
+
+
+def match_periods(text: str) -> frozenset[str]:
+    """Sub-match periods named in a sports market (halftime/1st half/2nd half/
+    quarter/period). Empty means full time. Calendar/fiscal periods
+    ("second half of 2026", "Q1 earnings") are ignored."""
+    if _CALENDAR_PERIOD_RE.search(text):
+        return frozenset()
+    return frozenset(key for pat, key in _PERIOD_PATTERNS if pat.search(text))
+
+
+def match_period_conflict(a: str, b: str) -> bool:
+    """True when one market settles on a sub-match period (halftime, 1st half,
+    2nd half, quarter, period) and the other on a different period or on the
+    full match (unqualified = full time)."""
+    pa, pb = match_periods(a), match_periods(b)
+    if not pa and not pb:
+        return False
+    return pa != pb and (not pa or not pb or pa.isdisjoint(pb))
+
+
+_RACE_RE = re.compile(
+    r"\bbefore\s+\$\s?\d"
+    r"|\$?\d[\d,.]*\s*[kmb]?\s+first\b"
+    r"|\bwhich\s+(?:level|price|target)?\s*(?:will\s+)?(?:be\s+)?(?:hit|reached|touched)?\s*first\b"
+    r"|\bfirst\s+to\s+(?:hit|reach|touch)\s+\$",
+    re.I,
+)
+_PRICE_TARGET_RE = re.compile(r"\$\s?\d|\b\d[\d,.]*\s*k\b", re.I)
+_HIT_VERB_RE = re.compile(r"\b(?:hit|hits|reach|reaches|touch|touches|above|exceed)\b|\bwhen\s+will\b", re.I)
+
+
+def price_race_conflict(a: str, b: str) -> bool:
+    """True when one side is a "X before Y" / "which first" race between price
+    levels and the other a single-threshold hit/reach market."""
+    ra, rb = bool(_RACE_RE.search(a)), bool(_RACE_RE.search(b))
+    if ra == rb:
+        return False
+    plain = b if ra else a
+    return bool(_PRICE_TARGET_RE.search(plain) and _HIT_VERB_RE.search(plain))
+
+
+_VOTE_SHARE_RE = re.compile(r"\d[\d.]*\s*%")
+_VOTE_WORD_RE = re.compile(r"\b(?:popular\s+vote|votes?|vote\s+share|ballots?)\b", re.I)
+_PLACEMENT_RE = re.compile(
+    r"\b(?:\d+(?:st|nd|rd|th)|first|second|third)\s+place\b|\bfinish(?:es)?\s+(?:in\s+)?"
+    r"(?:first|second|third|top|\d+(?:st|nd|rd|th))\b|\bplace\s+finish\b",
+    re.I,
+)
+
+
+def _is_vote_share(text: str) -> bool:
+    return bool(_VOTE_SHARE_RE.search(text) and _VOTE_WORD_RE.search(text))
+
+
+def vote_share_vs_placement_conflict(a: str, b: str) -> bool:
+    """True when one side is a vote-share percentage threshold and the other a
+    finishing-position (1st place / finish first) market."""
+    sa, sb = _is_vote_share(a), _is_vote_share(b)
+    return (sa and not sb and bool(_PLACEMENT_RE.search(b))) or (
+        sb and not sa and bool(_PLACEMENT_RE.search(a))
+    )
+
+
+_AWARD_CONTEXT_RE = re.compile(
+    r"\b(?:awards?|oscars?|emmys?|grammys?|golden\s+globes?|tonys?|bafta|goty|nominee|nominees|nominated)\b"
+    r"|\bof\s+the\s+year\b",
+    re.I,
+)
+_BEST_PHRASE_RE = re.compile(r"\bbest\s+((?:[a-z&'-]+\s+){0,3}[a-z&'-]+)", re.I)
+_OF_YEAR_PHRASE_RE = re.compile(r"\b((?:[a-z&'-]+\s+){0,2}[a-z&'-]+)\s+of\s+the\s+year\b", re.I)
+_PHRASE_STOP = {"of", "in", "for", "at", "by", "to", "on", "with", "from", "is", "be", "will", "win",
+                "wins", "the", "a", "an", "winner", "award", "awards"}
+
+
+def award_category_phrases(text: str) -> frozenset[frozenset[str]]:
+    """Token sets of generic award categories: "Best <X>" and "<X> of the Year"."""
+    if not _AWARD_CONTEXT_RE.search(text):
+        return frozenset()
+    out: set[frozenset[str]] = set()
+    for m in _BEST_PHRASE_RE.finditer(text):
+        toks: list[str] = []
+        for t in re.findall(r"[a-z0-9]+", m.group(1).lower()):
+            if t in _PHRASE_STOP or t.isdigit():
+                break
+            toks.append(t)
+        if toks:
+            out.add(frozenset(toks))
+    for m in _OF_YEAR_PHRASE_RE.finditer(text):
+        toks = [t for t in re.findall(r"[a-z0-9]+", m.group(1).lower())
+                if t not in _PHRASE_STOP and not t.isdigit()]
+        if toks:
+            out.add(frozenset(toks + ["oty"]))
+    return frozenset(out)
+
+
+def award_phrase_conflict(a: str, b: str) -> bool:
+    """True when both sides name award categories ("Best Audio Design", "Game
+    of the Year") and no category on one side contains/equals one on the other.
+    Subset phrases ("best record" vs "best regular season record") agree."""
+    pa, pb = award_category_phrases(a), award_category_phrases(b)
+    if not pa or not pb:
+        return False
+    return not any(x <= y or y <= x for x in pa for y in pb)
