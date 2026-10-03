@@ -186,8 +186,8 @@ class LazyDBInitialization(unittest.TestCase):
     def test_get_evidence_on_uninitialized_db_initializes_schema(self):
         """Verify that get_evidence lazy-initializes the DB schema
         on the first call, without requiring explicit store.init_db()."""
-        # Reset the module-level flag to simulate a fresh process.
-        evidence._db_initialized = False
+        # Clear the module-level initialized paths to simulate a fresh process.
+        evidence._initialized_db_paths.clear()
 
         # Mock _http_get_json to return a response so we don't hit the network.
         with patch("evidence._http_get_json", side_effect=_kalshi_responder("Some rules.")):
@@ -205,7 +205,7 @@ class LazyDBInitialization(unittest.TestCase):
     def test_get_evidence_idempotent_multiple_calls_after_lazy_init(self):
         """Verify that after the first call initializes the DB, subsequent
         calls work without re-initializing."""
-        evidence._db_initialized = False
+        evidence._initialized_db_paths.clear()
 
         # First call initializes with kalshi.
         with patch("evidence._http_get_json", side_effect=_kalshi_responder("First.")):
@@ -217,6 +217,51 @@ class LazyDBInitialization(unittest.TestCase):
             row2 = evidence.get_evidence("polymarket", "0xabc", max_age_s=0, fetch=True)
         self.assertIsNotNone(row2)
         self.assertIn("Second.", row2["rules_text"])
+
+    def test_get_evidence_handles_db_path_change_within_process(self):
+        """Verify that when PRED_DASHBOARD_DB changes within a process,
+        get_evidence lazily initializes the new DB path without error.
+
+        This simulates conftest's per-test DB isolation and tools that
+        switch DB paths per case."""
+        import os
+        import tempfile
+
+        evidence._initialized_db_paths.clear()
+
+        # First call on the test's default tmp DB.
+        with patch("evidence._http_get_json", side_effect=_kalshi_responder("First DB.")):
+            row1 = evidence.get_evidence("kalshi", "TICK_A", max_age_s=0, fetch=True)
+        self.assertEqual(row1["rules_text"], "First DB.")
+        first_db_path = str(store.db_path())
+        self.assertIn(first_db_path, evidence._initialized_db_paths)
+
+        # Switch to a new un-initialized DB path (simulating a new test case or tool switch).
+        with tempfile.TemporaryDirectory() as tmpdir:
+            new_db_path = os.path.join(tmpdir, "different-db.db")
+            old_db_path = os.environ.get("PRED_DASHBOARD_DB")
+            os.environ["PRED_DASHBOARD_DB"] = new_db_path
+            try:
+                # Verify the path changed.
+                self.assertNotEqual(str(store.db_path()), first_db_path)
+
+                # Second call on the new DB should work without "no such table" error.
+                with patch("evidence._http_get_json", side_effect=_kalshi_responder("Second DB.")):
+                    row2 = evidence.get_evidence("kalshi", "TICK_B", max_age_s=0, fetch=True)
+                self.assertIsNotNone(row2)
+                self.assertEqual(row2["rules_text"], "Second DB.")
+
+                # The new path should now be in the initialized set.
+                second_db_path = str(store.db_path())
+                self.assertIn(second_db_path, evidence._initialized_db_paths)
+                # Both paths should be tracked.
+                self.assertEqual(len(evidence._initialized_db_paths), 2)
+            finally:
+                # Restore the original DB path.
+                if old_db_path is not None:
+                    os.environ["PRED_DASHBOARD_DB"] = old_db_path
+                else:
+                    os.environ.pop("PRED_DASHBOARD_DB", None)
 
 
 if __name__ == "__main__":

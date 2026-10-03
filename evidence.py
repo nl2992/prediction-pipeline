@@ -29,9 +29,10 @@ import store
 
 logger = logging.getLogger(__name__)
 
-# Module-level flag to ensure init_db is called once per process before the
-# first store access. This makes get_evidence resilient to a missing schema.
-_db_initialized = False
+# Module-level set of initialized DB paths. Since PRED_DASHBOARD_DB can change
+# within one process (per-test in conftest, or switched per case in tools),
+# we track which paths have been initialized, not just a single boolean.
+_initialized_db_paths: set[str] = set()
 
 KALSHI_BASE = "https://api.elections.kalshi.com/trade-api/v2"
 GAMMA_BASE = "https://gamma-api.polymarket.com"
@@ -209,13 +210,17 @@ def _age_seconds(iso_ts: str) -> float:
 
 
 def _ensure_db_initialized() -> None:
-    """Lazy initialization of the database schema. Called once per process
-    before the first store access in get_evidence so that any caller
-    (including the audit CLI) benefits from schema initialization."""
-    global _db_initialized
-    if not _db_initialized:
+    """Lazy initialization of the database schema for the current DB path.
+
+    Since PRED_DASHBOARD_DB can change within one process (per-test or per case),
+    we track which paths have been initialized and initialize any new path on first
+    access. This ensures any caller (including the audit CLI) benefits from
+    schema initialization."""
+    global _initialized_db_paths
+    db_path_str = str(store.db_path())
+    if db_path_str not in _initialized_db_paths:
         store.init_db()
-        _db_initialized = True
+        _initialized_db_paths.add(db_path_str)
 
 
 def get_evidence(
