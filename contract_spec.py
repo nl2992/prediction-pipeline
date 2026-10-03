@@ -49,6 +49,8 @@ from semantic_scope import (
     match_period_conflict,
     price_race_conflict,
     award_phrase_conflict,
+    award_ceremony_conflict,
+    review_title_conflict,
     vote_share_vs_placement_conflict,
     central_bank_granularity_conflict,
     tournament_round_conflict,
@@ -1137,6 +1139,10 @@ def match_spec(
         return _reject("price race (X before Y) vs single level")
     if award_phrase_conflict(a.raw, b.raw):
         return _reject("different award category")
+    if award_ceremony_conflict(a.raw, b.raw):
+        return _reject("different awards ceremony")
+    if review_title_conflict(a.raw, b.raw):
+        return _reject("different reviewed work")
     if vote_share_vs_placement_conflict(a.raw, b.raw):
         return _reject("vote-share threshold vs placement")
     if central_bank_granularity_conflict(a.raw, b.raw):

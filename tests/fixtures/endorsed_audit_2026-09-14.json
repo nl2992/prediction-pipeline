@@ -4964,8 +4964,9 @@
    "v2_reasons_baseline": [
     "token similarity 0.75 >= 0.3"
    ],
-   "label": "same",
-   "reason_class": "ok"
+   "label": "different",
+   "reason_class": "different_awards_ceremony",
+   "note": "Esports Awards vs Streamer Awards: same category name, different ceremony."
   },
   {
    "poly_title": "Taylor Swift",

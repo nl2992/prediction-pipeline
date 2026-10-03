@@ -1186,3 +1186,41 @@ class ElectionOfficeConflict(unittest.TestCase):
         k = ks("Will Mike Johnson be the Republican nominee for LA-04?",
                "LA-04 Republican nominee?")
         self.assertIsNone(context_veto(p, k))
+
+
+class Oct2026AuditTitles(unittest.TestCase):
+    """Review-score markets for different works; same award category at a
+    different ceremony."""
+
+    def test_different_film_rejected(self):
+        p = pm('90+', '"Digger" Rotten Tomatoes Score?')
+        k = ks('Clayface Rotten Tomatoes score? Above 90', 'Clayface Rotten Tomatoes score?', 'Above 90')
+        self.assertEqual(context_veto(p, k), 'different reviewed work')
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_same_film_survives(self):
+        for title, thr in (('Digger', '52'), ('Primetime', '90')):
+            p = pm(f'{thr}+', f'"{title}" Rotten Tomatoes Score?')
+            k = ks(f'{title} Rotten Tomatoes score? Above {thr}', f'{title} Rotten Tomatoes score?', f'Above {thr}')
+            self.assertIsNone(context_veto(p, k))
+
+    def test_different_ceremony_rejected(self):
+        p = pm('Jynxzi', 'Esports Awards: Streamer of the Year')
+        k = ks('Will Jynxzi win Streamer of the Year at Streamer Awards 2026?', 'Streamer of the Year at Streamer Awards 2026?')
+        self.assertEqual(context_veto(p, k), 'different awards ceremony')
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_same_ceremony_survives(self):
+        p = pm('Jynxzi', 'The Streamer Awards 2026: Streamer of the Year')
+        k = ks('Will Jynxzi win Streamer of the Year at Streamer Awards 2026?', 'Streamer of the Year at Streamer Awards 2026?')
+        self.assertIsNone(context_veto(p, k))
+
+    def test_unnamed_ceremony_is_neutral(self):
+        p = pm('Resident Evil Requiem', 'The Game Awards: Game of the Year')
+        k = ks('2026 Game of the Year? Resident Evil Requiem', '2026 Game of the Year?')
+        self.assertIsNone(context_veto(p, k))
+
+    def test_emmys_survives(self):
+        p = pm('Last Week Tonight With John Oliver', 'Emmys 2026: Outstanding variety series')
+        k = ks('Will Last Week Tonight with John Oliver win Outstanding Variety Series?', 'Outstanding Variety Series')
+        self.assertIsNone(context_veto(p, k))

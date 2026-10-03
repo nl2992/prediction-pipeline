@@ -38,6 +38,8 @@ from semantic_scope import (
     match_period_conflict,
     price_race_conflict,
     award_phrase_conflict,
+    award_ceremony_conflict,
+    review_title_conflict,
     vote_share_vs_placement_conflict,
     central_bank_granularity_conflict,
     tournament_round_conflict,
@@ -2489,6 +2491,10 @@ def context_veto(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> str | None
         return "price race (X before Y) vs single level"
     if award_phrase_conflict(pt, kt):
         return "different award category"
+    if award_ceremony_conflict(pt, kt):
+        return "different awards ceremony"
+    if review_title_conflict(pt, kt):
+        return "different reviewed work"
     if vote_share_vs_placement_conflict(pt, kt):
         return "vote-share threshold vs placement"
     if central_bank_granularity_conflict(pt, kt):

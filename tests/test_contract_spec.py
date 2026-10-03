@@ -65,7 +65,7 @@ KNOWN_RECALL_EXCEPTIONS: set[tuple[str, str]] = set()
 # unchanged (98.46% / 100.0%) since the fix targeted recall, not this
 # fixture's remaining 5 documented false positives.
 AUDIT_EXPECTATIONS = {
-    "signal_subset": {"same": 315, "different": 24, "min_precision": 0.98},
+    "signal_subset": {"same": 314, "different": 25, "min_precision": 0.98},
     "stratified_subset": {"same": 145, "different": 4, "min_precision": 0.99},
 }
 
@@ -2191,6 +2191,47 @@ class AlertHistoryFalsePositives(unittest.TestCase):
         self.assertFalse(award_phrase_conflict("Best regular season record award", "best record award"))
         self.assertTrue(vote_share_vs_placement_conflict("at least 12% of the popular vote", "1st Place"))
         self.assertTrue(vote_share_vs_placement_conflict("at least 12% of the popular vote", "1st Place in Goiás"))
+
+
+class Oct2026AuditTitles(unittest.TestCase):
+    """Review-score markets for different works; same award category at a
+    different ceremony."""
+
+    def _reasons(self, d):
+        return ' | '.join(d.reasons)
+
+    def test_different_film_rejected(self):
+        d = decide_full('90+', '"Digger" Rotten Tomatoes Score?',
+                        'Clayface Rotten Tomatoes score? Above 90', 'Clayface Rotten Tomatoes score?')
+        self.assertFalse(d.match)
+        self.assertIn('different reviewed work', self._reasons(d))
+
+    def test_same_film_survives(self):
+        for title, thr in (('Digger', '52'), ('Primetime', '90')):
+            d = decide_full(f'{thr}+', f'"{title}" Rotten Tomatoes Score?',
+                            f'{title} Rotten Tomatoes score? Above {thr}', f'{title} Rotten Tomatoes score?')
+            self.assertNotIn('different reviewed work', self._reasons(d))
+
+    def test_different_ceremony_rejected(self):
+        d = decide_full('Jynxzi', 'Esports Awards: Streamer of the Year',
+                        'Will Jynxzi win Streamer of the Year at Streamer Awards 2026?', 'Streamer of the Year at Streamer Awards 2026?')
+        self.assertFalse(d.match)
+        self.assertIn('different awards ceremony', self._reasons(d))
+
+    def test_same_ceremony_survives(self):
+        d = decide_full('Jynxzi', 'The Streamer Awards 2026: Streamer of the Year',
+                        'Will Jynxzi win Streamer of the Year at Streamer Awards 2026?', 'Streamer of the Year at Streamer Awards 2026?')
+        self.assertNotIn('different awards ceremony', self._reasons(d))
+
+    def test_unnamed_ceremony_is_neutral(self):
+        d = decide_full('Resident Evil Requiem', 'The Game Awards: Game of the Year',
+                        '2026 Game of the Year? Resident Evil Requiem', '2026 Game of the Year?')
+        self.assertNotIn('different awards ceremony', self._reasons(d))
+
+    def test_emmys_survives(self):
+        d = decide_full('Last Week Tonight With John Oliver', 'Emmys 2026: Outstanding variety series',
+                        'Will Last Week Tonight with John Oliver win Outstanding Variety Series?', 'Outstanding Variety Series')
+        self.assertNotIn('different awards ceremony', self._reasons(d))
 
 
 if __name__ == "__main__":
