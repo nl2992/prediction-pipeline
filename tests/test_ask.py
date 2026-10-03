@@ -268,3 +268,41 @@ def test_route_ok_end_to_end(seeded, monkeypatch):
 def test_tools_route():
     body = _json(server.api_ask_tools())
     assert [t["name"] for t in body["tools"]] == [t["name"] for t in ask_tools.TOOLS]
+
+
+# ---- answer cleaning / message validity -------------------------------------
+
+def test_clean_answer_keeps_stray_lt_text():
+    text, _ = ask._clean_answer("Edge is 3% when Poly <Kalshi spread holds; rest of answer", ask.Citations())
+    assert text == "Edge is 3% when Poly <Kalshi spread holds; rest of answer"
+
+
+def test_clean_answer_strips_script_tag():
+    text, _ = ask._clean_answer("<script>alert(1)</script>ok", ask.Citations())
+    assert "<script" not in text and "</script" not in text and text.endswith("ok")
+
+
+def test_clean_answer_strips_bold_tag():
+    assert ask._clean_answer("a <b>bold</b> c", ask.Citations())[0] == "a bold c"
+
+
+def test_clean_answer_comparison_unchanged():
+    assert ask._clean_answer("x < y and y > z", ask.Citations())[0] == "x < y and y > z"
+
+
+def test_forced_final_round_message_sequence(seeded):
+    many = [call("search_pairs", {"limit": 1}, f"c{i}") for i in range(3)]
+    script = [{"tool_calls": many}] + [{"tool_calls": [call("search_pairs", {"limit": 1}, f"d{i}")]}
+                                       for i in range(ask.MAX_ROUNDS - 1)] + [{"content": "final"}]
+    fp = FakeProvider(script)
+    out = _ask(fp)
+    assert out["answer_markdown"] == "final"
+    msgs, tools = fp.calls[-1]
+    assert tools == []
+    assert any(m["role"] == "tool" for m in msgs)
+    for i, m in enumerate(msgs):
+        if m["role"] == "assistant" and m.get("tool_calls"):
+            ids = [tc["id"] for tc in m["tool_calls"]]
+            following = msgs[i + 1:i + 1 + len(ids)]
+            assert [f["role"] for f in following] == ["tool"] * len(ids)
+            assert [f["tool_call_id"] for f in following] == ids

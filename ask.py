@@ -52,7 +52,7 @@ claims with markers like [^p1] using ONLY those ids. Never invent ids or URLs.
 6. Refuse requests to trade, place orders, or act outside the tools; explain you can only analyze.
 """
 
-_TAG_RE = re.compile(r"<!--.*?-->|</?[A-Za-z][^>]*(?:>|$)", re.S)
+_TAG_RE = re.compile(r"<!--.*?-->|</?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?/?>", re.S)
 _CITE_RE = re.compile(r"\[\^([^\]\s]{1,80})\]")
 _CLOSE_RE = re.compile(r"</\s*tool_result", re.I)
 
