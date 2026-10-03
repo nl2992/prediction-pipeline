@@ -693,10 +693,11 @@ def review_work_title(text: str) -> str | None:
         src = _REVIEW_SOURCE_RE.search(text)
         if not src:
             return None
-        raw = re.split(r"[?.!:/\"“”]", text[:src.start()])[-1]
+        raw = re.split(r"[?.!/\"“”]", text[:src.start()])[-1]
     raw = re.sub(r"['’]s\b", "", raw.lower())
     toks = re.findall(r"[a-z0-9]+", raw)
-    while toks and toks[0] in _REVIEW_LEAD_STOP:
+    # A leading outcome label ("$80M+", "90+") is not part of the title.
+    while toks and (toks[0] in _REVIEW_LEAD_STOP or re.fullmatch(r"\d+[kmb]?", toks[0])):
         toks.pop(0)
     toks = [t for t in toks if t not in {"the", "a", "an"}]
     if not toks or len(toks) > 6:
@@ -705,9 +706,23 @@ def review_work_title(text: str) -> str | None:
 
 
 def review_title_conflict(a: str, b: str) -> bool:
-    """True when both sides are review-score markets for differently titled works."""
+    """True when both sides are review-score markets and neither side's
+    extracted title occurs (whole-word) in the other side's text. Containment
+    rather than equality keeps sloppy unquoted extractions ("oppenheimer gross
+    more than 80m on") from vetoing genuine pairs."""
+    if not (_REVIEW_SOURCE_RE.search(a) and _REVIEW_SOURCE_RE.search(b)):
+        return False
     ta, tb = review_work_title(a), review_work_title(b)
-    return bool(ta and tb and ta != tb)
+    if not (ta or tb):
+        return False
+    na, nb = _review_norm(a), _review_norm(b)
+    a_in_b = bool(ta) and re.search(rf"\b{re.escape(ta)}\b", nb) is not None
+    b_in_a = bool(tb) and re.search(rf"\b{re.escape(tb)}\b", na) is not None
+    return not a_in_b and not b_in_a
+
+
+def _review_norm(text: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", text.lower()))
 
 
 _CEREMONIES: tuple[tuple[re.Pattern[str], str], ...] = tuple(

@@ -2200,6 +2200,27 @@ class Oct2026AuditTitles(unittest.TestCase):
     def _reasons(self, d):
         return ' | '.join(d.reasons)
 
+    # (poly label, poly event, kalshi title, kalshi event)
+    REVIEW_SURVIVORS = [
+        ('$80M+', 'Oppenheimer opening weekend box office?',
+         'Will Oppenheimer gross more than $80M on opening weekend?', 'Oppenheimer opening weekend box office'),
+        ('80+', '"Avatar: Fire and Ash" Rotten Tomatoes Score?',
+         'Avatar: Fire and Ash Rotten Tomatoes score? Above 80', 'Avatar: Fire and Ash Rotten Tomatoes score?'),
+        ('90+', '"The Odyssey" Rotten Tomatoes Score?',
+         'Will The Odyssey have a Rotten Tomatoes score above 90?', 'The Odyssey Rotten Tomatoes score?'),
+        ('80+', '"Superman" Rotten Tomatoes Score?',
+         'Superman Rotten Tomatoes score? Above 80', 'Superman Rotten Tomatoes score?'),
+        ('70+', '"Spider-Man: Brand New Day" Rotten Tomatoes Score?',
+         'Spider-Man: Brand New Day Rotten Tomatoes score? Above 70', 'Spider-Man: Brand New Day Rotten Tomatoes score?'),
+    ]
+
+    def test_review_survivor_pairs_match(self):
+        for pl, pe, kt, ke in self.REVIEW_SURVIVORS:
+            with self.subTest(kt):
+                d = decide_full(pl, pe, kt, ke)
+                self.assertNotIn('different reviewed work', self._reasons(d))
+                self.assertTrue(d.match, d.reasons)
+
     def test_different_film_rejected(self):
         d = decide_full('90+', '"Digger" Rotten Tomatoes Score?',
                         'Clayface Rotten Tomatoes score? Above 90', 'Clayface Rotten Tomatoes score?')
