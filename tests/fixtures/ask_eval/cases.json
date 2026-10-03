@@ -1,0 +1,211 @@
+{
+ "version": 1,
+ "cases": [
+  {
+   "id": "mlb",
+   "rule_texts": "mlb.json",
+   "short_name": "MLB wins leader (Sonny Gray)",
+   "pair": {
+    "kalshi_ticker": "KXLEADERMLBWINS-26-SGRA",
+    "poly_id": "0xfad5a723109f7efd82d82f0ce47c41d34a31a3987c9a4d7d369f6ce01285d17a",
+    "poly_token_id": "0xfad5a723109f7efd82d82f0ce47c41d34a31a3987c9a4d7d369f6ce01285d17a-yes",
+    "kalshi_title": "MLB wins leader (Sonny Gray)",
+    "poly_title": "Will Sonny Gray lead MLB in pitcher wins for the 2026 season?",
+    "category": "sports",
+    "arb_net_accurate": 0.05,
+    "exec_profit": 20.0,
+    "exec_contracts": 400,
+    "kalshi_close": "2026-10-01T04:00:00+00:00",
+    "poly_close": "2026-10-01T04:00:00+00:00"
+   },
+   "question": "Is the MLB wins leader (Sonny Gray) pair a real arbitrage? Explain using the settlement rules.",
+   "expected": {
+    "mismatch": true,
+    "expected_flag_kinds": [
+     "tie_break"
+    ],
+    "allowed_extra_flag_kinds": [],
+    "must_mention_any": [
+     [
+      "tie",
+      "tied"
+     ],
+     [
+      "ERA",
+      "earned run",
+      "proportional"
+     ]
+    ],
+    "must_not_claim_mismatch": false
+   }
+  },
+  {
+   "id": "quebec",
+   "rule_texts": "quebec.json",
+   "short_name": "Quebec election 2nd place (CAQ)",
+   "pair": {
+    "kalshi_ticker": "KXQUEBEC2ND-26OCT05-2-CAQ",
+    "poly_id": "0xc2d9e2df0b1d1005b22ace7655928da4e92177718bd367372897aa1aff30d3c5",
+    "poly_token_id": "0xc2d9e2df0b1d1005b22ace7655928da4e92177718bd367372897aa1aff30d3c5-yes",
+    "kalshi_title": "Quebec election 2nd place (CAQ)",
+    "poly_title": "Will CAQ finish in second place in the Quebec general election?",
+    "category": "politics",
+    "arb_net_accurate": 0.04,
+    "exec_profit": 16.0,
+    "exec_contracts": 400,
+    "kalshi_close": "2026-10-06T04:00:00+00:00",
+    "poly_close": "2026-10-05T23:59:00+00:00"
+   },
+   "question": "Is the Quebec election 2nd place (CAQ) pair a real arbitrage? Explain using the settlement rules.",
+   "expected": {
+    "mismatch": true,
+    "expected_flag_kinds": [
+     "ranking_basis"
+    ],
+    "allowed_extra_flag_kinds": [
+     "tie_break"
+    ],
+    "must_mention_any": [
+     [
+      "seat"
+     ],
+     [
+      "vote"
+     ]
+    ],
+    "must_not_claim_mismatch": false
+   }
+  },
+  {
+   "id": "trump_xi_putin",
+   "rule_texts": "trump_xi_putin.json",
+   "short_name": "Trump, Xi and Putin together",
+   "pair": {
+    "kalshi_ticker": "KXTRUMPXIPUTIN-28JAN01-27JAN01",
+    "poly_id": "0x542376eacfaf03a742254d639f09b3b03bb9bc5fb496c3f1cd355116e1c700f4",
+    "poly_token_id": "0x542376eacfaf03a742254d639f09b3b03bb9bc5fb496c3f1cd355116e1c700f4-yes",
+    "kalshi_title": "Trump, Xi and Putin together",
+    "poly_title": "Trump, Putin, and Xi seen together before 2027?",
+    "category": "politics",
+    "arb_net_accurate": 0.06,
+    "exec_profit": 24.0,
+    "exec_contracts": 400,
+    "kalshi_close": "2027-01-01T04:00:00+00:00",
+    "poly_close": "2027-01-01T04:59:00+00:00"
+   },
+   "question": "Is the Trump, Xi and Putin together pair a real arbitrage? Explain using the settlement rules.",
+   "expected": {
+    "mismatch": true,
+    "expected_flag_kinds": [
+     "event_definition"
+    ],
+    "allowed_extra_flag_kinds": [],
+    "must_mention_any": [
+     [
+      "photo",
+      "photograph",
+      "videotaped",
+      "same frame"
+     ],
+     [
+      "meeting",
+      "trilateral",
+      "in person"
+     ]
+    ],
+    "must_not_claim_mismatch": false
+   }
+  },
+  {
+   "id": "cpi_core",
+   "rule_texts": "cpi_core.json",
+   "short_name": "Core CPI MoM Sept 2026",
+   "pair": {
+    "kalshi_ticker": "KXCPICORE-26SEP-T0.2",
+    "poly_id": "0xddf5a3cce8588c34d4970b002af99b4d2cee300d54ab6e8dcc86cba0b1e15096",
+    "poly_token_id": "0xddf5a3cce8588c34d4970b002af99b4d2cee300d54ab6e8dcc86cba0b1e15096-yes",
+    "kalshi_title": "Core CPI MoM Sept 2026",
+    "poly_title": "Will Core CPI MoM be 0.2% in September?",
+    "category": "economics",
+    "arb_net_accurate": 0.07,
+    "exec_profit": 28.0,
+    "exec_contracts": 400,
+    "kalshi_close": "2026-10-15T12:30:00+00:00",
+    "poly_close": "2026-10-15T12:30:00+00:00"
+   },
+   "question": "Is the Core CPI MoM Sept 2026 pair a real arbitrage? Explain using the settlement rules.",
+   "expected": {
+    "mismatch": true,
+    "expected_flag_kinds": [
+     "bucket_vs_threshold"
+    ],
+    "allowed_extra_flag_kinds": [],
+    "must_mention_any": [
+     [
+      "exactly",
+      "bucket",
+      "0.2%"
+     ],
+     [
+      "above",
+      "more than",
+      "threshold"
+     ]
+    ],
+    "must_not_claim_mismatch": false
+   }
+  },
+  {
+   "id": "measles",
+   "rule_texts": "measles.json",
+   "short_name": "US measles cases in 2026",
+   "pair": {
+    "kalshi_ticker": "KXMEASLES-26-6000",
+    "poly_id": "0x15c05c313a5a2743d3400b8f7250c418a94a8b6ed16fadf6ad29542d1673014b",
+    "poly_token_id": "0x15c05c313a5a2743d3400b8f7250c418a94a8b6ed16fadf6ad29542d1673014b-yes",
+    "kalshi_title": "US measles cases in 2026",
+    "poly_title": "Measles cases in US in 2026?",
+    "category": "health",
+    "arb_net_accurate": 0.03,
+    "exec_profit": 12.0,
+    "exec_contracts": 400,
+    "kalshi_close": "2027-01-15T15:00:00+00:00",
+    "poly_close": "2027-01-01T05:00:00+00:00"
+   },
+   "question": "Is the US measles cases in 2026 pair a real arbitrage? Explain using the settlement rules.",
+   "expected": {
+    "mismatch": false,
+    "expected_flag_kinds": [],
+    "allowed_extra_flag_kinds": [],
+    "must_mention_any": [],
+    "must_not_claim_mismatch": true
+   }
+  },
+  {
+   "id": "hurricane_category",
+   "rule_texts": "hurricane_category.json",
+   "short_name": "Hurricane Polo category",
+   "pair": {
+    "kalshi_ticker": "KXHURCAT-26POLO-T2",
+    "poly_id": "0xade5453906b46c44f0999d5f3b2f626f0197abf3d1860c450cdd6f4d4cb3123b",
+    "poly_token_id": "0xade5453906b46c44f0999d5f3b2f626f0197abf3d1860c450cdd6f4d4cb3123b-yes",
+    "kalshi_title": "Hurricane Polo category",
+    "poly_title": "What category will Hurricane Polo reach?",
+    "category": "weather",
+    "arb_net_accurate": 0.02,
+    "exec_profit": 8.0,
+    "exec_contracts": 400,
+    "kalshi_close": "2026-12-01T10:00:00+00:00",
+    "poly_close": "2026-12-01T05:00:00+00:00"
+   },
+   "question": "Is the Hurricane Polo category pair a real arbitrage? Explain using the settlement rules.",
+   "expected": {
+    "mismatch": false,
+    "expected_flag_kinds": [],
+    "allowed_extra_flag_kinds": [],
+    "must_mention_any": [],
+    "must_not_claim_mismatch": true
+   }
+  }
+ ]
+}
