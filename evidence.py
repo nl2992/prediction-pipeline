@@ -29,6 +29,11 @@ import store
 
 logger = logging.getLogger(__name__)
 
+# Module-level set of initialized DB paths. Since PRED_DASHBOARD_DB can change
+# within one process (per-test in conftest, or switched per case in tools),
+# we track which paths have been initialized, not just a single boolean.
+_initialized_db_paths: set[str] = set()
+
 KALSHI_BASE = "https://api.elections.kalshi.com/trade-api/v2"
 GAMMA_BASE = "https://gamma-api.polymarket.com"
 
@@ -204,6 +209,20 @@ def _age_seconds(iso_ts: str) -> float:
     return (datetime.now(timezone.utc) - ts).total_seconds()
 
 
+def _ensure_db_initialized() -> None:
+    """Lazy initialization of the database schema for the current DB path.
+
+    Since PRED_DASHBOARD_DB can change within one process (per-test or per case),
+    we track which paths have been initialized and initialize any new path on first
+    access. This ensures any caller (including the audit CLI) benefits from
+    schema initialization."""
+    global _initialized_db_paths
+    db_path_str = str(store.db_path())
+    if db_path_str not in _initialized_db_paths:
+        store.init_db()
+        _initialized_db_paths.add(db_path_str)
+
+
 def get_evidence(
     venue: str, market_id: str, max_age_s: int = DEFAULT_MAX_AGE_S, fetch: bool = True,
 ) -> dict | None:
@@ -224,6 +243,8 @@ def get_evidence(
 
     ``venue`` must be "kalshi" or "polymarket".
     """
+    _ensure_db_initialized()
+
     fetcher = _FETCHERS.get(venue)
     if fetcher is None:
         raise ValueError(f"unknown venue: {venue!r}")
