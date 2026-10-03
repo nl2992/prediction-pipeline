@@ -2097,5 +2097,101 @@ class Oct2026FalsePositiveFamilies(unittest.TestCase):
         self.assertTrue(d.match, d.reasons)
 
 
+class AlertHistoryFalsePositives(unittest.TestCase):
+    """2026-09-14 alerter-history false-positive families (v2 path), plus
+    direct helper tests that do not depend on older guards."""
+
+    def _rej(self, reason, *args):
+        d = decide_full(*args)
+        self.assertFalse(d.match)
+        self.assertTrue(any(reason in r for r in d.reasons), d.reasons)
+
+    def test_halftime_vs_margin_rejected(self):
+        for line, outcome in (("1.5", "Al-Ittihad Club"), ("2.5", "Al-Shamal")):
+            with self.subTest(line=line):
+                self._rej("settlement-period", outcome, "Al-Shamal vs. Al-Ittihad Club - Halftime Result",
+                          f"Al-Ittihad wins by more than {line} goals?", "Al-Shamal vs. Al-Ittihad Club: Spread")
+
+    def test_full_time_and_halftime_survive(self):
+        self.assertTrue(decide_full("Al-Ittihad Club", "Al-Shamal vs. Al-Ittihad Club",
+                                    "Al-Ittihad wins?", "Al-Shamal vs. Al-Ittihad Club").match)
+        self.assertTrue(decide_full("Al-Ittihad Club", "Al-Shamal vs. Al-Ittihad Club - Halftime Result",
+                                    "Al-Ittihad leads at halftime?", "Al-Shamal vs. Al-Ittihad Club: Halftime").match)
+
+    def test_near_miss_organisation_rejected_and_same_survives(self):
+        d = decide_full("Reporters Without Borders", "Nobel Peace Prize Winner 2026",
+                        "Who will win the Nobel Peace Prize? Doctors Without Borders (Médecins Sans Frontières)",
+                        "Who will win the Nobel Peace Prize?")
+        self.assertFalse(d.match)
+        d = decide_full("Doctors Without Borders", "Nobel Peace Prize Winner 2026",
+                        "Who will win the Nobel Peace Prize? Doctors Without Borders",
+                        "Who will win the Nobel Peace Prize?")
+        self.assertTrue(d.match, d.reasons)
+
+    def test_price_race_rejected_and_single_threshold_survives(self):
+        self._rej("price race", "by December 31, 2026", "When will Bitcoin hit $100k?",
+                  "Will BTC hit $50,000 before $100,000 by Dec 31, 2026? 50,000 first",
+                  "Will BTC hit $50,000 before $100,000?")
+        d = decide_full("by December 31, 2026", "When will Bitcoin hit $100k?",
+                        "Will BTC hit $100,000 by Dec 31, 2026?", "Will BTC hit $100,000?")
+        self.assertTrue(d.match, d.reasons)
+
+    def test_game_award_category_rejected_and_same_survives(self):
+        self._rej("award category", "Resident Evil Requiem", "The Game Awards: Best Audio Design",
+                  "2026 Game of the Year? Resident Evil Requiem", "2026 Game of the Year?")
+        d = decide_full("Resident Evil Requiem", "The Game Awards: Game of the Year",
+                        "2026 Game of the Year? Resident Evil Requiem", "2026 Game of the Year?")
+        self.assertTrue(d.match, d.reasons)
+
+    def test_vote_share_vs_first_place_rejected_and_finish_first_survives(self):
+        self._rej("vote-share", "Renan Santos", "Brazil Presidential Election First Round: 1st Place",
+                  "Will Renan Santos receive at least 12% of the popular vote in the first round of the "
+                  "2026 Brazilian presidential election?",
+                  "Brazilian presidential election: Renan Santos vote percent (1st Round)")
+        d = decide_full("Renan Santos", "Brazil Presidential Election First Round: 1st Place",
+                        "Will Renan Santos finish first in the first round?",
+                        "Brazil Presidential Election first round")
+        self.assertTrue(d.match, d.reasons)
+
+    def test_real_alerted_pairs_survive(self):
+        for args in (
+            ("Los Angeles Rams", "Pro Football: 2026-27 Best Regular Season Record",
+             "Will Los Angeles R have the best regular season record in the 2026-27 Pro Football season?",
+             "Best regular season record 2026-27"),
+            ("Centre Party (C)", "Which parties will be in next Swedish Government?",
+             "Will Centre Party be a part of the next government in Sweden?",
+             "Which parties will be in next Swedish Government?"),
+            ("Caribbean Premier League: Antigua And Barbuda Falcons",
+             "Caribbean Premier League: Antigua And Barbuda Falcons",
+             "Will Antigua And Barbuda Falcons win the 2026 Caribbean Premier League?",
+             "2026 Caribbean Premier League winner"),
+            ("Stefan Krkobabić", "Next Prime Minister of Serbia?",
+             "Will Stefan Krkobabić become Prime Minister of Serbia following the next Serbian election?",
+             "Next Prime Minister of Serbia?"),
+            ("Republican", "Which party wins 2028 US Presidential Election?",
+             "Will Republican win the Presidency in 2028? Republican party",
+             "Which party wins 2028 US Presidential Election?"),
+        ):
+            d = decide_full(*args)
+            self.assertTrue(d.match, (args, d.reasons))
+
+    def test_helpers_directly(self):
+        from semantic_scope import (
+            award_phrase_conflict, match_period_conflict, price_race_conflict,
+            vote_share_vs_placement_conflict,
+        )
+        self.assertTrue(match_period_conflict("Team A - Halftime Result", "Team A wins by more than 1.5 goals?"))
+        self.assertTrue(match_period_conflict("first half winner", "second half winner"))
+        self.assertFalse(match_period_conflict("Team A halftime", "Team A leads at the half-time break"))
+        self.assertFalse(match_period_conflict("GDP in the second half of 2026", "GDP growth in 2026"))
+        self.assertTrue(price_race_conflict("BTC $50,000 first", "When will Bitcoin hit $100k?"))
+        self.assertFalse(price_race_conflict("Will BTC hit $50,000?", "Will BTC hit $100,000?"))
+        self.assertTrue(award_phrase_conflict("The Game Awards: Best Audio Design", "Game of the Year"))
+        self.assertTrue(award_phrase_conflict("Oscars Best Actor", "Oscars Best Actress"))
+        self.assertFalse(award_phrase_conflict("Best regular season record award", "best record award"))
+        self.assertTrue(vote_share_vs_placement_conflict("at least 12% of the popular vote", "1st Place"))
+        self.assertFalse(vote_share_vs_placement_conflict("at least 12% of the popular vote", "1st Place in Goiás"))
+
+
 if __name__ == "__main__":
     unittest.main()
