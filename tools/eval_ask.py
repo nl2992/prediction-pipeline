@@ -43,7 +43,10 @@ BOOK_POLY = {"bids": [[0.40, 500], [0.39, 500]], "asks": [[0.45, 500], [0.46, 50
 BOOK_KALSHI = {"bids": [[0.50, 500], [0.49, 500]], "asks": [[0.55, 500], [0.56, 500]]}
 
 # Phrases that assert a rule mismatch. Used only for negative (genuine-pair) cases.
-MISMATCH_PHRASES = ("not a real arbitrage", "not the same", "mismatch", "do not match", "different rules")
+MISMATCH_PHRASES = ("not a real arbitrage", "not the same", "mismatch", "do not match", "different rules",
+                    "settlement risk", "resolve differently", "different settlement")
+# Phrases that assert the pair is genuine. Used to reject mismatch answers that conclude "real arbitrage".
+GENUINE_PHRASES = ("is a real arbitrage", "is a genuine arbitrage", "risk-free", "same contract", "they match")
 _NEGATION_RE = re.compile(r"\b(no|not|without|never|nor|isn't|aren't|doesn't|don't|zero)\b[^.\n]{0,40}$", re.I)
 _CITE_RE = re.compile(r"\[\^([^\]\s]{1,80})\]")
 
@@ -116,17 +119,26 @@ class ScriptedProvider:
 # Grading
 # ---------------------------------------------------------------------------
 
-def _asserts_mismatch(answer: str) -> list[str]:
-    """Mismatch-assertion phrases present in ``answer`` and not directly negated
-    (a negation word within 40 chars before the phrase, same sentence)."""
+def _asserted(answer: str, phrases: tuple[str, ...], always: tuple[str, ...] = ()) -> list[str]:
+    """Phrases present in ``answer`` and not directly negated (a negation word
+    within 40 chars before the phrase, same sentence). ``always`` phrases are
+    already negative in form and skip the guard."""
     low = answer.lower()
     hits = []
-    for phrase in MISMATCH_PHRASES:
+    for phrase in phrases:
         for m in re.finditer(re.escape(phrase), low):
-            if phrase == "not a real arbitrage" or not _NEGATION_RE.search(low[max(0, m.start() - 40): m.start()]):
+            if phrase in always or not _NEGATION_RE.search(low[max(0, m.start() - 40): m.start()]):
                 hits.append(phrase)
                 break
     return hits
+
+
+def _asserts_mismatch(answer: str) -> list[str]:
+    return _asserted(answer, MISMATCH_PHRASES, always=("not a real arbitrage",))
+
+
+def _asserts_genuine(answer: str) -> list[str]:
+    return _asserted(answer, GENUINE_PHRASES)
 
 
 def grade(case: dict, response: dict) -> dict:
@@ -134,7 +146,8 @@ def grade(case: dict, response: dict) -> dict:
 
     Checks (all must pass): status ok; rule citations (one per venue for
     mismatch cases, >=1 for negatives); every must_mention_any group hit
-    (mismatch cases); no un-negated mismatch phrase (negative cases);
+    (mismatch cases); mismatch cases must conclude a mismatch and not assert
+    the pair is genuine; no un-negated mismatch phrase (negative cases);
     get_pair_evidence/search_rules called; every [^id] in the answer is a
     returned citation; fixture rule_diff flag kinds match the case.
     """
@@ -151,6 +164,7 @@ def grade(case: dict, response: dict) -> dict:
         checks["rule_citation_each_venue"] = {"kalshi", "polymarket"} <= venues
         checks["must_mention_all_groups"] = all(
             any(alt.lower() in low for alt in group) for group in exp.get("must_mention_any") or [])
+        checks["concludes_mismatch"] = bool(_asserts_mismatch(answer)) and not _asserts_genuine(answer)
     else:
         checks["rule_citation_any"] = len(rule_cites) >= 1
         if exp.get("must_not_claim_mismatch"):

@@ -98,3 +98,14 @@ def test_main_scripted_writes_json(tmp_path, capsys):
     out = tmp_path / "res.json"
     assert eval_ask.main(["--out", str(out)]) == 0
     assert out.exists() and '"mode": "scripted"' in out.read_text()
+
+
+def test_grade_mismatch_must_conclude_mismatch():
+    bad = _resp("Kalshi ranks by seats and votes differ on Polymarket, but this is a real arbitrage [^r1][^r2].")
+    g = eval_ask.grade(CASES["quebec"], bad)
+    assert g["checks"]["must_mention_all_groups"] is True
+    assert g["checks"]["concludes_mismatch"] is False and not g["passed"]
+    good = _resp("This is not a real arbitrage because Polymarket ranks by seats while Kalshi ranks "
+                 "by votes [^r1][^r2].")
+    g = eval_ask.grade(CASES["quebec"], good)
+    assert g["checks"]["concludes_mismatch"] is True and g["passed"], g
