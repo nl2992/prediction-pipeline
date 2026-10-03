@@ -582,6 +582,71 @@ class LiveTopTenRemediation(unittest.TestCase):
                "Golfers to compete in the Presidents Cup this year", "J.J. Spaun")
         self.assertIsNone(context_veto(p, k))
 
+    def test_party_contest_election_vs_person_winner_rejected(self):
+        # Ranked-audit rank 10: Kalshi's "a party founded by Elon Musk" is
+        # both a different predicate (contesting vs winning) and a different
+        # subject (the party, not Musk) from Polymarket's "Elon Musk" winner
+        # outcome. The predicate mismatch alone is enough to veto here.
+        p = pm("Elon Musk", "Presidential Election Winner 2028")
+        k = ks("Will a party founded by Elon Musk contest the 2028 U.S. presidential election?",
+               "Will the America Party contest the 2028 U.S. presidential election?")
+        self.assertEqual(context_veto(p, k), "tournament participation vs winner")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_founded_by_party_vs_person_same_predicate_rejected(self):
+        # Same predicate (winning) on both sides, but the Kalshi subject is
+        # "a party founded by Elon Musk", not Musk himself.
+        p = pm("Elon Musk", "Presidential Election Winner 2028")
+        k = ks("Will a party founded by Elon Musk win the 2028 U.S. presidential election?",
+               "Will the America Party win the 2028 U.S. presidential election?")
+        self.assertEqual(context_veto(p, k), "organization founded by person vs person")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_person_winner_survives(self):
+        self.assertIsNone(context_veto(
+            pm("Elon Musk", "Presidential Election Winner 2028"),
+            ks("Will Elon Musk win the 2028 US presidential election?",
+               "2028 US Presidential Election Winner", "Elon Musk")))
+
+    def test_party_contest_vs_field_candidate_survives(self):
+        self.assertIsNone(context_veto(
+            pm("Yes", "Will the America Party contest the 2028 election?"),
+            ks("Will the America Party field a 2028 presidential candidate?",
+               "Will the America Party field a 2028 presidential candidate?", "Yes")))
+
+    def test_eurovision_song_contest_not_participant(self):
+        from semantic_scope import competition_result_scope
+        self.assertEqual(
+            competition_result_scope("Eurovision Song Contest winner 2026"), "winner")
+        self.assertEqual(
+            competition_result_scope("hot dog eating contest champion"), "winner")
+
+    def test_steel_bridge_vs_ncaa_football_rejected(self):
+        p = pm("Notre Dame", "Steel Bridge National Championship Winner")
+        k = ks("Will Notre Dame Fighting Irish win the 2027 National Champion?",
+               "NCAA Football: 2027 National Champion", "Notre Dame Fighting Irish")
+        self.assertEqual(context_veto(p, k), "competition identity mismatch")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_same_competition_identity_survives(self):
+        p = pm("Notre Dame", "College Football Playoff National Champion: Notre Dame")
+        k = ks("Will Notre Dame win the NCAA Football national championship?",
+               "College Football Playoff National Champion", "Notre Dame")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_competition_identity_neutral_when_one_side_unidentified(self):
+        p = pm("Notre Dame", "Who will win the championship?")
+        k = ks("Will Notre Dame Fighting Irish win the 2027 National Champion?",
+               "NCAA Football: 2027 National Champion", "Notre Dame Fighting Irish")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_frozen_four_vs_college_world_series_rejected(self):
+        p = pm("Texas", "Frozen Four Champion")
+        k = ks("Will Texas win the College World Series?",
+               "College World Series Champion", "Texas")
+        self.assertEqual(context_veto(p, k), "competition identity mismatch")
+        self.assertFalse(is_compatible_match(p, k))
+
     def test_inter_milan_vs_milan_rejected(self):
         p = pm("Inter Milan", "Serie A Top 4 Finishers (2026-27)")
         k = ks("Will Milan finish in the top 4 in the Serie A season?",
@@ -594,6 +659,37 @@ class LiveTopTenRemediation(unittest.TestCase):
         k = ks("Will Milan finish in the top 4 in the Serie A season?",
                "Serie A Top 4 Finishers", "Milan")
         self.assertIsNone(context_veto(p, k))
+
+    def test_mvp_vs_platinum_glove_same_player_rejected(self):
+        # Same player, different award: Kalshi's AL MVP market vs
+        # Polymarket's AL Platinum Glove outcome for Ceddanne Rafaela.
+        p = pm("Ceddanne Rafaela", "MLB: AL Platinum Glove Winner")
+        k = ks("Will Ceddanne Rafaela win AL MVP?", "MLB: AL MVP")
+        self.assertEqual(context_veto(p, k), "different award category")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_al_mvp_phrasing_variants_survive(self):
+        p = pm("Ceddanne Rafaela", "MLB: American League MVP")
+        k = ks("Will Ceddanne Rafaela win AL MVP?", "AL MVP winner")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_album_vs_record_of_the_year_rejected(self):
+        p = pm("Noah Kahan", "Grammys 2027: Record of the Year Winner")
+        k = ks("Will Noah Kahan win Album of the Year?", "Grammys 2027: Album of the Year")
+        self.assertEqual(context_veto(p, k), "different award category")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_grammys_album_of_the_year_phrasing_variants_survive(self):
+        p = pm("The Great Divide",
+               "Grammys 2027: Album of the Year Winner / The Great Divide - Noah Kahan")
+        k = ks("Will The Great Divide win Album of the Year?", "Grammys 2027: Album of the Year")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_best_actor_vs_best_supporting_actor_rejected(self):
+        p = pm("Timothee Chalamet", "Oscars 2027: Best Supporting Actor Winner")
+        k = ks("Will Timothee Chalamet win Best Actor?", "Oscars 2027: Best Actor")
+        self.assertEqual(context_veto(p, k), "different award category")
+        self.assertFalse(is_compatible_match(p, k))
 
     def test_single_race_vs_combo_market_rejected(self):
         p = pm("Cindy Holscher (D)", "Kansas Governor Election Winner")
@@ -831,3 +927,79 @@ class Pass11Precision(unittest.TestCase):
         self.assertFalse(_event_titles_agree(
             pm("Taylor Swift", "Spotify most streamed artist"),
             ks("Taylor Swift", "NFL draft first pick")))
+
+
+def pm_q(label, event, question):
+    """Like pm(), but also carries a full_question (as Polymarket does for a
+    ladder outcome, where the short label alone doesn't show the "be <value>"
+    exact-bucket wording)."""
+    return MarketSnapshot("polymarket", "p", "pe", label, "open", None, "",
+                          OrderBook(bids=[], asks=[]),
+                          extra={"event_title": event, "full_question": question})
+
+
+class BucketVsThreshold(unittest.TestCase):
+    """False positive: an exact-value bucket ("0.2%") on a Polymarket ladder
+    is a different contract from a Kalshi open-ended threshold ("Above
+    0.2%"), even though they share a strike."""
+
+    def test_cpi_exact_bucket_vs_above_threshold_rejected(self):
+        p = pm_q("0.2%", "Core CPI MoM - September 2026",
+                  "Will Core CPI MoM be 0.2% in September?")
+        k = ks("Will CPI Core rise more than 0.2% in September? Above 0.2%",
+               "CPI core in September")
+        self.assertEqual(context_veto(p, k), "exact-value bucket vs open-ended threshold")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_threshold_vs_threshold_survives(self):
+        p = pm_q("Above 0.2%", "Core CPI MoM - September 2026",
+                  "Core CPI above 0.2%?")
+        k = ks("Above 0.2%", "CPI core in September")
+        self.assertNotEqual(context_veto(p, k), "exact-value bucket vs open-ended threshold")
+
+    def test_bucket_vs_bucket_survives(self):
+        p = pm_q("0.3%", "Core CPI MoM - September 2026",
+                  "Will Core CPI MoM be 0.3% in September?")
+        k = ks("Will core CPI be exactly 0.3%?", "CPI core in September")
+        self.assertNotEqual(context_veto(p, k), "exact-value bucket vs open-ended threshold")
+
+    def test_measles_ladder_edge_threshold_survives(self):
+        # Polymarket's ladder-edge rung "↑6k" is itself open-ended (a
+        # threshold), not an exact bucket, so it must not be vetoed against
+        # Kalshi's open-ended "Above 6000" threshold.
+        p = pm_q("↑6k", "Measles cases in U.S. in 2026?",
+                  "Will there be at least 6000 measles cases in the U.S. in 2026?")
+        k = ks("Will there be more than 6000 measles cases in 2026? Above 6000",
+               "Measles cases in 2026")
+        self.assertNotEqual(context_veto(p, k), "exact-value bucket vs open-ended threshold")
+
+
+class ElectionOfficeConflict(unittest.TestCase):
+    """False positive: a US House district race is a different office/race
+    level from a presidential nominee market, even when the same person's
+    name appears on both sides."""
+
+    def test_house_district_vs_presidential_nominee_rejected(self):
+        p = pm("Mike Johnson", "Republican Presidential Nominee 2028")
+        k = ks("Will Mike Johnson be the Republican nominee for LA-04?",
+               "LA-04 Republican nominee?")
+        self.assertEqual(context_veto(p, k), "different office/race level")
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_same_district_survives(self):
+        p = pm("Mike Johnson", "LA-04 Republican nominee?")
+        k = ks("Will Mike Johnson be the Republican nominee for LA-04?",
+               "LA-04 Republican nominee?")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_presidential_nominee_survives(self):
+        p = pm("Mike Johnson", "Republican Presidential Nominee 2028")
+        k = ks("Will Mike Johnson be the 2028 Republican presidential nominee?",
+               "Republican Presidential Nominee 2028", "Mike Johnson")
+        self.assertIsNone(context_veto(p, k))
+
+    def test_unidentified_office_is_neutral(self):
+        p = pm("Mike Johnson", "Who will win?")
+        k = ks("Will Mike Johnson be the Republican nominee for LA-04?",
+               "LA-04 Republican nominee?")
+        self.assertIsNone(context_veto(p, k))

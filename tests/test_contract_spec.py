@@ -1615,6 +1615,79 @@ class LiveTopTenSemanticGuards(unittest.TestCase):
         )
         self.assertTrue(d.match, d.reasons)
 
+    def test_party_contest_election_vs_person_winner_rejected(self):
+        # Ranked-audit rank 10: "a party founded by Elon Musk" contesting the
+        # election is a different predicate (participate vs win) from Musk
+        # winning it — the predicate mismatch alone rejects this pair.
+        d = decide_full(
+            "Elon Musk", "Presidential Election Winner 2028",
+            "Will a party founded by Elon Musk contest the 2028 U.S. presidential election?",
+            "Will the America Party contest the 2028 U.S. presidential election?",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("tournament participation vs winner", d.reasons)
+
+    def test_founded_by_party_vs_person_same_predicate_rejected(self):
+        # Same predicate (winning) on both sides, but the subject on one side
+        # is "a party founded by Elon Musk", not Musk himself.
+        d = decide_full(
+            "Elon Musk", "Presidential Election Winner 2028",
+            "Will a party founded by Elon Musk win the 2028 U.S. presidential election?",
+            "Will the America Party win the 2028 U.S. presidential election?",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("organization founded by person vs person", d.reasons)
+
+    def test_person_winner_remains_matchable(self):
+        d = decide_full(
+            "Elon Musk", "Presidential Election Winner 2028",
+            "Will Elon Musk win the 2028 US presidential election?",
+            "2028 US Presidential Election Winner",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_party_contest_vs_field_candidate_remains_matchable(self):
+        d = decide_full(
+            "Yes", "Will the America Party contest the 2028 election?",
+            "Will the America Party field a 2028 presidential candidate?",
+            "Will the America Party field a 2028 presidential candidate?",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_steel_bridge_vs_ncaa_football_rejected(self):
+        d = decide_full(
+            "Notre Dame", "Steel Bridge National Championship Winner",
+            "Will Notre Dame Fighting Irish win the 2027 National Champion?",
+            "NCAA Football: 2027 National Champion",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("competition identity mismatch", d.reasons)
+
+    def test_same_competition_identity_remains_matchable(self):
+        d = decide_full(
+            "Notre Dame", "College Football Playoff National Champion: Notre Dame",
+            "Will Notre Dame win the NCAA Football national championship?",
+            "College Football Playoff National Champion",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_competition_identity_neutral_when_one_side_unidentified(self):
+        d = decide_full(
+            "Notre Dame", "Who will win the championship?",
+            "Will Notre Dame Fighting Irish win the 2027 National Champion?",
+            "NCAA Football: 2027 National Champion",
+        )
+        self.assertNotIn("competition identity mismatch", d.reasons)
+
+    def test_frozen_four_vs_college_world_series_rejected(self):
+        d = decide_full(
+            "Texas", "Frozen Four Champion",
+            "Will Texas win the College World Series?",
+            "College World Series Champion",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("competition identity mismatch", d.reasons)
+
     def test_inter_milan_vs_milan_rejected(self):
         d = decide_full(
             "Inter Milan", "Serie A Top 4 Finishers (2026-27)",
@@ -1623,6 +1696,46 @@ class LiveTopTenSemanticGuards(unittest.TestCase):
         )
         self.assertFalse(d.match)
         self.assertIn("different club/team", d.reasons)
+
+    def test_mvp_vs_platinum_glove_same_player_rejected(self):
+        # Same player, different award: Kalshi's AL MVP market vs Polymarket's
+        # AL Platinum Glove outcome for Ceddanne Rafaela.
+        d = decide_full(
+            "Ceddanne Rafaela", "MLB: AL Platinum Glove Winner",
+            "Will Ceddanne Rafaela win AL MVP?", "MLB: AL MVP",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("different award category", d.reasons)
+
+    def test_al_mvp_phrasing_variants_remain_matchable(self):
+        d = decide_full(
+            "Ceddanne Rafaela", "MLB: American League MVP",
+            "Will Ceddanne Rafaela win AL MVP?", "AL MVP winner",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_album_vs_record_of_the_year_rejected(self):
+        d = decide_full(
+            "Noah Kahan", "Grammys 2027: Record of the Year Winner",
+            "Will Noah Kahan win Album of the Year?", "Grammys 2027: Album of the Year",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("different award category", d.reasons)
+
+    def test_grammys_album_of_the_year_phrasing_variants_remain_matchable(self):
+        d = decide_full(
+            "The Great Divide", "Grammys 2027: Album of the Year Winner / The Great Divide - Noah Kahan",
+            "Will The Great Divide win Album of the Year?", "Grammys 2027: Album of the Year",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_best_actor_vs_best_supporting_actor_rejected(self):
+        d = decide_full(
+            "Timothee Chalamet", "Oscars 2027: Best Supporting Actor Winner",
+            "Will Timothee Chalamet win Best Actor?", "Oscars 2027: Best Actor",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("different award category", d.reasons)
 
     def test_ac_milan_alias_remains_matchable(self):
         d = decide_full(
@@ -1792,6 +1905,108 @@ class SharedSemanticScopeTests(unittest.TestCase):
         text = "Will Labour be part of the next government?"
         d = decide_full(text, text, text, text)
         self.assertTrue(d.match, d.reasons)
+
+
+def snap_q(title: str, event_title: str, question: str = "",
+           close: str = "2026-12-31T00:00:00Z") -> MarketSnapshot:
+    """snap() but also carrying a full_question in extra, as Polymarket
+    ladder outcomes do (the short outcome label alone doesn't show the
+    "be <value>" exact-bucket wording)."""
+    return MarketSnapshot(
+        source="x", market_id=title[:12], event_id="", title=title, status="open",
+        close_time=close, fetched_at="x",
+        orderbook=OrderBook(bids=[PriceLevel(0.4, 9.0)], asks=[PriceLevel(0.5, 9.0)]),
+        extra={"event_title": event_title, "full_question": question},
+    )
+
+
+def decide_q(p_title, p_event, p_question, k_title, k_event, k_question=""):
+    p = snap_q(p_title, p_event, p_question)
+    k = snap_q(k_title, k_event, k_question)
+    return match_spec(
+        extract_spec(p), extract_spec(k),
+        same_event=bool(p_event and k_event and p_event == k_event),
+        events_agree=_event_titles_agree(p, k),
+    )
+
+
+class BucketVsThresholdTests(unittest.TestCase):
+    """False positive: an exact-value bucket ("0.2%") on a Polymarket ladder
+    is a different contract from a Kalshi open-ended threshold ("Above
+    0.2%"), even though they share a strike."""
+
+    def test_cpi_exact_bucket_vs_above_threshold_rejected(self):
+        d = decide_q(
+            "0.2%", "Core CPI MoM - September 2026",
+            "Will Core CPI MoM be 0.2% in September?",
+            "Will CPI Core rise more than 0.2% in September? Above 0.2%",
+            "CPI core in September",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("exact-value bucket vs open-ended threshold", d.reasons)
+
+    def test_threshold_vs_threshold_survives(self):
+        d = decide_q(
+            "Above 0.2%", "Core CPI MoM - September 2026", "Core CPI above 0.2%?",
+            "Above 0.2%", "CPI core in September",
+        )
+        self.assertNotIn("exact-value bucket vs open-ended threshold", d.reasons)
+
+    def test_bucket_vs_bucket_survives(self):
+        d = decide_q(
+            "0.3%", "Core CPI MoM - September 2026",
+            "Will Core CPI MoM be 0.3% in September?",
+            "Will core CPI be exactly 0.3%?", "CPI core in September",
+        )
+        self.assertNotIn("exact-value bucket vs open-ended threshold", d.reasons)
+
+    def test_measles_ladder_edge_threshold_survives(self):
+        d = decide_q(
+            "↑6k", "Measles cases in U.S. in 2026?",
+            "Will there be at least 6000 measles cases in the U.S. in 2026?",
+            "Will there be more than 6000 measles cases in 2026? Above 6000",
+            "Measles cases in 2026",
+        )
+        self.assertNotIn("exact-value bucket vs open-ended threshold", d.reasons)
+
+
+class ElectionOfficeConflictTests(unittest.TestCase):
+    """False positive: a US House district race is a different office/race
+    level from a presidential nominee market, even when the same person's
+    name appears on both sides."""
+
+    def test_house_district_vs_presidential_nominee_rejected(self):
+        d = decide_full(
+            "Mike Johnson", "Republican Presidential Nominee 2028",
+            "Will Mike Johnson be the Republican nominee for LA-04?",
+            "LA-04 Republican nominee?",
+        )
+        self.assertFalse(d.match)
+        self.assertIn("different office/race level", d.reasons)
+
+    def test_same_district_survives(self):
+        d = decide_full(
+            "Mike Johnson", "LA-04 Republican nominee?",
+            "Will Mike Johnson be the Republican nominee for LA-04?",
+            "LA-04 Republican nominee?",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_presidential_nominee_survives(self):
+        d = decide_full(
+            "Mike Johnson", "Republican Presidential Nominee 2028",
+            "Will Mike Johnson be the 2028 Republican presidential nominee?",
+            "Republican Presidential Nominee 2028",
+        )
+        self.assertTrue(d.match, d.reasons)
+
+    def test_unidentified_office_is_neutral(self):
+        d = decide_full(
+            "Mike Johnson", "Who will win?",
+            "Will Mike Johnson be the Republican nominee for LA-04?",
+            "LA-04 Republican nominee?",
+        )
+        self.assertNotIn("different office/race level", d.reasons)
 
 
 if __name__ == "__main__":

@@ -26,10 +26,14 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from semantic_scope import (
+    bucket_threshold_conflict,
     club_team_scope,
+    competition_identity_conflict,
     competition_result_scope,
     election_office_bundle,
+    election_office_conflict,
     f1_career_scope,
+    founded_by_conflict,
     government_outcome_scope,
     judicial_selection_stage,
     league_outcome_scope,
@@ -1754,8 +1758,30 @@ _AWARD_CATEGORIES = (
     ("comeback", r"\bcomeback player\b|\bcpoty\b"),
     ("offensive_player", r"\boffensive player\b|\bopoty\b"),
     ("defensive_player", r"\bdefensive player\b|\bdpoty\b"),
-    ("rookie", r"\brookie of the year\b|\broty\b"),
-    ("mvp", r"\bmvp\b|\bmost valuable player\b"),
+    # "Offensive/Defensive Rookie of the Year" is a distinct named award from
+    # the plain "Rookie of the Year" (and from Offensive/Defensive Player of
+    # the Year above, which the "player"-not-"rookie" wording already keeps
+    # separate) — the lookbehind keeps a qualified rookie mention out of the
+    # generic "rookie" tag below so the two stay disjoint.
+    ("rookie_offensive", r"\boffensive rookie of the year\b"),
+    ("rookie_defensive", r"\bdefensive rookie of the year\b"),
+    ("rookie", r"(?<!offensive )(?<!defensive )\brookie of the year\b|\broty\b"),
+    # World Series/Super Bowl/(NBA) Finals MVP are stage-specific honors, not
+    # the regular-season MVP (audit FP: Ceddanne Rafaela "AL MVP" vs an
+    # unrelated award for the same player) — same lookbehind-dedup approach.
+    ("mvp_world_series", r"\bworld series mvp\b"),
+    ("mvp_super_bowl", r"\bsuper bowl mvp\b"),
+    ("mvp_finals", r"\b(?:nba )?finals mvp\b"),
+    ("mvp", r"(?<!world series )(?<!super bowl )(?<!finals )\bmvp\b|\bmost valuable player\b"),
+    ("cy_young", r"\bcy young\b"),
+    ("gold_glove", r"\bgold glove\b"),
+    ("platinum_glove", r"\bplatinum glove\b"),
+    ("silver_slugger", r"\bsilver slugger\b"),
+    ("hank_aaron", r"\bhank aaron award\b"),
+    ("sixth_man", r"\bsixth man\b"),
+    ("most_improved", r"\bmost improved player\b|\bmip award\b"),
+    ("clutch_player", r"\bclutch player\b"),
+    ("ballon_dor", r"\bballon d'?or\b"),
     ("coach", r"\bcoach of the year\b|\bmanager of the year\b|\bmoty\b"),
     # Film/TV/music categories — "Best Actress" is not "Best Actor".
     ("supporting_actor", r"\bbest supporting actor\b"),
@@ -2436,6 +2462,17 @@ def context_veto(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> str | None
         return "hole-in-one occurrence vs tournament winner"
     if {pcomp, kcomp} == {"participant", "winner"}:
         return "tournament participation vs winner"
+    # A party founded by (or belonging to) a person is not that person.
+    if founded_by_conflict(pt, kt):
+        return "organization founded by person vs person"
+    if competition_identity_conflict(pt, kt):
+        return "competition identity mismatch"
+    # An exact-value bucket ("be 0.2%") and an open-ended threshold ("above
+    # 0.2%") are disjoint outcomes even on the same strike. The question text
+    # (e.g. "Will Core CPI MoM be 0.2%?") often carries the only "be <value>"
+    # signal, so this check reads the full snapshot text, not just pt/kt.
+    if bucket_threshold_conflict(_snapshot_text(poly), _snapshot_text(kalshi)):
+        return "exact-value bucket vs open-ended threshold"
     pj, kj = judicial_selection_stage(pt), judicial_selection_stage(kt)
     if {pj, kj} == {"nomination", "seated"}:
         return "judicial nomination vs becoming justice"
@@ -2445,6 +2482,8 @@ def context_veto(poly: "MarketSnapshot", kalshi: "MarketSnapshot") -> str | None
     poffices, koffices = election_office_bundle(pt), election_office_bundle(kt)
     if poffices and koffices and poffices != koffices and (len(poffices) > 1 or len(koffices) > 1):
         return "single race vs combo market"
+    if election_office_conflict(pt, kt):
+        return "different office/race level"
     pparties, kparties = party_list_scope(pt), party_list_scope(kt)
     if len(pparties) == len(kparties) == 1 and pparties.isdisjoint(kparties):
         return "party alliance vs member party"

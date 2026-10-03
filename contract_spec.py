@@ -37,10 +37,14 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from semantic_scope import (
+    bucket_threshold_conflict,
     club_team_scope,
+    competition_identity_conflict,
     competition_result_scope,
     election_office_bundle,
+    election_office_conflict,
     f1_career_scope,
+    founded_by_conflict,
     government_outcome_scope,
     judicial_selection_stage,
     league_outcome_scope,
@@ -1110,6 +1114,13 @@ def match_spec(
         return _reject("hole-in-one occurrence vs tournament winner")
     if {competition_a, competition_b} == {"participant", "winner"}:
         return _reject("tournament participation vs winner")
+    # A party founded by (or belonging to) a person is not that person.
+    if founded_by_conflict(a.raw, b.raw):
+        return _reject("organization founded by person vs person")
+    if competition_identity_conflict(a.raw, b.raw):
+        return _reject("competition identity mismatch")
+    if bucket_threshold_conflict(a.raw, b.raw):
+        return _reject("exact-value bucket vs open-ended threshold")
     judicial_a = judicial_selection_stage(a.raw)
     judicial_b = judicial_selection_stage(b.raw)
     if {judicial_a, judicial_b} == {"nomination", "seated"}:
@@ -1122,6 +1133,8 @@ def match_spec(
     offices_b = election_office_bundle(b.raw)
     if offices_a and offices_b and offices_a != offices_b and (len(offices_a) > 1 or len(offices_b) > 1):
         return _reject("single race vs combo market")
+    if election_office_conflict(a.raw, b.raw):
+        return _reject("different office/race level")
     parties_a = party_list_scope(a.raw)
     parties_b = party_list_scope(b.raw)
     if len(parties_a) == len(parties_b) == 1 and parties_a.isdisjoint(parties_b):
