@@ -182,5 +182,42 @@ class GetEvidenceCaching(unittest.TestCase):
             evidence.get_evidence("nasdaq", "X")
 
 
+class LazyDBInitialization(unittest.TestCase):
+    def test_get_evidence_on_uninitialized_db_initializes_schema(self):
+        """Verify that get_evidence lazy-initializes the DB schema
+        on the first call, without requiring explicit store.init_db()."""
+        # Reset the module-level flag to simulate a fresh process.
+        evidence._db_initialized = False
+
+        # Mock _http_get_json to return a response so we don't hit the network.
+        with patch("evidence._http_get_json", side_effect=_kalshi_responder("Some rules.")):
+            row = evidence.get_evidence("kalshi", "TICK_FRESH", max_age_s=0, fetch=True)
+
+        # Verify the call succeeded and stored data.
+        self.assertIsNotNone(row)
+        self.assertEqual(row["rules_text"], "Some rules.")
+
+        # Verify the DB was initialized by checking we can query it.
+        latest = store.latest_evidence("kalshi", "TICK_FRESH")
+        self.assertIsNotNone(latest)
+        self.assertEqual(latest["rules_text"], "Some rules.")
+
+    def test_get_evidence_idempotent_multiple_calls_after_lazy_init(self):
+        """Verify that after the first call initializes the DB, subsequent
+        calls work without re-initializing."""
+        evidence._db_initialized = False
+
+        # First call initializes with kalshi.
+        with patch("evidence._http_get_json", side_effect=_kalshi_responder("First.")):
+            row1 = evidence.get_evidence("kalshi", "TICK1", max_age_s=0, fetch=True)
+        self.assertEqual(row1["rules_text"], "First.")
+
+        # Second call uses the initialized DB with polymarket.
+        with patch("evidence._http_get_json", side_effect=_poly_responder("Second.")):
+            row2 = evidence.get_evidence("polymarket", "0xabc", max_age_s=0, fetch=True)
+        self.assertIsNotNone(row2)
+        self.assertIn("Second.", row2["rules_text"])
+
+
 if __name__ == "__main__":
     unittest.main()

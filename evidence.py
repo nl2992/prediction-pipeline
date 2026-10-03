@@ -29,6 +29,10 @@ import store
 
 logger = logging.getLogger(__name__)
 
+# Module-level flag to ensure init_db is called once per process before the
+# first store access. This makes get_evidence resilient to a missing schema.
+_db_initialized = False
+
 KALSHI_BASE = "https://api.elections.kalshi.com/trade-api/v2"
 GAMMA_BASE = "https://gamma-api.polymarket.com"
 
@@ -204,6 +208,16 @@ def _age_seconds(iso_ts: str) -> float:
     return (datetime.now(timezone.utc) - ts).total_seconds()
 
 
+def _ensure_db_initialized() -> None:
+    """Lazy initialization of the database schema. Called once per process
+    before the first store access in get_evidence so that any caller
+    (including the audit CLI) benefits from schema initialization."""
+    global _db_initialized
+    if not _db_initialized:
+        store.init_db()
+        _db_initialized = True
+
+
 def get_evidence(
     venue: str, market_id: str, max_age_s: int = DEFAULT_MAX_AGE_S, fetch: bool = True,
 ) -> dict | None:
@@ -224,6 +238,8 @@ def get_evidence(
 
     ``venue`` must be "kalshi" or "polymarket".
     """
+    _ensure_db_initialized()
+
     fetcher = _FETCHERS.get(venue)
     if fetcher is None:
         raise ValueError(f"unknown venue: {venue!r}")

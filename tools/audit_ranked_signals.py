@@ -22,6 +22,7 @@ from alerter import compute_signals
 from discover import discover
 
 import evidence
+import store
 from rule_diff import compare_rules
 
 
@@ -73,14 +74,21 @@ def _attach_rule_flags(row: dict[str, Any], get_evidence_fn: Callable[..., dict 
     """Mutates ``row`` in place, adding a "rule_flags" list -- the whole
     point of ``--with-rules``: title-level matching (everything else in this
     audit) can't see a settlement-rule difference, only fetching the actual
-    rule text and diffing it can (Phase 2d)."""
+    rule text and diffing it can (Phase 2d).
+
+    On error, sets "rule_flags" to None and "rule_flags_error" to a
+    short error description, allowing the audit to continue."""
     kalshi_ticker = row.get("kalshi_ticker")
     poly_id = row.get("poly_id")
-    kalshi_evidence = get_evidence_fn("kalshi", kalshi_ticker) if kalshi_ticker else None
-    poly_evidence = get_evidence_fn("polymarket", poly_id) if poly_id else None
-    kalshi_text = kalshi_evidence.get("rules_text") if kalshi_evidence else None
-    poly_text = poly_evidence.get("rules_text") if poly_evidence else None
-    row["rule_flags"] = compare_rules(kalshi_text, poly_text)
+    try:
+        kalshi_evidence = get_evidence_fn("kalshi", kalshi_ticker) if kalshi_ticker else None
+        poly_evidence = get_evidence_fn("polymarket", poly_id) if poly_id else None
+        kalshi_text = kalshi_evidence.get("rules_text") if kalshi_evidence else None
+        poly_text = poly_evidence.get("rules_text") if poly_evidence else None
+        row["rule_flags"] = compare_rules(kalshi_text, poly_text)
+    except Exception as e:
+        row["rule_flags"] = None
+        row["rule_flags_error"] = f"{type(e).__name__}: {str(e)}"
 
 
 def run(
@@ -103,12 +111,19 @@ def run(
     ``with_rules`` (default off, so existing callers/fixtures see unchanged
     output) fetches settlement-rule evidence for each top-N signal's two
     markets and adds a ``rule_flags`` list to it (see ``rule_diff.compare_rules``),
-    plus a top-level ``high_severity_rule_flag_pairs`` count.
+    plus a top-level ``high_severity_rule_flag_pairs`` count. If an error
+    occurs during rule-flag attachment for a row, that row gets ``rule_flags``
+    set to None and ``rule_flags_error`` set to an error description, and the
+    audit continues. A ``rule_flag_errors`` count is added to the result.
     """
     if top_n <= 0:
         raise ValueError("top_n must be positive")
     if min_size <= 0:
         raise ValueError("min_size must be positive for a depth-backed audit")
+
+    # Initialize the database schema if we need to fetch evidence.
+    if with_rules:
+        store.init_db()
 
     coverage: dict[str, Any] = {}
     pairs = discover_fn(
@@ -150,12 +165,16 @@ def run(
     }
 
     if with_rules:
+        rule_flag_errors = 0
         for row in ranked:
             _attach_rule_flags(row, get_evidence_fn)
+            if row.get("rule_flags_error"):
+                rule_flag_errors += 1
         result["high_severity_rule_flag_pairs"] = sum(
             1 for row in ranked
             if any(flag.get("severity") == "high" for flag in row.get("rule_flags") or [])
         )
+        result["rule_flag_errors"] = rule_flag_errors
 
     return result
 
