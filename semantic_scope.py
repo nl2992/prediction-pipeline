@@ -613,10 +613,8 @@ def price_race_conflict(a: str, b: str) -> bool:
 
 _VOTE_SHARE_RE = re.compile(r"\d[\d.]*\s*%")
 _VOTE_WORD_RE = re.compile(r"\b(?:popular\s+vote|votes?|vote\s+share|ballots?)\b", re.I)
-# "1st Place in Goiás" is a state-level placement, left alone (frozen audit
-# fixtures label it the same contract as the national vote-percent market).
 _PLACEMENT_RE = re.compile(
-    r"\b(?:\d+(?:st|nd|rd|th)|first|second|third)\s+place\b(?!\s+in\s+[A-Za-z])|\bfinish(?:es)?\s+(?:in\s+)?"
+    r"\b(?:\d+(?:st|nd|rd|th)|first|second|third)\s+place\b|\bfinish(?:es)?\s+(?:in\s+)?"
     r"(?:first|second|third|top|\d+(?:st|nd|rd|th))\b|\bplace\s+finish\b",
     re.I,
 )

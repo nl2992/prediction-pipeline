@@ -65,7 +65,7 @@ KNOWN_RECALL_EXCEPTIONS: set[tuple[str, str]] = set()
 # unchanged (98.46% / 100.0%) since the fix targeted recall, not this
 # fixture's remaining 5 documented false positives.
 AUDIT_EXPECTATIONS = {
-    "signal_subset": {"same": 316, "different": 23, "min_precision": 0.98},
+    "signal_subset": {"same": 315, "different": 24, "min_precision": 0.98},
     "stratified_subset": {"same": 145, "different": 4, "min_precision": 0.99},
 }
 
@@ -1022,8 +1022,8 @@ class DepthRescuedAuditRegression(unittest.TestCase):
         items = self.fixture
         same = [i for i in items if i["label"] == "same"]
         different = [i for i in items if i["label"] == "different"]
-        self.assertEqual(len(same), 79, "fixture edited? unexpected same-count")
-        self.assertEqual(len(different), 6, "fixture edited? unexpected different-count")
+        self.assertEqual(len(same), 78, "fixture edited? unexpected same-count")
+        self.assertEqual(len(different), 7, "fixture edited? unexpected different-count")
 
         tp = fp = 0
         for it in same:
@@ -1037,7 +1037,7 @@ class DepthRescuedAuditRegression(unittest.TestCase):
             if match_spec(extract_spec(p), extract_spec(k)).match:
                 fp += 1
         # The corrected Game Awards category label is one distinct contract.
-        self.assertEqual(tp, 79)
+        self.assertEqual(tp, 78)
         precision = tp / (tp + fp)
         # Iteration 6 fixed all 5 documented false positives on this subset
         # (bucket-vs-cumulative-threshold x2, bucket-granularity, adjacent-
@@ -2190,7 +2190,7 @@ class AlertHistoryFalsePositives(unittest.TestCase):
         self.assertTrue(award_phrase_conflict("Oscars Best Actor", "Oscars Best Actress"))
         self.assertFalse(award_phrase_conflict("Best regular season record award", "best record award"))
         self.assertTrue(vote_share_vs_placement_conflict("at least 12% of the popular vote", "1st Place"))
-        self.assertFalse(vote_share_vs_placement_conflict("at least 12% of the popular vote", "1st Place in Goiás"))
+        self.assertTrue(vote_share_vs_placement_conflict("at least 12% of the popular vote", "1st Place in Goiás"))
 
 
 if __name__ == "__main__":

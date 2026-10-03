@@ -74,8 +74,9 @@
       "exec_net": 0.0243,
       "top_of_book_net": 0.0313,
       "v2_match_baseline": true,
-      "label": "same",
-      "reason_class": "ok"
+      "label": "different",
+      "reason_class": "state_placement_vs_national_vote_share",
+      "note": "State-level placement vs a national vote-share threshold: different contracts."
     },
     {
       "poly_title": "Resident Evil Requiem",
