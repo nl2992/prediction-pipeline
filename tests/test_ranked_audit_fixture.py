@@ -14,6 +14,7 @@ FIXTURES = (
     Path(__file__).parent / 'fixtures' / 'ranked_audit_2026-09-26-uncapped.json',
     Path(__file__).parent / 'fixtures' / 'ranked_audit_2026-09-26-post-remediation.json',
     Path(__file__).parent / 'fixtures' / 'ranked_audit_2026-09-26-final-pass.json',
+    Path(__file__).parent / 'fixtures' / 'ranked_audit_2026-10-02-fp-families.json',
 )
 
 

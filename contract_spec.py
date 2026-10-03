@@ -45,6 +45,12 @@ from semantic_scope import (
     election_office_conflict,
     f1_career_scope,
     founded_by_conflict,
+    speaker_conflict,
+    central_bank_granularity_conflict,
+    tournament_round_conflict,
+    advancement_vs_relegation_conflict,
+    fantasy_category_conflict,
+    team_season_predicate_conflict,
     government_outcome_scope,
     judicial_selection_stage,
     league_outcome_scope,
@@ -1119,6 +1125,16 @@ def match_spec(
         return _reject("organization founded by person vs person")
     if competition_identity_conflict(a.raw, b.raw):
         return _reject("competition identity mismatch")
+    if speaker_conflict(a.raw, b.raw):
+        return _reject("different speaker or venue")
+    if central_bank_granularity_conflict(a.raw, b.raw):
+        return _reject("specific meeting/size vs period-wide rate question")
+    if advancement_vs_relegation_conflict(a.raw, b.raw):
+        return _reject("advancement vs relegation outcome")
+    if fantasy_category_conflict(a.raw, b.raw):
+        return _reject("different fantasy category")
+    if team_season_predicate_conflict(a.raw, b.raw):
+        return _reject("different team-season predicate")
     if bucket_threshold_conflict(a.raw, b.raw):
         return _reject("exact-value bucket vs open-ended threshold")
     judicial_a = judicial_selection_stage(a.raw)
@@ -1531,6 +1547,8 @@ def match_spec(
             plain = raw_b if ra_r else raw_a
             if _is_win_market(plain) or re.search(r"\bchampions?\b", plain, flags=re.I):
                 return _reject("round scope mismatch")
+        if tournament_round_conflict(raw_a, raw_b):
+            return _reject("different tournament round")
         # (D) Deadline-window vs within-year occurrence (occurrence nouns
         # only): "US recession by end of 2027?" vs "recession in 2027?".
         pa_, kb_ = _occurrence_window(raw_a), _occurrence_window(raw_b)

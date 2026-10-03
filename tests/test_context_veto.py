@@ -344,6 +344,94 @@ class Keeps(unittest.TestCase):
             ks("Will Bitcoin be above $150,000 before 2027?", "Bitcoin price before 2027?")))
 
 
+class Oct2026FalsePositiveFamilies(unittest.TestCase):
+    """Live top-20 audit families: speaker/venue, central-bank granularity,
+    tournament round, qualify vs relegated, fantasy category, team predicate."""
+
+    def test_speaker_albertsons_vs_mrbeast_rejected(self):
+        p = pm('AI / Artificial Intelligence', 'What will MrBeast say during his next YouTube video?')
+        k = ks('What will Albertsons say during their next earnings call? AI / Artificial Intelligence', 'What will Albertsons say during their next earnings call?')
+        self.assertIn('different speaker or venue', context_veto(p, k) or '')
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_speaker_mccormick_vs_constellation_rejected(self):
+        p = pm('Mexico', 'What will Constellation Brands say during their next earnings call?')
+        k = ks('What will McCormick & Company, Incorporated say during their next earnings call? Mexico', 'What will McCormick & Company, Incorporated say during their next earnings call?')
+        self.assertIn('different speaker or venue', context_veto(p, k) or '')
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_same_speaker_survives_ok(self):
+        p = pm('AI', 'What will Albertsons say during their next earnings call?')
+        k = ks('What will Albertsons say during their next earnings call? AI', 'What will Albertsons say during their next earnings call?')
+        self.assertIsNone(context_veto(p, k))
+
+    def test_central_bank_meeting_vs_year_rejected(self):
+        p = pm('Yes', 'Bank of Canada Rate Hike in 2026?')
+        k = ks('Will Bank of Canada Hike rates by >25bps at their December 2026 meeting? Hike >25bps', 'Bank of Canada Hike rates by >25bps at their December 2026 meeting?')
+        self.assertIn('specific meeting/size vs period-wide rate question', context_veto(p, k) or '')
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_central_bank_same_meeting_survives_ok(self):
+        p = pm('Hike', 'Bank of Canada decision in December 2026?')
+        k = ks('Will Bank of Canada hike rates at their December 2026 meeting?', 'Will Bank of Canada hike rates at their December 2026 meeting?')
+        self.assertIsNone(context_veto(p, k))
+
+    def test_golf_round3_vs_round2_rejected(self):
+        p = pm('Austin Smotherman', 'PGA Tour: Bank of Utah Championship Second Round Leader')
+        k = ks('Austin Smotherman leads at the end of Round 3', 'Bank of Utah Championship: Round 3 Leader')
+        self.assertIn('different tournament round', context_veto(p, k) or '')
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_golf_round3_vs_third_survives_ok(self):
+        p = pm('Austin Smotherman', 'Bank of Utah Championship Third Round Leader')
+        k = ks('Austin Smotherman leads at the end of Round 3', 'Bank of Utah Championship: Round 3 Leader')
+        self.assertIsNone(context_veto(p, k))
+
+    def test_nations_league_qualify_vs_relegated_rejected(self):
+        p = pm('Czechia', 'UEFA Nations League A: Teams relegated (2026-27)')
+        k = ks('Will Czechia qualify for the UEFA Nations League Final?', 'UEFA Nations League Final qualifiers')
+        self.assertIn('advancement vs relegation', context_veto(p, k) or '')
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_nations_league_relegated_survives_ok(self):
+        p = pm('Czechia', 'UEFA Nations League A: Teams relegated (2026-27)')
+        k = ks('Will Czechia be relegated from UEFA Nations League A?', 'UEFA Nations League A relegation')
+        self.assertIsNone(context_veto(p, k))
+
+    def test_fantasy_rookie_vs_rb_rejected(self):
+        p = pm('Jeremiyah Love', 'Fantasy Football: 2026-27 Top 5 Scoring RBs')
+        k = ks('Will Jeremiyah Love be a top 5 fantasy rookie in the 2026-27 Pro Football regular season?', 'Top 5 fantasy rookies 2026-27')
+        self.assertIn('different fantasy category', context_veto(p, k) or '')
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_fantasy_rookie_vs_flex_rejected(self):
+        p = pm('Carnell Tate', 'Fantasy Football: 2026-27 Top 5 Scoring FLEX')
+        k = ks('Will Carnell Tate be a top 5 fantasy rookie in the 2026-27 Pro Football regular season?', 'Top 5 fantasy rookies 2026-27')
+        self.assertIn('different fantasy category', context_veto(p, k) or '')
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_fantasy_same_category_survives_ok(self):
+        p = pm('Jeremiyah Love', 'Fantasy Football: 2026-27 Top 5 Scoring RBs')
+        k = ks('Will Jeremiyah Love be a top 5 fantasy RB in the 2026-27 Pro Football regular season?', 'Top 5 fantasy RBs 2026-27')
+        self.assertIsNone(context_veto(p, k))
+
+    def test_last_team_to_win_vs_win_totals_rejected(self):
+        p = pm('Houston Texans', 'Pro Football: 2026 Regular Season Win Totals')
+        k = ks('Will Houston be the last team to win a game in the 2026-27 Pro Football regular season?', 'Last team to win a game 2026-27')
+        self.assertIn('different team-season predicate', context_veto(p, k) or '')
+        self.assertFalse(is_compatible_match(p, k))
+
+    def test_almere_winner_survives_ok(self):
+        p = pm('Almere City FC', 'Almere City FC vs. FC Volendam')
+        k = ks('Almere wins', 'Almere City FC vs. FC Volendam')
+        self.assertIsNone(context_veto(p, k))
+
+    def test_volendam_spread_survives_ok(self):
+        p = pm('FC Volendam (-1.5)', 'Almere City FC vs. FC Volendam - More Markets')
+        k = ks('Rkav Volendam wins by more than 1.5 goals?', 'Almere City FC vs. FC Volendam: Spread')
+        self.assertIsNone(context_veto(p, k))
+
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -371,3 +371,180 @@ def founded_by_conflict(a: str, b: str) -> bool:
         return False
     surname = person.split()[-1]
     return bool(re.search(rf"\b{re.escape(surname)}\b", person_text, re.I))
+
+
+
+# ---------------------------------------------------------------------------
+# Oct audit families: speaker/venue, central-bank granularity, tournament
+# round, qualify-vs-relegated, fantasy category, team-season predicate.
+# Every guard fires only when BOTH sides carry an identifiable, differing
+# signal; an unidentified side never vetoes.
+# ---------------------------------------------------------------------------
+
+_SPEAKER_RE = re.compile(
+    r"\b(?:what\s+)?will\s+(?!(?:the\s+)?(?:market|price|yes|no)\b)([^?:/|]{1,60}?)\s+(?:say|mention)\b",
+    re.I,
+)
+_SPEAKER_SUFFIX_RE = re.compile(
+    r"\b(?:incorporated|inc|corporation|corp|company|co|limited|ltd|plc|llc|holdings?|group)\b",
+    re.I,
+)
+_MENTION_CONTEXT_RE = re.compile(r"\b(?:say|says|mention|mentions)\b", re.I)
+_SPEECH_VENUES: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\bearnings\s+(?:call|conference)", re.I), "earnings_call"),
+    (re.compile(r"\byoutube\b", re.I), "youtube"),
+    (re.compile(r"\bpodcast\b", re.I), "podcast"),
+    (re.compile(r"\bpress\s+(?:conference|briefing)\b", re.I), "press_conference"),
+    (re.compile(r"\b(?:speech|address|rally|debate)\b", re.I), "speech"),
+)
+
+
+def _speaker_tokens(text: str) -> frozenset[str] | None:
+    m = _SPEAKER_RE.search(text)
+    if not m:
+        return None
+    span = _SPEAKER_SUFFIX_RE.sub(" ", m.group(1).lower().replace("&", " "))
+    toks = [t for t in re.findall(r"[a-z0-9]+", span) if t not in {"the", "a", "an"}]
+    return frozenset(toks) or None
+
+
+def _speech_venues(text: str) -> frozenset[str]:
+    return frozenset(key for pat, key in _SPEECH_VENUES if pat.search(text))
+
+
+def speaker_conflict(a: str, b: str) -> bool:
+    """True when two "what will <SPEAKER> say/mention ..." markets name
+    different speakers, or different venues (earnings call vs YouTube video,
+    speech, podcast, press conference). Token-subset speakers ("Trump" vs
+    "Donald Trump") are treated as the same."""
+    sa, sb = _speaker_tokens(a), _speaker_tokens(b)
+    if sa and sb and not (sa <= sb or sb <= sa):
+        return True
+    if _MENTION_CONTEXT_RE.search(a) and _MENTION_CONTEXT_RE.search(b):
+        va, vb = _speech_venues(a), _speech_venues(b)
+        if va and vb and va.isdisjoint(vb):
+            return True
+    return False
+
+
+_CENTRAL_BANK_RE = re.compile(
+    r"\b(?:fed|federal reserve|fomc|ecb|boc|boe|boj|rba|snb|riksbank|"
+    r"bank of (?:canada|england|japan|mexico|korea)|reserve bank|central bank)\b",
+    re.I,
+)
+_RATE_MOVE_RE = re.compile(r"\b(?:rates?|hikes?|cuts?|raise[sd]?|lower(?:s|ed)?)\b", re.I)
+_MONTH_RE = (r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|"
+             r"sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)")
+_SPECIFIC_MEETING_RE = re.compile(
+    rf"\b{_MONTH_RE}\b[^?.]{{0,25}}\b(?:meeting|decision)\b"
+    rf"|\b(?:meeting|decision)\b[^?.]{{0,20}}\b(?:in|of)\s+{_MONTH_RE}\b"
+    r"|\b\d+(?:\.\d+)?\s*(?:bps|basis points?)\b"
+    r"|[<>≥≤]\s*\d+\s*(?:bps|bp)\b",
+    re.I,
+)
+_PERIOD_WIDE_RE = re.compile(
+    r"\b(?:in|during|throughout)\s+20\d{2}\b|\bby\s+(?:the\s+)?end\s+of\s+(?:the\s+year|20\d{2})\b"
+    r"|\bthis\s+year\b",
+    re.I,
+)
+
+
+def central_bank_granularity_conflict(a: str, b: str) -> bool:
+    """True when one central-bank rate market is tied to a specific meeting
+    or bps size and the other asks about any time in a year/period."""
+    if not (_CENTRAL_BANK_RE.search(a) and _CENTRAL_BANK_RE.search(b)
+            and _RATE_MOVE_RE.search(a) and _RATE_MOVE_RE.search(b)):
+        return False
+    spec_a, spec_b = bool(_SPECIFIC_MEETING_RE.search(a)), bool(_SPECIFIC_MEETING_RE.search(b))
+    wide_a = bool(_PERIOD_WIDE_RE.search(a)) and not spec_a
+    wide_b = bool(_PERIOD_WIDE_RE.search(b)) and not spec_b
+    return (spec_a and wide_b) or (spec_b and wide_a)
+
+
+_ORDINAL_ROUNDS = {"1st": "1", "first": "1", "2nd": "2", "second": "2",
+                   "3rd": "3", "third": "3", "4th": "4", "fourth": "4"}
+_ROUND_RE = re.compile(
+    r"\bround\s+([1-4])\b(?!\s*(?:of|-))"
+    r"|\b(1st|2nd|3rd|4th|first|second|third|fourth)[\s-]+round\b"
+    r"|\b(final)\s+round\b",
+    re.I,
+)
+
+
+def _tournament_rounds(text: str) -> frozenset[str]:
+    out = set()
+    for m in _ROUND_RE.finditer(text):
+        if m.group(1):
+            out.add(m.group(1))
+        elif m.group(2):
+            out.add(_ORDINAL_ROUNDS[m.group(2).lower()])
+        else:
+            out.add("final")
+    return frozenset(out)
+
+
+def tournament_round_conflict(a: str, b: str) -> bool:
+    """True when both texts name tournament rounds and none overlap.
+    "final round" is compatible with round 4 (golf's last round)."""
+    ra, rb = _tournament_rounds(a), _tournament_rounds(b)
+    if not ra or not rb:
+        return False
+    if "final" in ra:
+        ra = ra | {"4"}
+    if "final" in rb:
+        rb = rb | {"4"}
+    return ra.isdisjoint(rb)
+
+
+_ADVANCE_RE = re.compile(
+    r"\b(?:qualif(?:y|ies|ied|ication)|advance[sd]?|promoted|promotion|reach(?:es)?\s+the\s+final)\b",
+    re.I,
+)
+_ELIMINATE_RE = re.compile(r"\b(?:relegat\w*|eliminat\w*)\b", re.I)
+
+
+def advancement_vs_relegation_conflict(a: str, b: str) -> bool:
+    """True when one side is a qualify/advance/promoted contract and the
+    other a relegated/eliminated one (neither carrying both signals)."""
+    a_up, a_down = bool(_ADVANCE_RE.search(a)), bool(_ELIMINATE_RE.search(a))
+    b_up, b_down = bool(_ADVANCE_RE.search(b)), bool(_ELIMINATE_RE.search(b))
+    return (a_up and not a_down and b_down and not b_up) or (b_up and not b_down and a_down and not a_up)
+
+
+_FANTASY_CATEGORIES: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\brookies?\b", re.I), "rookie"),
+    (re.compile(r"\b(?:rbs?|running\s*backs?)\b", re.I), "rb"),
+    (re.compile(r"\b(?:wrs?|wide\s*receivers?)\b", re.I), "wr"),
+    (re.compile(r"\b(?:tes?|tight\s*ends?)\b", re.I), "te"),
+    (re.compile(r"\b(?:qbs?|quarterbacks?)\b", re.I), "qb"),
+    (re.compile(r"\bsuper\s*flex\b", re.I), "superflex"),
+    (re.compile(r"\bflex\b", re.I), "flex"),
+)
+
+
+def fantasy_category_conflict(a: str, b: str) -> bool:
+    """True when two fantasy-leaderboard markets name disjoint categories
+    (rookie vs RB/WR/TE/QB/FLEX)."""
+    if not (re.search(r"\bfantasy\b", a, re.I) and re.search(r"\bfantasy\b", b, re.I)):
+        return False
+    ca = {k for p, k in _FANTASY_CATEGORIES if p.search(a)}
+    cb = {k for p, k in _FANTASY_CATEGORIES if p.search(b)}
+    return bool(ca and cb and ca.isdisjoint(cb))
+
+
+_TEAM_SEASON_PREDICATES: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\blast\s+team\s+to\s+win\b", re.I), "last_to_win"),
+    (re.compile(r"\bfirst\s+team\s+to\s+(?:lose|win)\b", re.I), "first_team_event"),
+    (re.compile(r"\bwinless\b", re.I), "winless"),
+    (re.compile(r"\b(?:undefeated|unbeaten|perfect\s+season)\b", re.I), "undefeated"),
+    (re.compile(r"\bwin\s+totals?\b|\bwins?\s+(?:over|under)\b|\b(?:over|under)\s*/\s*(?:under|over)\b"
+                r"|\b(?:over|under)\s+\d+(?:\.\d+)?\s+wins\b", re.I), "win_total"),
+)
+
+
+def team_season_predicate_conflict(a: str, b: str) -> bool:
+    """True when two team-season markets use distinct predicates (last team
+    to win a game / winless / undefeated / win totals)."""
+    pa = {k for p, k in _TEAM_SEASON_PREDICATES if p.search(a)}
+    pb = {k for p, k in _TEAM_SEASON_PREDICATES if p.search(b)}
+    return bool(pa and pb and pa.isdisjoint(pb))
