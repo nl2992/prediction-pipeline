@@ -306,3 +306,52 @@ def test_forced_final_round_message_sequence(seeded):
             following = msgs[i + 1:i + 1 + len(ids)]
             assert [f["role"] for f in following] == ["tool"] * len(ids)
             assert [f["tool_call_id"] for f in following] == ids
+
+
+def _evidence_result(flags, k_url="https://kalshi.com/m/K1", p_url="https://polymarket.com/e/x"):
+    return {"pair_key": "pk", "kalshi": {"rules_text": "Kalshi boilerplate. " * 5, "source_url": k_url},
+            "poly": {"rules_text": "Poly boilerplate. " * 5, "source_url": p_url}, "rule_flags": flags}
+
+
+_FLAG = {"kind": "rounding", "severity": "high", "detail": "d",
+         "kalshi_excerpt": "Uses the first print.", "poly_excerpt": "Uses the revised print."}
+
+
+def test_rule_flag_excerpts_get_precise_citations():
+    c = ask.Citations()
+    res = c.annotate(_evidence_result([dict(_FLAG)]))
+    flag = res["rule_flags"][0]
+    assert c.items[flag["kalshi_cite"]]["excerpt"] == "Uses the first print."
+    assert c.items[flag["kalshi_cite"]]["venue"] == "kalshi"
+    assert c.items[flag["poly_cite"]]["excerpt"] == "Uses the revised print."
+    assert c.items[flag["poly_cite"]]["venue"] == "polymarket"
+    assert {flag["kalshi_cite"], flag["poly_cite"], res["kalshi"]["cite"]} <= set(res["citation_ids"])
+
+
+def test_rule_flag_duplicate_excerpt_reuses_id_and_skips_empty():
+    c = ask.Citations()
+    f2 = dict(_FLAG, kind="other", poly_excerpt="")
+    res = c.annotate(_evidence_result([dict(_FLAG), f2, {"kind": "x", "kalshi_excerpt": None}]))
+    a, b, third = res["rule_flags"]
+    assert a["kalshi_cite"] == b["kalshi_cite"]
+    assert "poly_cite" not in b and "kalshi_cite" not in third
+
+
+def test_rule_flag_source_url_allowlist_applies():
+    c = ask.Citations()
+    res = c.annotate(_evidence_result([dict(_FLAG)], k_url="https://evil.example/x"))
+    flag = res["rule_flags"][0]
+    assert "source_url" not in c.items[flag["kalshi_cite"]]
+    assert c.items[flag["poly_cite"]]["source_url"] == "https://polymarket.com/e/x"
+
+
+def test_run_ask_returns_flag_citations(monkeypatch):
+    res = _evidence_result([dict(_FLAG)])
+    monkeypatch.setattr(ask_tools, "run_tool", lambda name, args: res)
+    fp = FakeProvider([
+        {"tool_calls": [call("get_pair_evidence", {"pair_key": "pk"})]},
+        {"content": "Differ [^r3][^r4]."},
+    ])
+    out = _ask(fp)
+    assert {c["id"] for c in out["citations"]} == {"r3", "r4"}
+    assert {c["excerpt"] for c in out["citations"]} == {"Uses the first print.", "Uses the revised print."}

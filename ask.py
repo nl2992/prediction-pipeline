@@ -47,7 +47,9 @@ If a tool returns status "books_unavailable" or stale evidence, say the data is 
 present numbers from it as current. Report rule_flags null as "unknown", not "no conflict".
 4. Citations: every tool result includes server-generated citation ids in "cite" fields \
 (pair rows p1, p2, ...; rule excerpts r1, ...; the scan s1) and a "citation_ids" summary. Cite \
-claims with markers like [^p1] using ONLY those ids. Never invent ids or URLs.
+claims with markers like [^p1] using ONLY those ids. Never invent ids or URLs. \
+When explaining a settlement difference, cite the rule_flags' "kalshi_cite"/"poly_cite" ids (the \
+specific differing sentences) rather than the whole-document "cite".
 5. Be concise. Use short markdown (lists/tables ok). Do not output HTML.
 6. Refuse requests to trade, place orders, or act outside the tools; explain you can only analyze.
 """
@@ -98,6 +100,7 @@ class Citations:
         self.items: dict[str, dict] = {}
         self._pair_ids: dict[str, str] = {}
         self._scan_ids: dict[Any, str] = {}
+        self._rule_ids: dict[tuple, str] = {}
         self._n = {"p": 0, "r": 0, "s": 0}
 
     def _new(self, prefix: str, citation: dict) -> str:
@@ -162,6 +165,20 @@ class Citations:
             if isinstance(ev, dict) and ev.get("rules_text"):
                 ev["cite"] = self.rule(venue, ev["rules_text"], ev.get("source_url"))
                 ids.append(ev["cite"])
+        for flag in res.get("rule_flags") or []:
+            if not isinstance(flag, dict):
+                continue
+            for side, venue in (("kalshi", "kalshi"), ("poly", "polymarket")):
+                excerpt = flag.get(f"{side}_excerpt")
+                if not isinstance(excerpt, str) or not excerpt.strip():
+                    continue
+                ev = res.get(side)
+                url = ev.get("source_url") if isinstance(ev, dict) else None
+                key = (venue, excerpt[:EXCERPT_CAP], url if isinstance(url, str) else None)
+                if key not in self._rule_ids:
+                    self._rule_ids[key] = self.rule(venue, excerpt, url)
+                flag[f"{side}_cite"] = self._rule_ids[key]
+                ids.append(flag[f"{side}_cite"])
         for row in res.get("results") or []:
             if not isinstance(row, dict):
                 continue
